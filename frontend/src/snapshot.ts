@@ -62,9 +62,16 @@ export interface Snapshot {
 
 let cached: Snapshot | null = null;
 
+/** Метка сборки — подставляется Vite, см. define в vite.config.ts. */
+declare const __BUILD_ID__: string;
+
 export async function loadSnapshot(): Promise<Snapshot> {
   if (cached) return cached;
-  const response = await fetch(`${import.meta.env.BASE_URL}data/snapshot.json`);
+  // Версия в адресе: имя файла между деплоями не меняется, поэтому без неё
+  // браузер отдаёт вчерашний снапшот из кэша.
+  const response = await fetch(
+    `${import.meta.env.BASE_URL}data/snapshot.json?v=${__BUILD_ID__}`,
+  );
   if (!response.ok) {
     throw new Error(`не удалось загрузить снапшот: ${response.status}`);
   }

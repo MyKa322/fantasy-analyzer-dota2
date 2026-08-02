@@ -74,9 +74,12 @@ type PortraitManifest = Record<string, Record<string, string>>;
 
 let manifest: PortraitManifest = {};
 
+declare const __BUILD_ID__: string;
+
 export async function loadPortraitManifest(): Promise<void> {
   try {
-    const response = await fetch(asset_("players/manifest.json"));
+    // Та же причина, что и у снапшота: имя файла постоянное, содержимое — нет.
+    const response = await fetch(`${asset_("players/manifest.json")}?v=${__BUILD_ID__}`);
     if (response.ok) manifest = await response.json();
   } catch {
     // без манифеста портреты просто заменятся инициалами

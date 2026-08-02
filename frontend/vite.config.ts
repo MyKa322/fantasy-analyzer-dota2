@@ -5,6 +5,12 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   // На GitHub Pages сайт живёт в подкаталоге /<repo>/, локально — в корне.
   base: process.env.BASE_PATH ?? "/",
+  define: {
+    // Метка сборки в адресе снапшота. Без неё браузер продолжает отдавать
+    // закэшированный JSON: имя файла не меняется, а данные обновляются каждый
+    // день — и страница молча показывает вчерашние числа.
+    __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
+  },
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
