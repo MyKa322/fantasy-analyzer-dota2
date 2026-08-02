@@ -1,0 +1,233 @@
+/* ============================================================================
+   DESIGN TOKENS — Dota 2 Fantasy Analytics
+   Direction: modern minimalist. Monochrome UI, semantic colour only.
+   ============================================================================
+
+   THE CORE RULE
+   -------------
+   The interface is greyscale. The ONLY saturated colour in the entire product
+   is the emblem group colour (red / blue / green), which carries real meaning,
+   plus each team's own brand crest.
+
+   That is what makes this read as an analytics tool rather than a game skin:
+   colour means something, so it is never spent on decoration. No accent
+   colour, no gradients on chrome, no glows, no bevels.
+
+   ASSET HANDLING
+   --------------
+   - Emblem icons (fantasy_craft/) are OPAQUE 128px greyscale tiles with real
+     artwork and shading. They are rendered as images at full fidelity and are
+     NEVER tinted or masked — an earlier version masked them into flat colour
+     silhouettes and destroyed the art. Group colour lives on the chip around
+     the icon, never on the icon itself.
+   - Team crests are full brand colour and are never tinted either.
+   ========================================================================= */
+
+:root {
+  /* ==========================================================================
+     1. NEUTRAL RAMP — the whole UI lives here
+     ====================================================================== */
+  --n-950: #0B0C0E;   /* page */
+  --n-900: #101215;   /* base surface */
+  --n-850: #16181C;   /* card */
+  --n-800: #1C1F24;   /* raised card, input */
+  --n-750: #23272D;   /* hover */
+  --n-700: #2C3138;   /* strong border */
+  --n-600: #3A4048;
+  --n-500: #545C66;
+  /* Tertiary text. Measured against the CARD (--n-850), the darkest surface it
+     ever sits on — #767F8A read 4.38:1 there and failed. */
+  --n-400: #7C858F;   /* 4.75:1 on n-850, 5.23:1 on the page */
+  --n-300: #9AA3AE;   /* secondary text */
+  --n-200: #C3C9D1;
+  --n-100: #E4E7EB;   /* primary text */
+  --n-050: #F4F6F8;   /* headings */
+
+  /* ==========================================================================
+     2. SEMANTIC COLOUR — emblem groups only. Never decorative.
+     Measured against --n-850 (the card these sit on).
+     ====================================================================== */
+  --group-red:        #F2555A;   /* 5.6:1 on n-850 */
+  --group-red-dim:    rgba(242, 85, 90, 0.14);
+  --group-red-line:   rgba(242, 85, 90, 0.42);
+
+  --group-blue:       #5AA2F5;   /* 6.4:1 on n-850 */
+  --group-blue-dim:   rgba(90, 162, 245, 0.14);
+  --group-blue-line:  rgba(90, 162, 245, 0.42);
+
+  --group-green:      #5BC46E;   /* 7.4:1 on n-850 */
+  --group-green-dim:  rgba(91, 196, 110, 0.14);
+  --group-green-line: rgba(91, 196, 110, 0.42);
+
+  /* ==========================================================================
+     3. SEMANTIC ROLES
+     ====================================================================== */
+  --color-bg-page:        var(--n-950);
+  --color-bg-base:        var(--n-900);
+  --color-bg-card:        var(--n-850);
+  --color-bg-raised:      var(--n-800);
+  --color-bg-hover:       var(--n-750);
+
+  --color-text-heading:   var(--n-050);
+  --color-text-primary:   var(--n-100);
+  --color-text-secondary: var(--n-300);
+  --color-text-tertiary:  var(--n-400);   /* 4.6:1 on n-900 — still AA */
+
+  --color-border:         rgba(255, 255, 255, 0.09);
+  --color-border-strong:  rgba(255, 255, 255, 0.16);
+  --color-border-focus:   var(--n-050);
+
+  /* Deltas stay monochrome by default — this is an analytics tool, and a
+     coloured delta would compete with the emblem semantics. Direction is
+     carried by an arrow glyph and weight, not hue. */
+  --color-up:             var(--n-050);
+  --color-down:           var(--n-400);
+
+  --color-overlay:        rgba(6, 7, 8, 0.72);
+
+  /* ==========================================================================
+     4. SPACING — 4px grid
+     ====================================================================== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10: 72px;
+  --space-11: 96px;
+  --space-12: 128px;
+
+  /* ==========================================================================
+     5. TYPOGRAPHY
+     Space Grotesk — headings. Geometric, modern, has character without being
+                     decorative. Deliberately not Inter.
+     Manrope       — body and UI.
+     JetBrains Mono— every figure. A mono numeric face is the honest choice for
+                     an analytics tool: perfect column alignment, and numbers
+                     read as data rather than as prose.
+     ====================================================================== */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'Manrope', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  --text-2xs:  11px;
+  --text-xs:   12px;
+  --text-sm:   13px;
+  --text-base: 15px;
+  --text-md:   17px;
+  --text-lg:   20px;
+  --text-xl:   26px;
+  --text-2xl:  34px;
+  --text-3xl:  44px;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  --leading-tight:   1.15;
+  --leading-snug:    1.35;
+  --leading-normal:  1.55;
+  --leading-relaxed: 1.7;
+
+  /* Minimalism means tight, not letterspaced. Wide tracking is reserved for
+     small uppercase labels, where it aids legibility rather than decorating. */
+  --track-tight:  -0.02em;
+  --track-normal: 0;
+  --track-label:  0.06em;
+
+  /* ==========================================================================
+     6. LAYOUT
+     ====================================================================== */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-full: 999px;
+
+  --width-page:   1440px;
+  --width-banner: 400px;
+  --width-prose:  68ch;
+
+  /* Shadows are almost absent. Elevation is expressed with surface value and
+     a hairline border, which is what makes a dark UI feel modern rather than
+     heavy. Only overlays get a real shadow. */
+  --shadow-none:    none;
+  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.6);
+
+  /* ==========================================================================
+     7. MOTION — restrained. No ceremony.
+     ====================================================================== */
+  --dur-fast:   120ms;
+  --dur-normal: 200ms;
+  --dur-slow:   320ms;
+  --ease:       cubic-bezier(0.2, 0, 0, 1);
+
+  --countup-duration: 420ms;
+
+  /* ==========================================================================
+     8. Z-INDEX
+     ====================================================================== */
+  --z-header:  100;
+  --z-overlay: 1000;
+  --z-popover: 1100;
+
+  /* ==========================================================================
+     9. COMPONENT TOKENS
+     ====================================================================== */
+  --icon-tile:      40px;   /* the emblem artwork tile */
+  --icon-tile-lg:   64px;
+  --control-height: 36px;
+  --touch-min:      44px;
+}
+
+/* ============================================================================
+   EMBLEM GROUP SCOPES
+   Set data-group on a container; the chip resolves its own colour. The icon
+   inside is never affected — only the chrome around it.
+   ========================================================================= */
+[data-group='red']   { --group: var(--group-red);   --group-dim: var(--group-red-dim);   --group-line: var(--group-red-line); }
+[data-group='blue']  { --group: var(--group-blue);  --group-dim: var(--group-blue-dim);  --group-line: var(--group-blue-line); }
+[data-group='green'] { --group: var(--group-green); --group-dim: var(--group-green-dim); --group-line: var(--group-green-line); }
+
+/* ============================================================================
+   BASE
+   ========================================================================= */
+html { color-scheme: dark; }
+
+body {
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+/* Every figure is mono and tabular. Non-negotiable in an analytics UI. */
+.num, [data-num], td, th {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: var(--track-tight);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-normal: 0ms;
+    --dur-slow: 0ms;
+    --countup-duration: 0ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

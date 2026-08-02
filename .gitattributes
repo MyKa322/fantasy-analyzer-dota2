@@ -1,0 +1,11 @@
+# В репозитории — LF, в рабочей копии Windows git развернёт CRLF сам.
+* text=auto eol=lf
+
+# Бинарники не трогать.
+*.png binary
+*.webp binary
+*.ico binary
+
+# Снапшот аналитики — одна длинная строка, дифф по нему бесполезен.
+frontend/public/data/snapshot.json -diff linguist-generated
+frontend/public/assets/players/manifest.json -diff linguist-generated

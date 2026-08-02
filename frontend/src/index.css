@@ -1,0 +1,31 @@
+@import "tailwindcss";
+/* Дизайн-токены: монохромный интерфейс, насыщенный цвет только у групп эмблем
+   (красная/синяя/зелёная) и у брендовых логотипов команд. */
+@import "./tokens.css";
+
+@theme {
+  --color-ink: #0c0d10;
+  --color-panel: #16181e;
+  --color-panel-soft: #1d2029;
+  --color-edge: #2a2e3a;
+  --color-gold: #c8a24a;
+  --color-gold-soft: #e0c987;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: #0c0d10;
+  color: #e6e6e6;
+  font-family: var(--font-sans);
+}
+
+/* Таблицы с числами читаются заметно лучше моноширинными цифрами. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

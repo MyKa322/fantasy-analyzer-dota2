@@ -1,0 +1,59 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body, #root { height: 100%; }
+
+  body {
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--track-tight);
+    line-height: var(--leading-tight);
+    color: var(--color-text-heading);
+    margin: 0;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  ::selection { background: rgba(255, 255, 255, 0.16); }
+
+  /* Neutral scrollbars — a coloured scrollbar would break the "colour means
+     something" rule the whole system rests on. */
+  * { scrollbar-width: thin; scrollbar-color: var(--n-700) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--n-700);
+    border: 3px solid var(--color-bg-page);
+    border-radius: var(--radius-full);
+  }
+  *::-webkit-scrollbar-thumb:hover { background: var(--n-600); }
+}
+
+@layer components {
+  /* The one small-caps treatment. Used for column headers and metadata only —
+     never for body copy or buttons. */
+  .label {
+    font-family: var(--font-body);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+  }
+
+  /* Hairline divider. Elevation in this system is surface value + 1px, not
+     shadow. */
+  .hairline { border-color: var(--color-border); }
+}

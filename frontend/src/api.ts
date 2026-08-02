@@ -1,0 +1,632 @@
+// Клиент бэкенда. Типы повторяют схемы FastAPI из app/api/schemas.py.
+//
+// У клиента два режима. С локальным бэкендом всё идёт по HTTP; на GitHub Pages
+// сервера нет, и те же методы читают предрассчитанный снапшот, а баннеры
+// считают в браузере. Компоненты разницы не видят.
+
+import {
+  optimiseBanner,
+  scoreBanner,
+  type Availability,
+  type GroupColor,
+  type RulesSnapshot,
+  type StatValue,
+} from "./engine/scoring";
+import { STATIC_MODE, findRole, loadSnapshot } from "./snapshot";
+
+export type { Availability, GroupColor, StatValue };
+
+export interface Team {
+  team_id: number;
+  name: string;
+  tag: string | null;
+  compendium_name: string | null;
+  rating: number | null;
+  rd: number | null;
+  volatility: number | null;
+  matches_played: number;
+  days_idle: number | null;
+  is_listable: boolean;
+}
+
+export interface RatingPoint {
+  as_of: string;
+  rating: number;
+  rd: number;
+  matches_played: number;
+}
+
+export interface RatingHistory {
+  team_id: number;
+  name: string | null;
+  points: RatingPoint[];
+}
+
+export interface BucketProbability {
+  team_id: number;
+  name: string | null;
+  probabilities: Record<string, number>;
+  advance: number;
+  expected_series: number;
+}
+
+export interface PredictionPick {
+  key: string;
+  pick: string;
+  label: string | null;
+}
+
+export interface GroupPrediction {
+  simulations: number;
+  teams: BucketProbability[];
+  plan: PredictionPick[];
+  expected_points: number;
+  expected_correct: number;
+  points_percentiles: Record<string, number>;
+}
+
+export interface StatRule {
+  key: string;
+  label: string;
+  color: GroupColor;
+  kind: string;
+  per_unit: number;
+  base: number;
+  value_if_true: number;
+  max_points: number;
+}
+
+export interface TraitRule {
+  key: string;
+  label: string;
+  description: string;
+  condition: string;
+  effects: { scope: string; amount: number }[];
+}
+
+export interface StatSource {
+  stat: string;
+  label: string;
+  color: string;
+  availability: Availability;
+  note: string;
+}
+
+export interface FantasyRules {
+  version: string;
+  source: string;
+  stats: StatRule[];
+  qualities: Record<string, number>;
+  traits: TraitRule[];
+  banner_slots: number;
+  trait_bonus_mode: string;
+  sources: StatSource[];
+}
+
+export interface PredictionsConfig {
+  version: string;
+  event: string;
+  teams: string[];
+  team_ids: Record<string, number | null>;
+  buckets: { key: string; label: string; description: string; slots: number }[];
+  group_points: Record<string, number>;
+  playoff_points: Record<string, number>;
+  bracket_slots: string[];
+}
+
+export interface Emblem {
+  stat: string;
+  quality: string;
+  trait: string | null;
+}
+
+export interface Projection {
+  role: string;
+  team_id: number;
+  team_name: string | null;
+  player_names: string[];
+  mean: number;
+  median: number;
+  floor_p5: number;
+  ceiling_p95: number;
+  std: number;
+  games_used: number;
+  expected_series: number;
+  unavailable_stats: string[];
+}
+
+export interface BannerOption {
+  emblems: Emblem[];
+  mean: number;
+  ceiling_p95: number;
+  floor_p5: number;
+}
+
+export interface RosterCandidate {
+  role: string;
+  team_id: number;
+  team_name: string | null;
+  player_names: string[];
+  mean: number;
+  floor_p5: number;
+  ceiling_p95: number;
+  games_used: number;
+}
+
+export interface RosterPick {
+  role: string;
+  team_id: number;
+  team_name: string | null;
+  mean: number;
+}
+
+export interface Roster {
+  expected_total: number;
+  p5: number;
+  p95: number;
+  picks: RosterPick[];
+}
+
+export interface RosterResponse {
+  candidates: Record<string, RosterCandidate[]>;
+  rosters: Roster[];
+  banners: Record<string, Emblem[]>;
+  skipped: string[];
+}
+
+export interface SlotAdvice {
+  slot: number;
+  color: GroupColor;
+  stat: string;
+  label: string;
+  quality: string;
+  trait: string | null;
+  percent: number;
+  base_points: number;
+  points: number;
+  alternatives: StatValue[];
+}
+
+export interface BannerAdvice {
+  role: string;
+  team_id: number;
+  team_name: string | null;
+  player_names: string[];
+  slots: SlotAdvice[];
+  expected_card_points: number;
+  period_mean: number | null;
+  period_ceiling: number | null;
+}
+
+export interface StatRanking {
+  stat: string;
+  team_id: number;
+  team_name: string | null;
+  role: string;
+  player_names: string[];
+  units_per_game: number;
+  base_points: number;
+  p95_points: number;
+  games: number;
+}
+
+export interface TitleAdvice {
+  key: string;
+  label: string;
+  bonus: number;
+  condition: string;
+  hit_rate: number | null;
+  expected_bonus: number | null;
+  estimator: string;
+  note: string;
+}
+
+export interface TeamRoles {
+  team_id: number;
+  team_name: string | null;
+  roles: Record<string, number[]>;
+  player_names: Record<string, string | null>;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+const OFFLINE_MESSAGE =
+  "Эта операция требует локального бэкенда — на опубликованной странице данные " +
+  "берутся из снапшота, который обновляется по расписанию.";
+
+function offline(): never {
+  throw new ApiError(OFFLINE_MESSAGE, 501);
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/api${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail ?? detail;
+    } catch {
+      // тело не JSON — оставляем статус
+    }
+    throw new ApiError(detail, response.status);
+  }
+  return response.json() as Promise<T>;
+}
+
+const live = {
+  fantasyRules: () => request<FantasyRules>("/config/fantasy"),
+  predictionsConfig: () => request<PredictionsConfig>("/config/predictions"),
+
+  teams: (compendiumOnly = false) =>
+    request<Team[]>(`/teams?compendium_only=${compendiumOnly}`),
+  ratingHistory: (teamId: number) =>
+    request<RatingHistory>(`/teams/${teamId}/rating-history`),
+  recomputeRatings: () =>
+    request<{ teams: number; snapshots: number; listable: number }>(
+      "/ratings/recompute",
+      { method: "POST" },
+    ),
+
+  groupPrediction: (simulations: number, teamIds?: number[]) => {
+    const params = new URLSearchParams({ simulations: String(simulations) });
+    teamIds?.forEach((id) => params.append("team_ids", String(id)));
+    return request<GroupPrediction>(`/predictions/group?${params}`);
+  },
+
+  teamRoles: (teamId: number, historyDays = 120) =>
+    request<TeamRoles>(`/fantasy/roles/${teamId}?history_days=${historyDays}`),
+
+  project: (payload: {
+    team_id: number;
+    role: string;
+    banner: { emblems: Emblem[] };
+    simulations?: number;
+    history_days?: number;
+    series_distribution?: Record<number, number>;
+  }) =>
+    request<Projection>("/fantasy/project", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  optimiseBanner: (payload: {
+    team_id: number;
+    role: string;
+    available_emblems: Emblem[];
+    slots?: number;
+    simulations?: number;
+    history_days?: number;
+    top_n?: number;
+  }) =>
+    request<BannerOption[]>("/fantasy/optimise-banner", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  roster: (payload?: {
+    simulations?: number;
+    series?: number;
+    min_games?: number;
+    top_n?: number;
+    history_days?: number;
+  }) =>
+    request<RosterResponse>("/fantasy/roster", {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    }),
+
+  statReport: (payload: {
+    team_id: number;
+    role: string;
+    history_days?: number;
+    include_unavailable?: boolean;
+  }) =>
+    request<StatValue[]>("/fantasy/stat-report", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  bestBanner: (payload: {
+    team_id: number;
+    role: string;
+    qualities?: string[] | null;
+    traits?: (string | null)[] | null;
+    simulate?: boolean;
+    simulations?: number;
+    top_n?: number;
+    history_days?: number;
+    series?: number;
+  }) =>
+    request<BannerAdvice[]>("/fantasy/best-banner", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  statRanking: (stat: string, role?: string, minGames = 5) => {
+    const params = new URLSearchParams({ min_games: String(minGames) });
+    if (role) params.set("role", role);
+    return request<StatRanking[]>(`/fantasy/stat-ranking/${stat}?${params}`);
+  },
+
+  titles: (payload: { team_id: number; role: string; history_days?: number }) =>
+    request<TitleAdvice[]>("/fantasy/titles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  ingestProFeed: (daysBack = 30, maxPages = 10) =>
+    request<{ requested: number; parsed: number; unparsed: number }>(
+      `/ingest/pro-feed?days_back=${daysBack}&max_pages=${maxPages}`,
+      { method: "POST" },
+    ),
+  ingestTeam: (teamId: number, daysBack = 120) =>
+    request<{ requested: number; parsed: number; unparsed: number }>(
+      `/ingest/team/${teamId}?days_back=${daysBack}`,
+      { method: "POST" },
+    ),
+  resolveTeams: () =>
+    request<Record<string, number | null>>("/ingest/resolve-teams", {
+      method: "POST",
+    }),
+};
+
+// --- статический режим --------------------------------------------------------
+// На GitHub Pages бэкенда нет. Всё, что требует базы и симуляций, читается из
+// снапшота; математика эмблем считается прямо в браузере тем же аддитивным
+// движком, что и на сервере.
+
+const staticApi: typeof live = {
+  fantasyRules: async () => {
+    const { rules } = await loadSnapshot();
+    return {
+      version: rules.version,
+      source: rules.source,
+      stats: rules.stats as unknown as StatRule[],
+      qualities: rules.qualities,
+      traits: rules.traits as unknown as TraitRule[],
+      banner_slots: rules.banner_slots,
+      trait_bonus_mode: rules.trait_bonus_mode,
+      sources: rules.stats.map((s) => ({
+        stat: s.key,
+        label: s.label,
+        color: s.color,
+        availability: s.availability,
+        note: s.note,
+      })),
+    };
+  },
+
+  predictionsConfig: async () => {
+    const snapshot = await loadSnapshot();
+    return {
+      version: snapshot.rules.version,
+      event: "The International 2026 (TI15)",
+      teams: snapshot.teams.map((t) => t.name),
+      team_ids: Object.fromEntries(snapshot.teams.map((t) => [t.name, t.team_id])),
+      buckets: snapshot.group?.buckets ?? [],
+      group_points: {},
+      playoff_points: {},
+      bracket_slots: [],
+    };
+  },
+
+  teams: async () => {
+    const snapshot = await loadSnapshot();
+    return snapshot.teams.map((t) => ({
+      team_id: t.team_id,
+      name: t.name,
+      tag: null,
+      compendium_name: t.name,
+      rating: t.rating,
+      rd: t.rd,
+      volatility: null,
+      matches_played: 0,
+      days_idle: null,
+      is_listable: t.listable,
+    }));
+  },
+
+  ratingHistory: async () => offline(),
+  recomputeRatings: async () => offline(),
+
+  groupPrediction: async () => {
+    const snapshot = await loadSnapshot();
+    if (!snapshot.group) return offline();
+    return {
+      simulations: snapshot.group.simulations,
+      teams: snapshot.group.teams.map((t) => ({
+        team_id: t.team_id,
+        name: t.name,
+        probabilities: t.probabilities,
+        advance: t.advance,
+        expected_series: t.expected_series,
+      })),
+      plan: snapshot.group.plan.map((p) => ({
+        key: p.name,
+        pick: p.bucket,
+        label:
+          snapshot.group?.buckets.find((b) => b.key === p.bucket)?.label ?? p.bucket,
+      })),
+      expected_points: snapshot.group.expected_points,
+      expected_correct: snapshot.group.expected_correct,
+      points_percentiles: snapshot.group.points_percentiles,
+    };
+  },
+
+  teamRoles: async (teamId: number) => {
+    const snapshot = await loadSnapshot();
+    const roles = snapshot.roles.filter((r) => r.team_id === teamId);
+    return {
+      team_id: teamId,
+      team_name: roles[0]?.team_name ?? null,
+      roles: Object.fromEntries(roles.map((r) => [r.role, []])),
+      player_names: {},
+    };
+  },
+
+  project: async () => offline(),
+  optimiseBanner: async () => offline(),
+
+  roster: async (payload) => {
+    const snapshot = await loadSnapshot();
+    const candidates: Record<string, RosterCandidate[]> = {};
+    const byRole: Record<string, { team_id: number; team_name: string; mean: number }[]> = {};
+
+    for (const role of snapshot.roles) {
+      const banner = neutralBannerFor(role.role, snapshot.rules);
+      const values = new Map(role.stats.map((s) => [s.stat, s]));
+      const card = scoreBanner(banner, values, snapshot.rules).total;
+      const mean = card * role.period_ratio;
+      candidates[role.role] ??= [];
+      candidates[role.role].push({
+        role: role.role,
+        team_id: role.team_id,
+        team_name: role.team_name,
+        player_names: role.players,
+        mean,
+        floor_p5: mean * 0.85,
+        ceiling_p95: card * role.ceiling_ratio,
+        games_used: role.games,
+      });
+      byRole[role.role] ??= [];
+      byRole[role.role].push({ team_id: role.team_id, team_name: role.team_name, mean });
+    }
+
+    for (const role of Object.keys(candidates)) {
+      candidates[role].sort((a, b) => b.mean - a.mean);
+    }
+
+    // Лучшие сочетания из трёх разных команд.
+    const rosters: Roster[] = [];
+    const roles = Object.keys(byRole);
+    if (roles.length === 3) {
+      for (const core of byRole[roles[0]] ?? []) {
+        for (const mid of byRole[roles[1]] ?? []) {
+          if (mid.team_id === core.team_id) continue;
+          for (const support of byRole[roles[2]] ?? []) {
+            if (support.team_id === core.team_id || support.team_id === mid.team_id) continue;
+            const picks = [
+              { role: roles[0], ...core },
+              { role: roles[1], ...mid },
+              { role: roles[2], ...support },
+            ];
+            const total = picks.reduce((s, p) => s + p.mean, 0);
+            rosters.push({
+              expected_total: total,
+              p5: total * 0.85,
+              p95: total * 1.15,
+              picks,
+            });
+          }
+        }
+      }
+      rosters.sort((a, b) => b.expected_total - a.expected_total);
+    }
+
+    return {
+      candidates,
+      rosters: rosters.slice(0, payload?.top_n ?? 5),
+      banners: {},
+      skipped: [],
+    };
+  },
+
+  statReport: async (payload) => {
+    const snapshot = await loadSnapshot();
+    const role = findRole(snapshot, payload.team_id, payload.role);
+    if (!role) return offline();
+    return payload.include_unavailable
+      ? role.stats
+      : role.stats.filter((s) => s.availability !== "unavailable");
+  },
+
+  bestBanner: async (payload) => {
+    const snapshot = await loadSnapshot();
+    const role = findRole(snapshot, payload.team_id, payload.role);
+    if (!role) return offline();
+
+    const options = optimiseBanner(payload.role, role.stats, snapshot.rules, {
+      qualities: payload.qualities ?? undefined,
+      traits: payload.traits ?? undefined,
+      topN: payload.top_n ?? 3,
+    });
+
+    return options.map((option) => ({
+      role: payload.role,
+      team_id: payload.team_id,
+      team_name: role.team_name,
+      player_names: role.players,
+      slots: option.slots.map((s) => ({ ...s, alternatives: [] })),
+      expected_card_points: option.total,
+      period_mean: option.total * role.period_ratio,
+      period_ceiling: option.total * role.ceiling_ratio,
+    }));
+  },
+
+  statRanking: async (stat: string, role?: string) => {
+    const snapshot = await loadSnapshot();
+    return snapshot.roles
+      .filter((r) => !role || r.role === role)
+      .map((r) => ({ role: r, value: r.stats.find((s) => s.stat === stat) }))
+      .filter((entry) => entry.value)
+      .map(({ role: r, value }) => ({
+        stat,
+        team_id: r.team_id,
+        team_name: r.team_name,
+        role: r.role,
+        player_names: r.players,
+        units_per_game: value!.units_per_game,
+        base_points: value!.base_points,
+        p95_points: value!.p95_points,
+        games: r.games,
+      }))
+      .sort((a, b) => b.base_points - a.base_points);
+  },
+
+  titles: async (payload) => {
+    const snapshot = await loadSnapshot();
+    const role = findRole(snapshot, payload.team_id, payload.role);
+    return role ? role.titles : offline();
+  },
+
+  ingestProFeed: async () => offline(),
+  ingestTeam: async () => offline(),
+  resolveTeams: async () => offline(),
+};
+
+function neutralBannerFor(role: string, rules: RulesSnapshot): Emblem[] {
+  const defaults: Record<string, string[]> = {
+    core: ["kills", "gpm", "creep_score"],
+    mid: ["kills", "gpm", "teamfight_participation"],
+    support: ["wards_placed", "stuns", "camps_stacked"],
+  };
+  const stats = defaults[role] ?? defaults.core;
+  const colors = rules.role_slots[role] ?? [];
+  // Нейтральный набор должен укладываться в цвета слотов роли.
+  const byColor = new Map<string, string[]>();
+  for (const stat of rules.stats) {
+    if (!byColor.has(stat.color)) byColor.set(stat.color, []);
+    byColor.get(stat.color)!.push(stat.key);
+  }
+  return colors.map((color, index) => {
+    const preferred = stats[index];
+    const pool = byColor.get(color) ?? [];
+    return {
+      stat: pool.includes(preferred) ? preferred : (pool[0] ?? preferred),
+      quality: "tier_3",
+      trait: null,
+    };
+  });
+}
+
+export const api = STATIC_MODE ? staticApi : live;

@@ -1,0 +1,92 @@
+name: Refresh data
+
+# Каждый день подтягивает свежие матчи участников TI15, пересчитывает рейтинги и
+# аналитику, коммитит обновлённый снапшот. Коммит в frontend/public/data
+# запускает деплой страницы.
+on:
+  schedule:
+    # 04:20 UTC — ночь по Москве, матчи предыдущего дня уже разобраны.
+    - cron: "20 4 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Глубина загрузки истории команд, дней"
+        default: "150"
+        required: false
+
+permissions:
+  contents: write
+  # Нужно, чтобы запустить деплой вручную: коммиты от GITHUB_TOKEN намеренно не
+  # триггерят другие workflow, иначе получилась бы бесконечная рекурсия.
+  actions: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # Загрузка упирается в лимит OpenDota (50 запросов/мин), не в процессор.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Установить зависимости
+        run: pip install -r backend/requirements.txt
+
+      # База с уже загруженными матчами: без неё каждый запуск заново тянул бы
+      # семь сотен матчей и упирался в суточный лимит OpenDota.
+      - name: Восстановить базу из кэша
+        uses: actions/cache/restore@v4
+        with:
+          path: backend/data/analyzer.db
+          key: analyzer-db-${{ github.run_id }}
+          restore-keys: analyzer-db-
+
+      - name: Загрузить свежие матчи
+        working-directory: backend
+        env:
+          ANALYZER_OPENDOTA_API_KEY: ${{ secrets.OPENDOTA_API_KEY }}
+        run: python tools/cli.py ingest-ti --days ${{ github.event.inputs.days || '150' }}
+
+      - name: Пересчитать рейтинги
+        working-directory: backend
+        run: python tools/cli.py ratings --days 200
+
+      - name: Экспортировать снапшот
+        working-directory: backend
+        run: python tools/export_snapshot.py --simulations 20000
+
+      - name: Сохранить базу в кэш
+        uses: actions/cache/save@v4
+        with:
+          path: backend/data/analyzer.db
+          key: analyzer-db-${{ github.run_id }}
+
+      - name: Закоммитить обновление
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/public/data/snapshot.json
+          if git diff --staged --quiet; then
+            echo "данные не изменились — коммит не нужен"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "data: обновление снапшота $(date -u +%Y-%m-%d)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Опубликовать обновлённую страницу
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref ${{ github.ref_name }}

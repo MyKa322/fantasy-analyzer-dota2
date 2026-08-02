@@ -1,0 +1,319 @@
+# Fantasy Draft — правила начисления очков компендиума TI15 (2026).
+#
+# Источник цифр: экран GLOSSARY внутриигрового компендиума (скриншоты от 2026-07-31).
+# Всё, что помечено `verified: false`, взято не из глоссария, а выведено логически —
+# это первые кандидаты на проверку, когда появится больше данных.
+#
+# ВАЖНО: эти цифры отличаются от TI2025 (kills 121 -> 107, deaths 1800/-180 -> 1950/-195,
+# roshan 850 -> 1172, stuns 128/сек -> 10/сек и т.д.), не переиспользовать старые таблицы.
+
+version: "TI15"
+source: "in-game compendium glossary, 2026-07-31"
+
+# --- Базовая стоимость статов -------------------------------------------------
+# kind:
+#   per_unit  — points = per_unit * value
+#   linear    — points = base + per_unit * value  (deaths: 1950 стартовых, -195 за смерть)
+#   flat      — points = value_if_true * bool(value)
+#   capped    — points = max_points * clamp(value, 0, 1)  (доля участия в тимфайтах)
+stats:
+  kills:
+    color: red
+    kind: per_unit
+    per_unit: 107.0
+    label: "Kills"
+  deaths:
+    color: red
+    kind: linear
+    base: 1950.0
+    per_unit: -195.0
+    label: "Deaths"
+  creep_score:
+    color: red
+    kind: per_unit
+    per_unit: 3.0
+    label: "Creep Score"        # last hits + denies
+  gpm:
+    color: red
+    kind: per_unit
+    per_unit: 2.0
+    label: "GPM"
+  madstone_collected:
+    color: red
+    kind: per_unit
+    per_unit: 13.0
+    label: "Madstone Collected"
+  tower_kills:
+    color: red
+    kind: per_unit
+    per_unit: 352.0
+    label: "Tower Kills"        # именно ластхит по вышке
+
+  wards_placed:
+    color: blue
+    kind: per_unit
+    per_unit: 117.0
+    label: "Wards Placed"       # только observer
+  camps_stacked:
+    color: blue
+    kind: per_unit
+    per_unit: 234.0
+    label: "Camps Stacked"
+  runes_grabbed:
+    color: blue
+    kind: per_unit
+    per_unit: 141.0
+    label: "Runes Grabbed"      # bottled or taken
+  watchers_taken:
+    color: blue
+    kind: per_unit
+    per_unit: 147.0
+    label: "Watchers Taken"
+  smokes_used:
+    color: blue
+    kind: per_unit
+    per_unit: 293.0
+    label: "Smokes Used"
+  lotuses_grabbed:
+    color: blue
+    kind: per_unit
+    per_unit: 176.0
+    label: "Lotuses Grabbed"
+
+  roshan_kills:
+    color: green
+    kind: per_unit
+    per_unit: 1172.0
+    label: "Roshan Kills"
+  teamfight_participation:
+    color: green
+    kind: capped
+    max_points: 2124.0
+    label: "Teamfight Participation"   # точная формула Valve не раскрыта, берём долю участия
+  stuns:
+    color: green
+    kind: per_unit
+    per_unit: 10.0
+    label: "Stuns"              # секунды наложенного стана
+  tormentor_kills:
+    color: green
+    kind: per_unit
+    per_unit: 879.0
+    label: "Tormentor Kills"
+  first_blood:
+    color: green
+    kind: flat
+    value_if_true: 1934.0
+    label: "First Blood"
+  courier_kills:
+    color: green
+    kind: per_unit
+    per_unit: 703.0
+    label: "Courier Kills"
+
+# --- Качество эмблемы ---------------------------------------------------------
+# Бонус к базовому значению стата эмблемы.
+qualities:
+  tier_1: 0.10
+  tier_2: 0.30
+  tier_3: 0.60
+  tier_4: 1.00
+  tier_5: 1.50
+
+# ПОДТВЕРЖДЕНО по экрану War Banner: множители складываются, а не перемножаются.
+#
+#   итоговый % = 100 + бонус качества + собственный трейт (если условие выполнено)
+#                + сумма эффектов соседей
+#
+# Сверка на реальных карточках:
+#   Creep Score  Tier II + Friendly(не выполнен)            = 100+30+0      = 130%
+#   Stuns        Tier I  + Fractal(не выполнен) + сосед-Vamp = 100+10+0-10  = 100%
+#   GPM          Tier II + Vampiric сам себе                 = 100+30+50    = 180%
+#   GPM (mid)    Tier II + Unique + сосед-Vampiric           = 100+30+30-10 = 150%
+#   Teamfight    Tier II + Fractal(не выполнен) + сосед-Vamp = 100+30+0-10  = 120%
+trait_bonus_mode: additive
+
+# --- Трейты эмблем ------------------------------------------------------------
+# scope:
+#   self_bonus     — множит сам БОНУС качества ("+X% to the stat bonus")
+#   self_value     — множит итоговое ЗНАЧЕНИЕ стата ("increases the stat value")
+#   adjacent_value — множит значение стата соседних эмблем
+traits:
+  fractal:
+    label: "Fractal"
+    description: "+60%, если все качества эмблем на баннере разные"
+    effects:
+      - scope: self_bonus
+        amount: 0.60
+    condition: all_qualities_distinct
+  benevolent:
+    label: "Benevolent"
+    description: "+20% соседним эмблемам"
+    effects:
+      - scope: adjacent_value
+        amount: 0.20
+    condition: always
+  vampiric:
+    label: "Vampiric"
+    description: "+50% себе, -10% соседним эмблемам"
+    effects:
+      - scope: self_value
+        amount: 0.50
+      - scope: adjacent_value
+        amount: -0.10
+    condition: always
+  unique:
+    label: "Unique"
+    description: "+30%, если это единственная Unique эмблема на баннере"
+    effects:
+      - scope: self_bonus
+        amount: 0.30
+    condition: only_unique_on_banner
+  friendly:
+    label: "Friendly"
+    description: "+50%, если на баннере минимум 3 Friendly эмблемы"
+    effects:
+      - scope: self_bonus
+        amount: 0.50
+    condition: at_least_3_friendly
+
+# --- Устройство War Banner ----------------------------------------------------
+banner:
+  # ПОДТВЕРЖДЕНО экраном War Banner: ровно три эмблемы на роль.
+  slots: 3
+  verified_slots: true
+  # ПОДТВЕРЖДЕНО: эмблемы стоят вертикальной колонкой, соседи = i-1 и i+1.
+  # На core-баннере Vampiric в нижнем слоте снял 10% только со среднего, а
+  # верхний остался при своих 130% — при кольцевой раскладке пострадали бы оба.
+  adjacency: linear
+  verified_adjacency: true
+  # "there are no duplicate stats on a War Banner"
+  allow_duplicate_stats: false
+  # По одному баннеру на роль; оба игрока дуо считаются по одному и тому же баннеру.
+  per_role: true
+
+# Цвет каждого слота задан ролью и НЕ рероллится: меняются только стат внутри
+# цвета, качество и трейт. Отсюда же берётся, какие статы вообще доступны роли —
+# саппорту, например, никогда не выпадет GPM.
+role_slots:
+  core: [red, red, green]
+  mid: [red, blue, green]
+  support: [blue, blue, green]
+
+# --- Правила подсчёта итогового счёта -----------------------------------------
+# Из глоссария (раздел Scoring):
+#   "each player's score is calculated individually in every game they participate in.
+#    Players receive points only for the stats present on their War Banner...
+#    We then average the score of all players for a role... The top two scoring games
+#    within a series are used to get the role's final score for the match. If a role
+#    participates in more than one series in a period, the best scoring series will be used."
+scoring_rules:
+  aggregate_within_role: mean      # среднее по игрокам роли за конкретную игру
+  games_per_series: 2              # топ-2 игры серии
+  series_per_period: best          # лучшая серия периода
+  roles:
+    core:
+      label: "Core Duo"
+      players: 2
+    mid:
+      label: "Mid"
+      players: 1
+    support:
+      label: "Support Duo"
+      players: 2
+
+# --- Coaching Titles ----------------------------------------------------------
+# Префикс + суффикс, каждый даёт % к финальному счёту игры при выполнении условия.
+# Титулы меняются бесплатно, поэтому выбирать их стоит под конкретного игрока.
+#
+# `estimator` — как модель оценивает вероятность срабатывания условия:
+#   hero_pool   — зависит от пула героев игрока (цвет/тип героя); данных о цветах
+#                 героев у нас нет, поэтому вклад считается только если задать
+#                 вероятность вручную
+#   from_data   — считается по истории матчей роли (длительность игры, поражения,
+#                 время первой крови и т.п.)
+#   unmodelled  — условие вне наших данных (смерть от Торментора, фонтан-килл);
+#                 в проекции не учитывается, но показывается в интерфейсе
+titles:
+  prefixes:
+    - key: crimson
+      label: "Crimson"
+      bonus: 0.06
+      condition: "герой красного цвета"
+      estimator: hero_pool
+    - key: cerulean
+      label: "Cerulean"
+      bonus: 0.11
+      condition: "герой синего цвета"
+      estimator: hero_pool
+    - key: emerald
+      label: "Emerald"
+      bonus: 0.06
+      condition: "герой зелёного цвета"
+      estimator: hero_pool
+    - key: royal
+      label: "Royal"
+      bonus: 0.10
+      condition: "герой фиолетового цвета"
+      estimator: hero_pool
+    - key: golden
+      label: "Golden"
+      bonus: 0.08
+      condition: "жёлтый или коричневый герой"
+      estimator: hero_pool
+    - key: elemental
+      label: "Elemental"
+      bonus: 0.08
+      condition: "водный, огненный или ледяной герой"
+      estimator: hero_pool
+    - key: otherworldly
+      label: "Otherworldly"
+      bonus: 0.07
+      condition: "нежить, демон или дух"
+      estimator: hero_pool
+    - key: heroic
+      label: "Heroic"
+      bonus: 0.09
+      condition: "герой в плаще или маске"
+      estimator: hero_pool
+  suffixes:
+    - key: tormented
+      label: "the Tormented"
+      bonus: 0.23
+      condition: "любой игрок погиб от Торментора"
+      estimator: unmodelled
+    - key: flayed
+      label: "the Flayed Twins Acolyte"
+      bonus: 0.09
+      condition: "первая кровь до стартового гонга"
+      estimator: unmodelled
+    - key: patient
+      label: "the Patient"
+      bonus: 0.23
+      condition: "первая кровь позже 10-й минуты"
+      estimator: from_data
+    - key: underdog
+      label: "the Underdog"
+      bonus: 0.06
+      condition: "игра проиграна"
+      estimator: from_data
+    - key: decisive
+      label: "the Decisive"
+      bonus: 0.24
+      condition: "игра короче 25 минут"
+      estimator: from_data
+    - key: clutch
+      label: "the Clutch"
+      bonus: 0.16
+      condition: "последняя возможная карта серии"
+      estimator: from_data
+    - key: lucky
+      label: "the Lucky"
+      bonus: 0.21
+      condition: "время матча заканчивается на 8"
+      estimator: from_data
+    - key: cruel
+      label: "the Cruel"
+      bonus: 0.13
+      condition: "игрок убит в своём фонтане"
+      estimator: unmodelled

@@ -1,0 +1,23 @@
+# Окружения и сборки
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+node_modules/
+frontend/dist/
+
+# Локальные данные: база и кэш матчей OpenDota (сотни мегабайт, восстанавливаются
+# командой `cli.py ingest-ti`). Результат анализа лежит в снапшоте, он в репозитории.
+backend/data/
+backend/.env
+
+# Исходные ассеты в полном разрешении (82 МБ). В репозитории — их ужатые
+# WebP-копии во frontend/public/assets, собираются `tools/optimise_assets.py`.
+/players/
+/teams/
+/fantasy_craft/
+dota2-fantasy-design-main/players/
+dota2-fantasy-design-main/teams/
+dota2-fantasy-design-main/fantasy_craft/
+dota2-fantasy-design-main/node_modules/

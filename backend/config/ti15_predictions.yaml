@@ -1,0 +1,157 @@
+# Predictions — структура турнира и шкалы очков компендиума TI15 (2026).
+# Источник: экран HOW TO PLAY + экран сетки предсказаний группового этапа (скриншоты 2026-07-31).
+
+version: "TI15"
+event: "The International 2026 (TI15)"
+location: "Shanghai"
+dates: "2026-08-13 .. 2026-08-23"
+
+# --- Групповой этап (Swiss, 16 команд) ---------------------------------------
+# Предсказывается финальная корзина каждой команды. Суммарно 16 слотов.
+group_stage:
+  format: swiss
+  teams: 16
+  # Механика Swiss, выведенная из размеров корзин (1/2/5/5/2/1 = 16 команд):
+  # команда играет, пока не наберёт 4 победы или 4 поражения. За 4 раунда
+  # определяются 4-0 и 0-4, за 5-й — 4-1 и 1-4, после чего остаются 10 команд
+  # (5 с записью 3-2 и 5 с 2-3). Они играют Elimination Round: 5 победителей
+  # проходят в плей-офф (итого 8), 5 проигравших вылетают.
+  swiss:
+    wins_to_advance: 4
+    losses_to_eliminate: 4
+    max_rounds: 6
+    # Матч, который может квалифицировать или выбить команду, играется в Bo3,
+    # остальные — Bo1. Формат TI15 официально не объявлен; правится здесь.
+    regular_best_of: 1
+    decisive_best_of: 3
+  # Порядок как на экране предсказаний, сверху вниз / слева направо.
+  buckets:
+    - key: "4-0"
+      label: "4-0"
+      description: "One undefeated team"
+      slots: 1
+    - key: "4-1"
+      label: "4-1"
+      description: "Two teams with 4 wins and 1 loss"
+      slots: 2
+    - key: "elim_winner"
+      label: "Elimination Round Winner"
+      description: "Five teams that win in the Elimination Round"
+      slots: 5
+    - key: "elim_loser"
+      label: "Elimination Round Loser"
+      description: "Five teams that lose in the Elimination Round"
+      slots: 5
+    - key: "1-4"
+      label: "1-4"
+      description: "Two teams with 1 win and 4 losses"
+      slots: 2
+    - key: "0-4"
+      label: "0-4"
+      description: "One unvictorious team"
+      slots: 1
+  # Очки за N угаданных слотов (индекс = число совпадений).
+  points_by_correct:
+    1: 30
+    2: 60
+    3: 120
+    4: 360
+    5: 720
+    6: 1200
+    7: 1800
+    8: 2520
+    9: 3360
+    10: 4320
+    11: 5400
+    12: 6600
+    13: 7920
+    14: 9360
+    15: 10920
+    16: 12000
+
+# --- Плей-офф (сетка TI) ------------------------------------------------------
+# Заполняется после группового этапа: победитель каждой серии, вплоть до чемпиона.
+playoffs:
+  predictions: 14
+  # 14 предсказаний = все матчи double elimination на 8 команд:
+  # UB: 4 четвертьфинала + 2 полуфинала + финал = 7
+  # LB: 2 + 2 + 1 + финал = 6
+  # Гранд-финал = 1
+  teams: 8
+  format: double_elimination
+  best_of: 3
+  grand_final_best_of: 5
+  points_by_correct:
+    1: 120
+    2: 360
+    3: 720
+    4: 1200
+    5: 1800
+    6: 2520
+    7: 3360
+    8: 4320
+    9: 5400
+    10: 6600
+    11: 7920
+    12: 9360
+    13: 10920
+    14: 12000
+
+# --- Участники ----------------------------------------------------------------
+# Порядок как на экране выбора команды.
+#
+# `name` — как команда подписана в компендиуме. Часть команд Valve показывает под
+# изменёнными названиями (у организаций со спонсорами-букмекерами), поэтому у них
+# есть `aliases` — реальные названия, под которыми команда идёт в OpenDota и на
+# Liquipedia. Сопоставление (`cli.py resolve-teams`) ищет по всем вариантам.
+#
+# `team_id` — OpenDota/Steam team id. Проставляется resolve-teams, значения
+# сверены с историей матчей команды.
+# ВНИМАНИЕ по историческим профилям. У части организаций в OpenDota есть более
+# старый профиль с длинной историей (L1GA TEAM 9303383, LGD Gaming 15,
+# Nigma Galaxy 7554697). Они СЮДА НЕ ПОДМЕШИВАЮТСЯ: составы там другие, и
+# приписывать новой команде рейтинг, заработанный другими игроками, — прямой путь
+# к ложной уверенности прогноза. Малое число матчей честно отражается высоким RD.
+teams:
+  - name: "Team Liquid"
+    team_id: 2163
+  - name: "BoomBoys"
+    aliases: ["BetBoom Team", "BetBoom"]
+    team_id: 8255888        # тот же профиль, что и BetBoom: gpk, Kiritych, Save-
+  - name: "Xtreme Gaming"
+    team_id: 8261500
+  - name: "Team Falcons"
+    team_id: 9247354
+  - name: "Aurora Gaming"
+    aliases: ["Aurora"]
+    team_id: 9467224
+  - name: "Team Yandex"
+    aliases: ["Yandex"]
+    team_id: 9823272
+  - name: "Iron Wing"
+    aliases: ["1win", "1Win Team", "Iron Wings"]
+    team_id: 10150413       # состав bzm, 33, Pure, Whitemon, Ari
+  - name: "Vici Gaming"
+    team_id: 726228
+  - name: "Team Resilience"
+    aliases: ["Resilience"]
+    team_id: 5017210
+  - name: "LGD Gaming"
+    aliases: ["PSG.LGD", "LGD"]
+    team_id: 10150538       # новый профиль; старый китайский LGD — id 15, состав другой
+  - name: "OG"
+    team_id: 2586976
+  - name: "GamerLegion"
+    aliases: ["Gamer Legion"]
+    team_id: 9964962
+  - name: "Nigma Galaxy"
+    aliases: ["Team Nigma", "Nigma"]
+    team_id: 10136357       # состав GH, SumaiL, OmaR; старый профиль — 7554697
+  - name: "Huligani"
+    aliases: ["L1ga Team", "L1ga"]
+    team_id: 10149530       # бывшая L1GA (9303383), но состав сменился почти полностью
+  - name: "Team Vision"
+    aliases: ["PARIVISION", "Pari Vision"]
+    team_id: 9572001        # состав No[o]ne-, Dukalis, Satanic
+  - name: "Team Spirit"
+    team_id: 7119388

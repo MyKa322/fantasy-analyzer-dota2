@@ -1,0 +1,61 @@
+name: Deploy Pages
+
+# Страница пересобирается при любом изменении фронтенда или снапшота — в том
+# числе после коммита, который делает обновление данных по расписанию.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Параллельные деплои не нужны: важна последняя версия, промежуточные можно
+# отменять, но уже начатый деплой не рвём.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Установить зависимости
+        working-directory: frontend
+        run: npm ci
+
+      - name: Собрать статическую версию
+        working-directory: frontend
+        env:
+          # Без бэкенда: данные читаются из снапшота, эмблемы считаются в браузере.
+          VITE_STATIC_DATA: "1"
+          # Pages отдаёт сайт из подкаталога /<repo>/.
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

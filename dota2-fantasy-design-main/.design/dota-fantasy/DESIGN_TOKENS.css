@@ -1,0 +1,671 @@
+/* ============================================================================
+   DESIGN TOKENS — Dota 2 Fantasy: Banner Builder & Advisor
+   Philosophy: Heraldic Deco (Art Deco / Geometric, heraldic material)
+   Derived from: .design/dota-fantasy/DESIGN_BRIEF.md
+   Date: 2026-08-01
+   ============================================================================
+
+   ON THEMES — READ BEFORE ADDING A LIGHT MODE
+   -------------------------------------------
+   This product is dark-only by decision (see brief, "Out of Scope"). The whole
+   asset kit is authored for dark grounds and a light theme would fight every
+   value below.
+
+   But the design is NOT single-surface. It has two opposed surface families
+   that coexist on the same screen, and text must flip between them:
+
+     • DARK surfaces  — app ground, modals, emblem wells, slate picker
+                        → cream/gold text (--ink-*)
+     • PARCHMENT      — the banner field itself, tan and genuinely light
+                        → dark brown text (--umber-*)
+
+   So this is a DUAL-SURFACE system, not a dual-theme system. Every place a
+   light theme would have needed a text ramp, the parchment ramp already
+   provides one. Using --ink-* on parchment, or --umber-* on dark, will fail
+   contrast — that pairing is the single most likely bug in this system.
+
+   The [data-theme] hooks at the bottom are scaffolding only. They exist so a
+   theme could be added later without touching a single component. They are
+   deliberately not populated with an invented light palette.
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ==========================================================================
+     1. RAW PALETTE — the material. Never referenced by components directly.
+     ====================================================================== */
+
+  /* --- Warm dark ground: leather, shadow, the app's base material --------- */
+  --raw-ground-void:      #0B0705;
+  --raw-ground-deep:      #140D07;
+  --raw-ground-base:      #1C1309;
+  --raw-ground-raised:    #2A1D10;
+  --raw-ground-panel:     #3A2818;
+  --raw-ground-panel-hi:  #4E3720;
+
+  /* --- Parchment: the banner field. A LIGHT surface inside a dark app. ---- */
+  --raw-parch-bright:     #E0D2B4;
+  --raw-parch-base:       #CDBB96;
+  --raw-parch-mid:        #B9A47D;
+  --raw-parch-deep:       #9C8560;
+  --raw-parch-shadow:     #7C6746;
+
+  /* --- Gold: hardware, frames, ornament. Six stops for bevel gradients. --- */
+  --raw-gold-pale:        #F2DFAE;
+  --raw-gold-light:       #E5C87E;
+  --raw-gold-base:        #C9A24E;
+  --raw-gold-mid:         #A8822F;
+  --raw-gold-deep:        #7E601F;
+  --raw-gold-shadow:      #4E3A12;
+
+  /* --- Ink: text ON DARK surfaces ---------------------------------------- */
+  --raw-ink-bright:       #F0E7D5;   /* 14.8:1 on ground-base */
+  --raw-ink-base:         #D8CBB2;   /* 11.1:1 — body text */
+  --raw-ink-muted:        #A3947A;   /*  6.5:1 — secondary */
+  --raw-ink-faint:        #7A6D57;   /*  3.8:1 — LARGE TEXT / non-text only */
+
+  /* --- Umber: text ON PARCHMENT surfaces ---------------------------------
+     Ratios measured against --raw-parch-base (#CDBB96), which is the DARKEST
+     parchment a glyph is ever allowed to sit on. parch-mid and below are
+     decorative only — see the banner gradient note in §11.                 */
+  --raw-umber-deep:       #2E1F0C;   /* 8.46:1 on parch-base — headings */
+  --raw-umber-base:       #43301A;   /* 6.65:1 — body text */
+  --raw-umber-muted:      #584428;   /* 4.90:1 — secondary, passes AA */
+  --raw-umber-faint:      #6E5B3C;   /* 3.46:1 — LARGE TEXT / non-text only */
+
+  /* --- Slate: the ONE cool surface. Compact team picker only. ------------ */
+  --raw-slate-void:       #151A22;
+  --raw-slate-base:       #1E2530;
+  --raw-slate-raised:     #29323F;
+  --raw-slate-panel:      #333D4C;
+  --raw-slate-ink:        #C6CEDA;
+
+  /* --- Emblem groups: SEMANTIC. Colour carries stat-group meaning. -------
+     Never use these decoratively. Never use them for status or deltas.
+     Always paired with the emblem glyph AND its stat name in text, so no
+     information is colour-only.                                            */
+
+  /* RED — Kills, Deaths, Creep Score, GPM, Madstone, Tower Kills */
+  --raw-red-glyph:        #F0A0A0;   /* tint applied to the white PNG */
+  --raw-red-hi:           #7B3B3B;   /* header strip */
+  --raw-red-base:         #5A2A2A;
+  --raw-red-well:         #341A1A;   /* inset body */
+  --raw-red-emit:         214, 92, 92;
+
+  /* BLUE — Wards, Camps Stacked, Runes, Watchers, Smokes, Lotuses */
+  --raw-blue-glyph:       #9FC0F0;
+  --raw-blue-hi:          #3B4B7B;
+  --raw-blue-base:        #2A3459;
+  --raw-blue-well:        #1A2038;
+  --raw-blue-emit:        92, 132, 214;
+
+  /* GREEN — Roshan, Teamfight, Stuns, Tormentor, First Blood, Courier */
+  --raw-green-glyph:      #A6DCA6;
+  --raw-green-hi:         #3B6B3B;
+  --raw-green-base:       #2A4F2A;
+  --raw-green-well:       #1A301A;
+  --raw-green-emit:       106, 194, 106;
+
+  /* --- Steel: secondary hardware (close button, disabled SUBMIT) ---------
+     Darker than the client's, deliberately. The reference steel is a
+     mid-tone (#85847B) carrying dark text at 4.23:1 — and a mid-tone plate
+     carries NEITHER dark nor light text at AA: dark text bottoms out at
+     2.33:1 over the gradient's dark end, light text at 2.8:1 over its light
+     end. There is no glyph colour that fixes a mid-tone plate. So the ramp
+     moves down and the glyph goes light: 4.76:1 at the worst point.
+     Disabled controls are WCAG-exempt, but the close button uses this same
+     treatment and is active, so it has to pass.                           */
+  --raw-steel-light:      #66655E;
+  --raw-steel-base:       #4E4D47;
+  --raw-steel-deep:       #38372F;
+  --raw-steel-shadow:     #1F1E1A;
+
+
+  /* ==========================================================================
+     2. SEMANTIC COLOUR
+     ====================================================================== */
+
+  /* --- Backgrounds -------------------------------------------------------- */
+  --color-bg-primary:          var(--raw-ground-base);
+  --color-bg-secondary:        var(--raw-ground-raised);
+  --color-bg-tertiary:         var(--raw-ground-panel);
+  --color-bg-elevated:         var(--raw-ground-panel-hi);
+  --color-bg-sunken:           var(--raw-ground-deep);
+  --color-bg-inverse:          var(--raw-parch-base);
+
+  /* Parchment surface family — the banner field */
+  --color-surface-parchment:       var(--raw-parch-base);
+  --color-surface-parchment-hi:    var(--raw-parch-bright);
+  --color-surface-parchment-lo:    var(--raw-parch-mid);
+  --color-surface-parchment-edge:  var(--raw-parch-shadow);
+
+  /* Slate surface family — compact team picker ONLY */
+  --color-surface-slate:       var(--raw-slate-base);
+  --color-surface-slate-hi:    var(--raw-slate-raised);
+  --color-surface-slate-panel: var(--raw-slate-panel);
+
+  --color-surface-overlay:     rgba(11, 7, 5, 0.86);
+
+  /* --- Text ON DARK ------------------------------------------------------- */
+  --color-text-primary:        var(--raw-ink-base);
+  --color-text-heading:        var(--raw-ink-bright);
+  --color-text-secondary:      var(--raw-ink-muted);
+  --color-text-tertiary:       var(--raw-ink-faint);
+  --color-text-accent:         var(--raw-gold-light);
+  --color-text-link:           var(--raw-gold-light);
+
+  /* --- Text ON PARCHMENT — do not mix with the above ---------------------- */
+  --color-text-on-parch:           var(--raw-umber-base);
+  --color-text-on-parch-heading:   var(--raw-umber-deep);
+  --color-text-on-parch-secondary: var(--raw-umber-muted);
+  --color-text-on-parch-tertiary:  var(--raw-umber-faint);
+
+  /* --- Text ON SLATE ------------------------------------------------------ */
+  --color-text-on-slate:       var(--raw-slate-ink);
+
+  /* --- Borders ------------------------------------------------------------ */
+  --color-border-primary:      var(--raw-gold-deep);
+  --color-border-secondary:    rgba(201, 162, 78, 0.24);
+  --color-border-subtle:       rgba(201, 162, 78, 0.10);
+  --color-border-ornament:     var(--raw-gold-base);
+  --color-border-on-parch:     var(--raw-parch-shadow);
+
+  /* --- Accent / actions --------------------------------------------------- */
+  --color-accent-primary:         var(--raw-gold-base);
+  --color-accent-primary-hover:   var(--raw-gold-light);
+  --color-accent-primary-active:  var(--raw-gold-mid);
+  --color-accent-secondary:       var(--raw-steel-base);
+
+  /* --- Gold has a lightness fork. Ornament gold FAILS as body text. ------- */
+  --color-gold-ornament:       var(--raw-gold-base);   /* frames, rules, bevels */
+  --color-gold-text:           var(--raw-gold-light);  /* 11.25:1 on ground-base */
+  --color-gold-text-on-parch:  var(--raw-gold-shadow); /* 5.75:1 on parch-base */
+
+  /* --- FORBIDDEN PAIRINGS — all four measured, all four fail ------------
+     These are not style preferences. Each was tested and rejected.
+
+       gold-ornament  ON parchment  →  1.27:1   catastrophic. Gold-on-tan is
+                                                 near-invisible. Use
+                                                 --color-gold-text-on-parch.
+       ink-*          ON parchment  →  < 2:1    cream on tan. Use --umber-*.
+       umber-*        ON dark       →  < 2:1    brown on brown. Use --ink-*.
+       umber-muted    ON parch-mid  →  3.46:1   why the banner gradient
+                                                 floors at parch-base.
+
+     The ink/umber inversion is the likeliest bug in this system: both ramps
+     are warm browns and cream, so a wrong pairing looks plausible in code
+     and is unreadable on screen. Use [data-surface] scoping rather than
+     picking ramps by hand.                                                */
+
+  /* --- Emblem groups (semantic) ------------------------------------------- */
+  --color-emblem-red-glyph:    var(--raw-red-glyph);
+  --color-emblem-red-header:   var(--raw-red-hi);
+  --color-emblem-red-body:     var(--raw-red-well);
+  --color-emblem-blue-glyph:   var(--raw-blue-glyph);
+  --color-emblem-blue-header:  var(--raw-blue-hi);
+  --color-emblem-blue-body:    var(--raw-blue-well);
+  --color-emblem-green-glyph:  var(--raw-green-glyph);
+  --color-emblem-green-header: var(--raw-green-hi);
+  --color-emblem-green-body:   var(--raw-green-well);
+
+  /* --- Deltas: DELIBERATELY NOT RED/GREEN --------------------------------
+     A green "+8.4k" sitting beside green emblems would collide with the
+     semantic colour system and make stat-group colour ambiguous. Gains use
+     gold, losses use terracotta — neither is an emblem group. Both MUST be
+     accompanied by a directional glyph so the signal is never colour-only. */
+  --color-delta-gain:          var(--raw-gold-light);
+  --color-delta-loss:          #C77B5A;
+  --color-delta-neutral:       var(--raw-ink-muted);
+
+  /* --- Status ------------------------------------------------------------- */
+  --color-status-success:      #8FB56A;
+  --color-status-warning:      #D9A441;
+  --color-status-error:        #C4614B;
+  --color-status-info:         #6E93C4;
+
+  /* --- Focus: TWO rings. One colour cannot survive parchment AND slate. ---
+     Components pick by surface; the composite ring below works on either. */
+  --color-focus-on-dark:       var(--raw-gold-pale);
+  --color-focus-on-parch:      var(--raw-umber-deep);
+  --color-focus-halo:          rgba(11, 7, 5, 0.9);
+
+
+  /* ==========================================================================
+     3. TEAM CREST TREATMENT
+     Sixteen uncontrolled brand palettes must not compete with the semantic
+     red/blue/green emblem system. Crests always sit on a neutral plate and
+     are desaturated unless selected. This is the resolution the brief
+     required — it is a token, not a per-component decision.
+     ====================================================================== */
+  --crest-plate-bg:            rgba(11, 7, 5, 0.45);
+  --crest-plate-bg-selected:   rgba(242, 223, 174, 0.08);
+  --crest-filter-idle:         saturate(0.30) brightness(0.72) contrast(1.05);
+  --crest-filter-hover:        saturate(0.70) brightness(0.90);
+  --crest-filter-selected:     saturate(1) brightness(1);
+  --crest-filter-disabled:     grayscale(1) brightness(0.45);
+
+
+  /* ==========================================================================
+     4. SPACING — 16px base, 4px grid. Deco padding is architectural.
+     ====================================================================== */
+  --space-0:   0;
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   24px;
+  --space-6:   32px;
+  --space-7:   48px;
+  --space-8:   64px;
+  --space-9:   96px;
+  --space-10:  128px;
+  --space-11:  192px;
+  --space-12:  256px;
+
+
+  /* ==========================================================================
+     5. TYPOGRAPHY
+     Cinzel      — Roman inscriptional capitals. Role titles, modal titles.
+     Alegreya Sans — humanist body. Warm, small-caps capable, not Inter.
+     Barlow Semi Condensed — TABULAR figures for every score column.
+     ====================================================================== */
+  --font-family-display:  'Cinzel', 'Trajan Pro', Georgia, serif;
+  --font-family-body:     'Alegreya Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-family-numeric:  'Barlow Semi Condensed', 'Alegreya Sans', sans-serif;
+  --font-family-mono:     ui-monospace, 'Cascadia Mono', Menlo, monospace;
+
+  /* Numerals are non-negotiable: this UI is full of aligned 4–5 digit scores */
+  --font-numeric-tabular: tabular-nums lining-nums;
+
+  --font-size-xs:    11px;
+  --font-size-sm:    13px;
+  --font-size-base:  16px;   /* mobile body floor — do not go below */
+  --font-size-md:    18px;
+  --font-size-lg:    22px;
+  --font-size-xl:    28px;
+  --font-size-2xl:   36px;
+  --font-size-3xl:   48px;
+  --font-size-4xl:   64px;
+
+  --font-weight-normal:    400;
+  --font-weight-medium:    500;
+  --font-weight-semibold:  600;
+  --font-weight-bold:      700;
+
+  --line-height-tight:     1.15;
+  --line-height-snug:      1.3;
+  --line-height-normal:    1.5;
+  --line-height-relaxed:   1.7;
+
+  --letter-spacing-tight:    -0.01em;
+  --letter-spacing-normal:   0;
+  --letter-spacing-wide:     0.08em;
+  --letter-spacing-wider:    0.16em;   /* small-caps labels */
+  --letter-spacing-widest:   0.28em;   /* role + modal titles. Deco extremity. */
+
+
+  /* ==========================================================================
+     6. LAYOUT
+     ====================================================================== */
+  --max-width-content:   68ch;
+  --max-width-wide:      1180px;
+  --max-width-page:      1600px;
+  --max-width-banner:    380px;   /* one banner column at desktop */
+
+  /* Geometric, not rounded. Deco corners are cut or square, never soft. */
+  --border-radius-sm:    2px;
+  --border-radius-md:    3px;
+  --border-radius-lg:    4px;
+  --border-radius-full:  9999px;
+
+  --border-width-hair:   1px;
+  --border-width-base:   2px;
+  --border-width-frame:  3px;
+
+  --shadow-sm:  0 1px 2px rgba(11, 7, 5, 0.55);
+  --shadow-md:  0 3px 8px rgba(11, 7, 5, 0.60);
+  --shadow-lg:  0 10px 28px rgba(11, 7, 5, 0.68);
+  --shadow-xl:  0 22px 60px rgba(11, 7, 5, 0.76);
+
+
+  /* ==========================================================================
+     7. BEVEL & GLOW — the signature of this system.
+     Source 2 hardware is beveled, not flat and not soft-shadowed. These
+     composites are why the UI reads as Dota rather than as a dark website.
+     ====================================================================== */
+
+  /* Raised gold hardware: buttons, frames */
+  --bevel-gold-raised:
+    inset 0 1px 0 rgba(242, 223, 174, 0.75),
+    inset 0 -1px 0 rgba(78, 58, 18, 0.85),
+    inset 1px 0 0 rgba(242, 223, 174, 0.25),
+    inset -1px 0 0 rgba(78, 58, 18, 0.45),
+    0 2px 5px rgba(11, 7, 5, 0.6);
+
+  --bevel-gold-pressed:
+    inset 0 2px 4px rgba(11, 7, 5, 0.75),
+    inset 0 -1px 0 rgba(242, 223, 174, 0.22);
+
+  /* Inset well: emblem bodies, tier/trait rows, input fields */
+  --bevel-well:
+    inset 0 2px 5px rgba(11, 7, 5, 0.72),
+    inset 0 -1px 0 rgba(242, 223, 174, 0.06);
+
+  /* Raised panel: cards, banner columns */
+  --bevel-panel-raised:
+    inset 0 1px 0 rgba(242, 223, 174, 0.14),
+    inset 0 -2px 4px rgba(11, 7, 5, 0.45),
+    0 4px 12px rgba(11, 7, 5, 0.55);
+
+  /* Parchment banner edge — light surface needs its own bevel logic */
+  --bevel-parchment:
+    inset 0 1px 0 rgba(255, 250, 235, 0.6),
+    inset 0 -2px 6px rgba(124, 103, 70, 0.5);
+
+  /* Emblem glows — driven by the group's emit triple */
+  --glow-emblem-sm:  0 0 6px  rgba(var(--emblem-emit), 0.35);
+  --glow-emblem-md:  0 0 14px rgba(var(--emblem-emit), 0.45);
+  --glow-emblem-lg:  0 0 28px rgba(var(--emblem-emit), 0.55);
+  --glow-gold:       0 0 16px rgba(229, 200, 126, 0.40);
+  --glow-gold-lg:    0 0 34px rgba(229, 200, 126, 0.52);
+
+  /* Composite focus rings — survive dark, parchment, and slate alike */
+  --ring-on-dark:
+    0 0 0 2px var(--color-focus-halo),
+    0 0 0 4px var(--color-focus-on-dark);
+  --ring-on-parch:
+    0 0 0 2px var(--raw-parch-bright),
+    0 0 0 4px var(--color-focus-on-parch);
+
+  /* Grain overlay — Deco demands texture; flat brown reads as cheap */
+  --texture-grain-opacity:      0.055;
+  --texture-parchment-opacity:  0.10;
+  --texture-leather-opacity:    0.08;
+
+
+  /* ==========================================================================
+     8. MOTION
+     Budget is spent almost entirely on the roll. Everything else is quick.
+     ====================================================================== */
+  --duration-instant:     50ms;
+  --duration-fast:        150ms;
+  --duration-normal:      250ms;
+  --duration-slow:        400ms;
+  --duration-slower:      600ms;
+  --duration-ceremony:    800ms;   /* the roll sequence, and nothing else */
+
+  --easing-default:   cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-in:        cubic-bezier(0.4, 0, 1, 1);
+  --easing-out:       cubic-bezier(0, 0, 0.2, 1);
+  --easing-settle:    cubic-bezier(0.16, 0.84, 0.24, 1);  /* deco reveal */
+  --easing-bounce:    cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Roll sequence stagger — glyph, then stat, then tier, then trait */
+  --stagger-step:     90ms;
+  --stagger-count:    4;
+
+  --parallax-portrait-depth:  14px;   /* card hover parallax travel */
+  --hover-lift:               -3px;
+  --countup-duration:         900ms;
+
+
+  /* ==========================================================================
+     9. Z-INDEX — routed overlays need a declared stack
+     ====================================================================== */
+  --z-base:        0;
+  --z-raised:      10;
+  --z-sticky:      100;
+  --z-header:      200;
+  --z-backdrop:    900;
+  --z-overlay:     1000;
+  --z-popover:     1100;   /* point breakdowns sit ABOVE routed overlays */
+  --z-toast:       1200;
+
+
+  /* ==========================================================================
+     10. BREAKPOINTS (reference values; media queries can't read var())
+     ====================================================================== */
+  --breakpoint-sm:   375px;
+  --breakpoint-md:   768px;
+  --breakpoint-lg:   1024px;
+  --breakpoint-xl:   1280px;
+  --breakpoint-2xl:  1536px;
+
+
+  /* ==========================================================================
+     11. COMPONENT-LEVEL TOKENS
+     ====================================================================== */
+
+  /* Banner column — the spine
+     GRADIENT FLOOR IS parch-base, NOT parch-mid. Measured: umber-muted on
+     parch-mid is 3.46:1 and fails AA. Forcing all four umber steps to pass
+     on parch-mid would collapse umber-base and umber-muted into effectively
+     the same colour and destroy the text hierarchy. So the gradient stops at
+     parch-base, and parch-mid/deep/shadow are decorative only — the bottom
+     edge behind the portraits, where no glyph ever lands. */
+  --banner-width:              var(--max-width-banner);
+  --banner-bg:                 linear-gradient(180deg,
+                                 var(--raw-parch-bright) 0%,
+                                 var(--raw-parch-base) 100%);
+  --banner-foot-bg:            linear-gradient(180deg,
+                                 var(--raw-parch-base) 0%,
+                                 var(--raw-parch-mid) 100%);   /* portraits only, no text */
+  --banner-border:             var(--border-width-base) solid var(--raw-gold-deep);
+  --banner-shadow:             var(--bevel-parchment), var(--shadow-lg);
+  --banner-title-size:         var(--font-size-2xl);
+  --banner-title-tracking:     var(--letter-spacing-widest);
+  --banner-title-color:        var(--color-text-on-parch-heading);
+  --banner-padding:            var(--space-5);
+  --banner-gap:                var(--space-4);
+
+  /* Emblem card */
+  --emblem-card-width:         184px;
+  --emblem-header-height:      34px;
+  --emblem-row-height:         22px;
+  --emblem-glyph-size:         26px;
+  --emblem-card-radius:        var(--border-radius-sm);
+  --emblem-card-shadow:        var(--bevel-panel-raised);
+  --emblem-body-shadow:        var(--bevel-well);
+  --emblem-label-size:         var(--font-size-xs);
+  --emblem-label-tracking:     var(--letter-spacing-wider);
+  --emblem-pct-size:           var(--font-size-md);
+
+  /* Gold button — primary action hardware */
+  --btn-gold-bg:               linear-gradient(180deg,
+                                 var(--raw-gold-light) 0%,
+                                 var(--raw-gold-base) 52%,
+                                 var(--raw-gold-mid) 100%);
+  --btn-gold-bg-hover:         linear-gradient(180deg,
+                                 var(--raw-gold-pale) 0%,
+                                 var(--raw-gold-light) 52%,
+                                 var(--raw-gold-base) 100%);
+  --btn-gold-border:           var(--border-width-hair) solid var(--raw-gold-shadow);
+  --btn-gold-text:             #2A1D0A;   /* 8.9:1 on gold-base */
+  --btn-gold-shadow:           var(--bevel-gold-raised);
+  --btn-steel-bg:              linear-gradient(180deg,
+                                 var(--raw-steel-light) 0%,
+                                 var(--raw-steel-base) 55%,
+                                 var(--raw-steel-deep) 100%);
+  --btn-steel-text:            var(--raw-ink-bright);  /* 4.76:1 worst case */
+  --btn-height:                40px;
+  --btn-height-sm:             32px;
+  --btn-padding-x:             var(--space-5);
+  --btn-label-size:            var(--font-size-xs);
+  --btn-label-tracking:        var(--letter-spacing-wider);
+  --btn-touch-min:             44px;   /* mobile floor */
+
+  /* Modal / routed overlay */
+  --modal-bg:                  radial-gradient(120% 90% at 50% 0%,
+                                 var(--raw-ground-raised) 0%,
+                                 var(--raw-ground-deep) 58%,
+                                 var(--raw-ground-void) 100%);
+  --modal-frame:               var(--border-width-hair) solid var(--raw-gold-base);
+  --modal-title-size:          var(--font-size-2xl);
+  --modal-title-tracking:      var(--letter-spacing-widest);
+  --modal-title-color:         var(--raw-gold-pale);
+  --modal-padding:             var(--space-7);
+  --modal-backdrop:            var(--color-surface-overlay);
+
+  /* Team card (full-grid picker) */
+  --teamcard-width:            150px;
+  --teamcard-aspect:           150 / 220;
+  --teamcard-bg:               linear-gradient(180deg,
+                                 var(--raw-ground-panel-hi) 0%,
+                                 var(--raw-ground-panel) 45%,
+                                 var(--raw-ground-raised) 100%);
+  --teamcard-border:           var(--border-width-hair) solid rgba(201, 162, 78, 0.28);
+  --teamcard-border-selected:  var(--border-width-base) solid var(--raw-gold-light);
+  --teamcard-crest-size:       88px;
+  --teamcard-name-size:        var(--font-size-xs);
+  --teamcard-name-tracking:    var(--letter-spacing-wider);
+
+  /* Advisor panel */
+  --advisor-width:             340px;
+  --advisor-bg:                var(--raw-ground-raised);
+  --advisor-border:            var(--border-width-hair) solid var(--color-border-secondary);
+
+  /* Point breakdown popover */
+  --popover-bg:                var(--raw-ground-deep);
+  --popover-border:            var(--border-width-hair) solid var(--raw-gold-deep);
+  --popover-shadow:            var(--shadow-xl);
+  --popover-max-width:         320px;
+
+  /* Modelled-data badge — persistent, non-dismissable */
+  --badge-modelled-bg:         rgba(217, 164, 65, 0.14);
+  --badge-modelled-border:     var(--border-width-hair) solid rgba(217, 164, 65, 0.45);
+  --badge-modelled-text:       var(--color-status-warning);
+  --badge-modelled-size:       var(--font-size-xs);
+
+  /* Score / projection display */
+  --score-font:                var(--font-family-numeric);
+  --score-size-lg:             var(--font-size-2xl);
+  --score-size-md:             var(--font-size-lg);
+  --score-size-sm:             var(--font-size-base);
+  --score-tracking:            var(--letter-spacing-tight);
+}
+
+
+/* ============================================================================
+   EMBLEM GROUP SCOPES
+   Set --emblem-emit on the container; glow tokens resolve automatically.
+   ========================================================================= */
+[data-emblem="red"] {
+  --emblem-emit:   var(--raw-red-emit);
+  --emblem-glyph:  var(--raw-red-glyph);
+  --emblem-header: var(--raw-red-hi);
+  --emblem-base:   var(--raw-red-base);
+  --emblem-body:   var(--raw-red-well);
+}
+[data-emblem="blue"] {
+  --emblem-emit:   var(--raw-blue-emit);
+  --emblem-glyph:  var(--raw-blue-glyph);
+  --emblem-header: var(--raw-blue-hi);
+  --emblem-base:   var(--raw-blue-base);
+  --emblem-body:   var(--raw-blue-well);
+}
+[data-emblem="green"] {
+  --emblem-emit:   var(--raw-green-emit);
+  --emblem-glyph:  var(--raw-green-glyph);
+  --emblem-header: var(--raw-green-hi);
+  --emblem-base:   var(--raw-green-base);
+  --emblem-body:   var(--raw-green-well);
+}
+
+
+/* ============================================================================
+   SURFACE SCOPES
+   Put data-surface on any container that changes surface family. Text tokens
+   remap so components don't have to know which ground they landed on.
+   ========================================================================= */
+[data-surface="parchment"] {
+  --color-text-primary:    var(--raw-umber-base);
+  --color-text-heading:    var(--raw-umber-deep);
+  --color-text-secondary:  var(--raw-umber-muted);
+  --color-text-tertiary:   var(--raw-umber-faint);
+  --color-text-accent:     var(--raw-gold-shadow);
+  --color-border-primary:  var(--raw-parch-shadow);
+  --ring-active:           var(--ring-on-parch);
+}
+[data-surface="slate"] {
+  --color-bg-primary:      var(--raw-slate-base);
+  --color-bg-secondary:    var(--raw-slate-raised);
+  --color-bg-tertiary:     var(--raw-slate-panel);
+  --color-text-primary:    var(--raw-slate-ink);
+  --color-text-heading:    #E4EAF2;
+  --color-text-secondary:  #8C97A6;
+  --color-border-primary:  rgba(198, 206, 218, 0.18);
+  --ring-active:           var(--ring-on-dark);
+}
+[data-surface="dark"], :root {
+  --ring-active:           var(--ring-on-dark);
+}
+
+
+/* ============================================================================
+   BASE
+   ========================================================================= */
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+}
+
+/* Every numeral in this product aligns. No exceptions. */
+.tabular,
+[data-score],
+table td,
+table th {
+  font-family: var(--font-family-numeric);
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-active);
+}
+
+
+/* ============================================================================
+   REDUCED MOTION
+   Remove the theatre, keep every piece of information.
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant:   0ms;
+    --duration-fast:      0ms;
+    --duration-normal:    0ms;
+    --duration-slow:      0ms;
+    --duration-slower:    0ms;
+    --duration-ceremony:  0ms;
+    --stagger-step:       0ms;
+    --countup-duration:   0ms;
+    --parallax-portrait-depth: 0px;
+    --hover-lift:         0px;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* ============================================================================
+   THEME SCAFFOLDING — intentionally unpopulated. See header note.
+   Components reference semantic tokens only, so a future theme is a values
+   change here and nothing else. Do not invent a light palette without
+   revisiting the brief.
+   ========================================================================= */
+[data-theme="dark"] {
+  /* Default. All values above already are the dark theme. */
+}
