@@ -604,29 +604,23 @@ const staticApi: typeof live = {
   resolveTeams: async () => offline(),
 };
 
+// Те же нейтральные наборы, что и в backend/app/fantasy/presets.py: порядок
+// статов соответствует цветам слотов роли. Расхождение здесь означало бы, что
+// опубликованная страница и локальный расчёт дают разные числа.
+const NEUTRAL_ROLE_STATS: Record<string, string[]> = {
+  core: ["gpm", "kills", "teamfight_participation"],
+  mid: ["gpm", "runes_grabbed", "teamfight_participation"],
+  support: ["wards_placed", "camps_stacked", "stuns"],
+};
+
 function neutralBannerFor(role: string, rules: RulesSnapshot): Emblem[] {
-  const defaults: Record<string, string[]> = {
-    core: ["kills", "gpm", "creep_score"],
-    mid: ["kills", "gpm", "teamfight_participation"],
-    support: ["wards_placed", "stuns", "camps_stacked"],
-  };
-  const stats = defaults[role] ?? defaults.core;
+  const stats = NEUTRAL_ROLE_STATS[role] ?? NEUTRAL_ROLE_STATS.core;
   const colors = rules.role_slots[role] ?? [];
-  // Нейтральный набор должен укладываться в цвета слотов роли.
-  const byColor = new Map<string, string[]>();
-  for (const stat of rules.stats) {
-    if (!byColor.has(stat.color)) byColor.set(stat.color, []);
-    byColor.get(stat.color)!.push(stat.key);
-  }
-  return colors.map((color, index) => {
-    const preferred = stats[index];
-    const pool = byColor.get(color) ?? [];
-    return {
-      stat: pool.includes(preferred) ? preferred : (pool[0] ?? preferred),
-      quality: "tier_3",
-      trait: null,
-    };
-  });
+  return colors.map((_, index) => ({
+    stat: stats[index],
+    quality: "tier_3",
+    trait: null,
+  }));
 }
 
 export const api = STATIC_MODE ? staticApi : live;

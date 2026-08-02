@@ -148,13 +148,10 @@ def cmd_roster(args: argparse.Namespace) -> None:
     from app.fantasy.scoring import Banner, Emblem
 
     # Нейтральные баннеры: один и тот же набор статов для всех кандидатов роли,
-    # иначе сравнение команд превратится в сравнение баннеров. Tier III без
-    # трейтов — середина шкалы качества.
-    default_banners = {
-        "core": ["kills", "gpm", "creep_score"],
-        "mid": ["kills", "gpm", "teamfight_participation"],
-        "support": ["wards_placed", "stuns", "camps_stacked"],
-    }
+    # иначе сравнение команд превратится в сравнение баннеров.
+    from app.fantasy.presets import DEFAULT_ROLE_STATS
+
+    default_banners = {role: list(stats) for role, stats in DEFAULT_ROLE_STATS.items()}
     if args.banner:
         stats = args.banner.split(",")
         default_banners = {role: stats for role in default_banners}
