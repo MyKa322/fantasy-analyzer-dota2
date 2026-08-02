@@ -3,15 +3,21 @@
     Следит за файлами проекта и коммитит изменения с пушем.
 
 .DESCRIPTION
-    Изменения копятся и уходят одним коммитом после паузы в правках (по
-    умолчанию 45 секунд). Без такой паузы каждое сохранение файла редактором
-    давало бы отдельный коммит, а история превращалась бы в мусор.
+    Скрипт опрашивает `git status` раз в несколько секунд. Так проще и надёжнее
+    FileSystemWatcher: обработчики событий выполняются в отдельном runspace, где
+    переменные скрипта недоступны, и отслеживание молча ничего не делает. К тому
+    же git сам применяет .gitignore, так что тяжёлые каталоги (база, кэш матчей,
+    node_modules, .venv) в опрос не попадают.
 
-    Что не отслеживается — берётся из .gitignore: база, кэш матчей, node_modules,
-    .venv. Так что тяжёлые каталоги watcher не трогает.
+    Изменения копятся и уходят одним коммитом после паузы в правках (по
+    умолчанию 45 секунд) — иначе каждое сохранение файла в редакторе давало бы
+    отдельный коммит.
 
 .PARAMETER DebounceSeconds
     Сколько секунд тишины ждать перед коммитом.
+
+.PARAMETER PollSeconds
+    Как часто опрашивать состояние репозитория.
 
 .PARAMETER NoPush
     Только коммитить, не пушить.
@@ -23,6 +29,7 @@
 [CmdletBinding()]
 param(
     [int]$DebounceSeconds = 45,
+    [int]$PollSeconds = 5,
     [switch]$NoPush
 )
 
@@ -31,75 +38,61 @@ $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 
 if (-not (Test-Path (Join-Path $repo '.git'))) {
-    Write-Error "не репозиторий git: $repo"
+    throw "не репозиторий git: $repo"
 }
 
-Write-Host "Слежу за $repo (пауза $DebounceSeconds с, пуш: $(-not $NoPush))" -ForegroundColor Cyan
+Write-Host "Слежу за $repo" -ForegroundColor Cyan
+Write-Host "пауза перед коммитом: $DebounceSeconds с, пуш: $(-not $NoPush)" -ForegroundColor DarkGray
 Write-Host "Ctrl+C — остановить`n" -ForegroundColor DarkGray
 
-function Invoke-AutoCommit {
-    # Порядок важен: сначала узнаём, есть ли что коммитить, и только потом
-    # трогаем индекс — иначе пустой коммит на каждое срабатывание таймера.
-    $status = git status --porcelain
-    if (-not $status) { return }
+$lastStatus = $null
+$quietSince = $null
 
-    $files = ($status | Measure-Object).Count
-    git add -A | Out-Null
+while ($true) {
+    $status = (git status --porcelain | Out-String).Trim()
 
-    $staged = git diff --staged --stat
-    if (-not $staged) { return }
+    if ($status -ne $lastStatus) {
+        # Состояние изменилось — отсчёт тишины начинается заново.
+        $lastStatus = $status
+        $quietSince = Get-Date
+        Start-Sleep -Seconds $PollSeconds
+        continue
+    }
 
-    $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm'
-    git commit -m "auto: правки от $stamp ($files файлов)" | Out-Null
-    Write-Host "[$stamp] коммит: $files файлов" -ForegroundColor Green
+    $readyToCommit = $status -and $quietSince -and
+                     ((Get-Date) - $quietSince).TotalSeconds -ge $DebounceSeconds
 
-    if (-not $NoPush) {
-        try {
-            git push 2>&1 | Out-Null
-            Write-Host "           запушено" -ForegroundColor DarkGreen
-        } catch {
-            # Нет сети или отклонён пуш — коммит уже сохранён локально,
-            # следующая попытка отправит и его.
-            Write-Host "           пуш не удался: $_" -ForegroundColor Yellow
+    if ($readyToCommit) {
+        $files = ($status -split "`n" | Where-Object { $_ }).Count
+        git add -A | Out-Null
+
+        # Проверяем именно индекс: неотслеживаемый файл, целиком попавший под
+        # .gitignore, состояние меняет, а коммитить в нём нечего.
+        if (git diff --staged --quiet) {
+            $lastStatus = (git status --porcelain | Out-String).Trim()
+            $quietSince = $null
+            Start-Sleep -Seconds $PollSeconds
+            continue
         }
-    }
-}
 
-$watcher = [System.IO.FileSystemWatcher]::new($repo)
-$watcher.IncludeSubdirectories = $true
-$watcher.EnableRaisingEvents = $true
-$watcher.NotifyFilter = [System.IO.NotifyFilters]::FileName -bor
-                        [System.IO.NotifyFilters]::LastWrite -bor
-                        [System.IO.NotifyFilters]::DirectoryName
+        $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm'
+        git commit -q -m "auto: правки от $stamp ($files файлов)"
+        Write-Host "[$stamp] коммит: $files файлов" -ForegroundColor Green
 
-# Каталоги, которые шумят постоянно и всё равно не попадают в git.
-$ignored = '\\(\.git|\.venv|node_modules|__pycache__|\.pytest_cache|dist|data)\\'
-
-$script:lastChange = $null
-$handler = {
-    if ($Event.SourceEventArgs.FullPath -notmatch $using:ignored) {
-        $script:lastChange = Get-Date
-    }
-}
-
-$subscriptions = @(
-    Register-ObjectEvent $watcher Changed -Action $handler
-    Register-ObjectEvent $watcher Created -Action $handler
-    Register-ObjectEvent $watcher Deleted -Action $handler
-    Register-ObjectEvent $watcher Renamed -Action $handler
-)
-
-try {
-    while ($true) {
-        Start-Sleep -Seconds 5
-        if ($script:lastChange -and
-            ((Get-Date) - $script:lastChange).TotalSeconds -ge $DebounceSeconds) {
-            $script:lastChange = $null
-            Invoke-AutoCommit
+        if (-not $NoPush) {
+            git push -q 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "                  запушено" -ForegroundColor DarkGreen
+            } else {
+                # Нет сети или пуш отклонён — коммит уже сохранён локально,
+                # следующая попытка отправит и его.
+                Write-Host "                  пуш не удался, коммит остался локально" -ForegroundColor Yellow
+            }
         }
+
+        $lastStatus = (git status --porcelain | Out-String).Trim()
+        $quietSince = $null
     }
-} finally {
-    $subscriptions | Unregister-Event -Force
-    $watcher.Dispose()
-    Write-Host "`nостановлено" -ForegroundColor Cyan
+
+    Start-Sleep -Seconds $PollSeconds
 }
