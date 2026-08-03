@@ -582,6 +582,10 @@ def _stat_value_out(value) -> schemas.StatValueOut:
         p5_points=round(value.p5_points, 1),
         availability=str(value.availability),
         negligible=value.is_negligible,
+        median_points=round(value.median_points, 1),
+        p75_points=round(value.p75_points, 1),
+        hit_rate=round(value.hit_rate, 3),
+        trend=round(value.trend, 3) if value.trend is not None else None,
     )
 
 
@@ -740,6 +744,186 @@ def stat_ranking(
         )
         for row in ranking
     ]
+
+
+@router.post("/fantasy/players", response_model=list[schemas.PlayerProfileOut])
+def player_report(
+    request: schemas.StatReportRequest = Body(...),
+    session: Session = Depends(get_db),
+) -> list[schemas.PlayerProfileOut]:
+    """Разбивка роли по игрокам: кто именно набирает очки внутри пары.
+
+    В зачёт идёт среднее по игрокам роли, поэтому пара, где всё делает один
+    человек, и пара, где оба, стоят одинаково — но ведут себя по-разному, если
+    один из двоих провалит серию.
+    """
+    history, _ = _role_history(session, request)
+    names = {
+        p.account_id: p.name
+        for p in session.scalars(
+            select(Player).where(Player.account_id.in_(history.account_ids))
+        )
+    }
+    return [
+        schemas.PlayerProfileOut(
+            account_id=profile.account_id,
+            name=profile.name,
+            games=profile.games,
+            values=[_stat_value_out(v) for v in profile.values],
+        )
+        for profile in EmblemAdvisor().player_values(history, names=names)
+    ]
+
+
+@router.post("/fantasy/timeline", response_model=schemas.TimelineOut)
+def role_timeline(
+    request: schemas.StatReportRequest = Body(...),
+    session: Session = Depends(get_db),
+) -> schemas.TimelineOut:
+    """Очки за каждую карту с нейтральным баннером — форма роли во времени.
+
+    Баннер нейтральный намеренно: кривая сравнима между командами и не зависит
+    от того, какие эмблемы выберет пользователь. Важна не абсолютная величина, а
+    форма и разброс: в зачёт идут две лучшие карты серии, и роль с редкими
+    высокими картами может стоить дороже ровной.
+    """
+    history, _ = _role_history(session, request)
+    projector = RoleProjector()
+    banner = neutral_banner(request.role)
+
+    base = projector.base_matrix(history)
+    multipliers = projector.scorer.emblem_multipliers(banner)
+    vector = [0.0] * base.shape[1]
+    for emblem, multiplier in zip(banner.emblems, multipliers, strict=True):
+        vector[projector._stat_index[emblem.stat]] = multiplier
+
+    scores = base @ vector
+    return schemas.TimelineOut(
+        role=request.role,
+        team_id=request.team_id,
+        banner=[
+            schemas.EmblemIn(stat=e.stat, quality=e.quality, trait=e.trait)
+            for e in banner.emblems
+        ],
+        points=[
+            schemas.TimelinePointOut(
+                d=game.start_time.date().isoformat(),
+                p=round(float(score)),
+                w=None if game.won is None else int(game.won),
+            )
+            for game, score in zip(history.games, scores, strict=True)
+        ],
+    )
+
+
+@router.post("/fantasy/inventory", response_model=schemas.InventoryResponse)
+def inventory_fit(
+    request: schemas.InventoryRequest = Body(...),
+    session: Session = Depends(get_db),
+    simulate_top: int = Query(5, ge=0, le=16, description="для скольких пар считать период"),
+    simulations: int = Query(3000, ge=200, le=50_000),
+) -> schemas.InventoryResponse:
+    """Под кого ставить эмблемы, которые уже есть.
+
+    Цвета слотов фиксированы ролью, качества и трейты в инвентаре заданы —
+    свободы остаётся ровно две: какие три эмблемы взять и в каком порядке
+    поставить (соседство меняет проценты). Перебор идёт по каждой роли каждой
+    команды, результат — рейтинг пар.
+    """
+    if not request.inventory:
+        raise HTTPException(400, "инвентарь пуст")
+
+    rules = load_rules()
+    inventory = [
+        Emblem(stat=e.stat, quality=e.quality, trait=e.trait) for e in request.inventory
+    ]
+    unknown = [e.stat for e in inventory if e.stat not in rules.stats]
+    if unknown:
+        raise HTTPException(400, f"неизвестные статы: {', '.join(sorted(set(unknown)))}")
+
+    candidates = ti_candidates(session)
+    if not candidates:
+        raise HTTPException(400, "игроки TI15 не размечены — выполните ingest истории")
+
+    advisor = EmblemAdvisor()
+
+    # Нехватку считаем по всем ролям правил, а не только по тем, где есть
+    # размеченные ростеры: пользователю важно знать, что саппорта он из этого
+    # инвентаря не соберёт, даже если саппортов в базе пока нет.
+    gaps: dict[str, list[str]] = {}
+    for role_key in rules.role_slots:
+        if request.role and role_key != request.role:
+            continue
+        missing = advisor.inventory_gaps(inventory, role_key)
+        if missing:
+            gaps[role_key] = list(missing)
+
+    histories = []
+    for role_key, entries in candidates.items():
+        if request.role and role_key != request.role:
+            continue
+        if role_key in gaps:
+            continue
+        for team_id, team_name, account_ids in entries:
+            history = build_role_history(
+                session,
+                team_id,
+                role_key,
+                account_ids,
+                since=_since(request.history_days),
+            )
+            history.team_name = team_name
+            histories.append(history)
+
+    fits = advisor.rank_inventory(inventory, histories, min_games=request.min_games)[
+        : request.top_n
+    ]
+
+    projector = RoleProjector()
+    by_key = {(h.team_id, h.role): h for h in histories}
+    rows: list[schemas.InventoryFitOut] = []
+    for index, fit in enumerate(fits):
+        period_mean = period_ceiling = None
+        if index < simulate_top:
+            projection = projector.project(
+                by_key[(fit.team_id, fit.role)],
+                fit.banner(),
+                simulations=simulations,
+            )
+            period_mean = round(projection.mean, 1)
+            period_ceiling = round(projection.ceiling, 1)
+        rows.append(
+            schemas.InventoryFitOut(
+                role=fit.role,
+                team_id=fit.team_id,
+                team_name=fit.team_name,
+                player_names=list(fit.player_names),
+                expected_card_points=round(fit.expected_card_points, 1),
+                period_mean=period_mean,
+                period_ceiling=period_ceiling,
+                games=fit.games,
+                unused=[
+                    schemas.EmblemIn(stat=e.stat, quality=e.quality, trait=e.trait)
+                    for e in fit.unused
+                ],
+                slots=[
+                    schemas.SlotAdviceOut(
+                        slot=slot.slot,
+                        color=slot.color,
+                        stat=slot.emblem.stat,
+                        label=load_rules().stats[slot.emblem.stat].label,
+                        quality=slot.emblem.quality,
+                        trait=slot.emblem.trait,
+                        percent=round(slot.percent, 1),
+                        base_points=round(slot.base_points, 1),
+                        points=round(slot.points, 1),
+                    )
+                    for slot in fit.slots
+                ],
+            )
+        )
+
+    return schemas.InventoryResponse(fits=rows, gaps=gaps)
 
 
 @router.post("/fantasy/titles", response_model=list[schemas.TitleAdviceOut])

@@ -20,6 +20,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.analytics.glicko2 import Rating  # noqa: E402
@@ -149,6 +151,48 @@ def export_group(session, simulations: int) -> dict | None:
     }
 
 
+def _stat_row(value) -> dict:
+    return {
+        "stat": value.stat,
+        "label": value.label,
+        "color": value.color,
+        "units_per_game": round(value.units_per_game, 3),
+        "base_points": round(value.base_points, 1),
+        "p95_points": round(value.p95_points, 1),
+        "p5_points": round(value.p5_points, 1),
+        "median_points": round(value.median_points, 1),
+        "p75_points": round(value.p75_points, 1),
+        "hit_rate": round(value.hit_rate, 3),
+        "trend": round(value.trend, 3) if value.trend is not None else None,
+        "availability": str(value.availability),
+        "negligible": value.is_negligible,
+    }
+
+
+def _timeline(projector: RoleProjector, history, banner) -> list[dict]:
+    """Очки за каждую карту с нейтральным баннером — форма роли во времени.
+
+    Баннер нейтральный намеренно: строка сравнима между командами и не зависит
+    от того, какие эмблемы выберет пользователь. Абсолютная величина здесь не
+    так важна, как форма кривой и разброс.
+    """
+    base = projector.base_matrix(history)
+    multipliers = projector.scorer.emblem_multipliers(banner)
+    vector = np.zeros(base.shape[1])
+    for emblem, multiplier in zip(banner.emblems, multipliers, strict=True):
+        vector[projector._stat_index[emblem.stat]] = multiplier
+    scores = base @ vector
+
+    return [
+        {
+            "d": game.start_time.date().isoformat(),
+            "p": round(float(score)),
+            "w": None if game.won is None else int(game.won),
+        }
+        for game, score in zip(history.games, scores, strict=True)
+    ]
+
+
 def export_roles(session, *, history_days: int, simulations: int, series: int) -> list[dict]:
     """Для каждой роли каждой команды: ценность статов, проекция, титулы.
 
@@ -183,20 +227,31 @@ def export_roles(session, *, history_days: int, simulations: int, series: int) -
                     "role": role,
                     "players": list(history.player_names),
                     "games": len(history.games),
-                    "stats": [
+                    "last_game": history.games[-1].start_time.date().isoformat(),
+                    "stats": [_stat_row(v) for v in values],
+                    # Разбивка по игрокам: среднее по паре не показывает, кто
+                    # именно набирает очки и насколько роль зависит от одного.
+                    "player_stats": [
                         {
-                            "stat": v.stat,
-                            "label": v.label,
-                            "color": v.color,
-                            "units_per_game": round(v.units_per_game, 3),
-                            "base_points": round(v.base_points, 1),
-                            "p95_points": round(v.p95_points, 1),
-                            "p5_points": round(v.p5_points, 1),
-                            "availability": str(v.availability),
-                            "negligible": v.is_negligible,
+                            "account_id": profile.account_id,
+                            "name": profile.name,
+                            "games": profile.games,
+                            "stats": [
+                                {
+                                    "stat": v.stat,
+                                    "units_per_game": round(v.units_per_game, 3),
+                                    "base_points": round(v.base_points, 1),
+                                    "p95_points": round(v.p95_points, 1),
+                                    "hit_rate": round(v.hit_rate, 3),
+                                    "trend": round(v.trend, 3) if v.trend is not None else None,
+                                }
+                                for v in profile.values
+                                if not v.is_negligible
+                            ],
                         }
-                        for v in values
+                        for profile in advisor.player_values(history, role=role)
                     ],
+                    "timeline": _timeline(advisor.projector, history, neutral_banner(role)),
                     # Во сколько раз счёт за период больше счёта за одну карту.
                     # Позволяет браузеру пересчитать период для любого баннера,
                     # не повторяя симуляцию.

@@ -55,6 +55,12 @@ export interface StatValue {
   p5_points: number;
   availability: Availability;
   negligible: boolean;
+  // Точечные данные по картам: медиана и квартиль против выбросов, доля карт
+  // со статом (0,3 Рошана — это каждая третья игра) и свежая форма.
+  median_points?: number;
+  p75_points?: number;
+  hit_rate?: number;
+  trend?: number | null;
 }
 
 function traitByKey(rules: RulesSnapshot): Record<string, TraitRule> {
@@ -150,6 +156,111 @@ export function scoreBanner(
     };
   });
   return { slots, total: slots.reduce((sum, s) => sum + s.points, 0) };
+}
+
+// --- свой инвентарь -----------------------------------------------------------
+
+export interface InventoryFit {
+  role: string;
+  used: Emblem[];
+  unused: Emblem[];
+  slots: SlotBreakdown[];
+  total: number;
+}
+
+function statColors(rules: RulesSnapshot): Map<string, GroupColor> {
+  return new Map(rules.stats.map((s) => [s.key, s.color]));
+}
+
+/**
+ * Каких цветов не хватает, чтобы вообще заполнить баннер роли.
+ * Зависит только от инвентаря и роли: цвета слотов фиксированы.
+ */
+export function inventoryGaps(
+  inventory: Emblem[],
+  role: string,
+  rules: RulesSnapshot,
+): { color: GroupColor; need: number; have: number }[] {
+  const colors = statColors(rules);
+  const need = new Map<string, number>();
+  for (const color of rules.role_slots[role] ?? []) {
+    need.set(color, (need.get(color) ?? 0) + 1);
+  }
+  const have = new Map<string, number>();
+  for (const emblem of inventory) {
+    const color = colors.get(emblem.stat);
+    if (color) have.set(color, (have.get(color) ?? 0) + 1);
+  }
+  return [...need.entries()]
+    .filter(([color, count]) => (have.get(color) ?? 0) < count)
+    .map(([color, count]) => ({
+      color: color as GroupColor,
+      need: count,
+      have: have.get(color) ?? 0,
+    }));
+}
+
+/**
+ * Разложить имеющиеся эмблемы по слотам роли наилучшим образом.
+ *
+ * Обратная задача к optimiseBanner: качества и трейты уже выпали, менять их
+ * нечем. Свободы две — какие три эмблемы взять и в каком порядке поставить:
+ * Benevolent и Vampiric действуют на соседей, поэтому порядок решает.
+ * Кандидаты в слот ограничены его цветом, так что перебор остаётся крошечным.
+ */
+export function fitInventory(
+  role: string,
+  inventory: Emblem[],
+  statValues: StatValue[],
+  rules: RulesSnapshot,
+): InventoryFit | null {
+  const slotColors = rules.role_slots[role] ?? [];
+  if (inventoryGaps(inventory, role, rules).length) return null;
+
+  const colors = statColors(rules);
+  const byStat = new Map(statValues.map((v) => [v.stat, v]));
+  const base = (stat: string) => byStat.get(stat)?.base_points ?? 0;
+
+  const candidates = slotColors.map((color) =>
+    inventory.map((_, i) => i).filter((i) => colors.get(inventory[i].stat) === color),
+  );
+
+  let bestTotal = -Infinity;
+  let bestIndices: number[] = [];
+
+  const walk = (slot: number, chosen: number[]) => {
+    if (slot === slotColors.length) {
+      const emblems = chosen.map((i) => inventory[i]);
+      const multipliers = emblemMultipliers(emblems, rules);
+      let total = 0;
+      for (let i = 0; i < emblems.length; i++) total += base(emblems[i].stat) * multipliers[i];
+      if (total > bestTotal) {
+        bestTotal = total;
+        bestIndices = [...chosen];
+      }
+      return;
+    }
+    for (const index of candidates[slot]) {
+      if (chosen.includes(index)) continue;
+      // Один и тот же стат дважды на баннере правилами запрещён.
+      if (chosen.some((c) => inventory[c].stat === inventory[index].stat)) continue;
+      chosen.push(index);
+      walk(slot + 1, chosen);
+      chosen.pop();
+    }
+  };
+  walk(0, []);
+
+  if (!bestIndices.length) return null;
+  const used = bestIndices.map((i) => inventory[i]);
+  const detailed = scoreBanner(used, byStat, rules);
+  return {
+    role,
+    used,
+    unused: inventory.filter((_, i) => !bestIndices.includes(i)),
+    slots: detailed.slots,
+    total: detailed.total,
+  };
 }
 
 function cartesian<T>(pool: T[], length: number): T[][] {

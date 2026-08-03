@@ -179,6 +179,12 @@ class StatValueOut(BaseModel):
     p5_points: float
     availability: str
     negligible: bool
+    median_points: float = 0.0
+    p75_points: float = 0.0
+    # Доля карт, где стат случился хотя бы раз.
+    hit_rate: float = 0.0
+    # Очки за последние 30 дней к предыдущим 60; None — карт слишком мало.
+    trend: float | None = None
 
 
 class SlotAdviceOut(BaseModel):
@@ -251,6 +257,59 @@ class StatRankingOut(BaseModel):
     base_points: float
     p95_points: float
     games: int
+
+
+class PlayerProfileOut(BaseModel):
+    """Вклад одного игрока роли: среднее по паре не показывает, кто его делает."""
+
+    account_id: int
+    name: str | None = None
+    games: int
+    values: list[StatValueOut]
+
+
+class TimelinePointOut(BaseModel):
+    """Одна карта: дата, очки с нейтральным баннером, победа."""
+
+    d: str
+    p: float
+    w: int | None = None
+
+
+class TimelineOut(BaseModel):
+    role: str
+    team_id: int
+    banner: list[EmblemIn]
+    points: list[TimelinePointOut]
+
+
+class InventoryRequest(BaseModel):
+    """Эмблемы, которые уже есть у игрока, и под кого их подбирать."""
+
+    inventory: list[EmblemIn]
+    role: str | None = None
+    history_days: int = 180
+    min_games: int = 5
+    top_n: int = 16
+
+
+class InventoryFitOut(BaseModel):
+    role: str
+    team_id: int
+    team_name: str | None = None
+    player_names: list[str] = []
+    slots: list[SlotAdviceOut]
+    expected_card_points: float
+    period_mean: float | None = None
+    period_ceiling: float | None = None
+    unused: list[EmblemIn] = []
+    games: int
+
+
+class InventoryResponse(BaseModel):
+    fits: list[InventoryFitOut]
+    # Роли, которые из этого инвентаря не собрать, с указанием нехватки.
+    gaps: dict[str, list[str]] = {}
 
 
 class TitleAdviceOut(BaseModel):

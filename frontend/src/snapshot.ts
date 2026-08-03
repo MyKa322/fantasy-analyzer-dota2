@@ -10,13 +10,38 @@ import type { RulesSnapshot, StatValue } from "./engine/scoring";
 
 export const STATIC_MODE = import.meta.env.VITE_STATIC_DATA === "1";
 
+/** Вклад одного игрока роли — среднее по паре его не показывает. */
+export interface PlayerStats {
+  account_id: number;
+  name: string | null;
+  games: number;
+  stats: {
+    stat: string;
+    units_per_game: number;
+    base_points: number;
+    p95_points: number;
+    hit_rate: number;
+    trend: number | null;
+  }[];
+}
+
+/** Очки за каждую карту с нейтральным баннером: форма роли во времени. */
+export interface TimelinePoint {
+  d: string;
+  p: number;
+  w: number | null;
+}
+
 export interface RoleSnapshot {
   team_id: number;
   team_name: string;
   role: string;
   players: string[];
   games: number;
+  last_game: string;
   stats: StatValue[];
+  player_stats: PlayerStats[];
+  timeline: TimelinePoint[];
   period_ratio: number;
   ceiling_ratio: number;
   titles: {

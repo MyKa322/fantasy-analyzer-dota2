@@ -398,3 +398,247 @@ def test_titles_sorted_by_expected_value(advisor):
     )
     # Неоценённые титулы уходят в конец списка.
     assert advice[-1].expected_bonus is None
+
+
+# --- свой инвентарь эмблем ----------------------------------------------------
+
+
+def test_inventory_gaps_names_missing_colors(advisor):
+    only_red = [
+        Emblem(stat="gpm", quality="tier_3", trait=None),
+        Emblem(stat="kills", quality="tier_3", trait=None),
+        Emblem(stat="creep_score", quality="tier_3", trait=None),
+    ]
+    # Саппорту нужны два синих и зелёный — красные тут бесполезны.
+    gaps = advisor.inventory_gaps(only_red, "support")
+    assert len(gaps) == 2
+    assert any(g.startswith("blue") for g in gaps)
+    assert any(g.startswith("green") for g in gaps)
+    # Кору эти же эмблемы закрывают красные слоты, но не зелёный.
+    assert advisor.inventory_gaps(only_red, "core") == ("green: нужно 1, есть 0",)
+
+
+def test_inventory_uses_only_owned_emblems(advisor):
+    inventory = [
+        Emblem(stat="wards_placed", quality="tier_2", trait=None),
+        Emblem(stat="camps_stacked", quality="tier_4", trait=None),
+        Emblem(stat="stuns", quality="tier_1", trait=None),
+        Emblem(stat="smokes_used", quality="tier_5", trait=None),
+    ]
+    fit = advisor.fit_inventory(history("support", SUPPORT_STATS), inventory)
+
+    assert len(fit.used) == 3
+    assert set(fit.used) <= set(inventory)
+    assert len(fit.unused) == 1
+    assert fit.slots[0].color == "blue"
+    assert fit.slots[2].color == "green"
+
+
+def test_benevolent_goes_to_the_middle_slot(advisor):
+    """Бонус соседям выгоднее там, где соседей двое."""
+    inventory = [
+        Emblem(stat="wards_placed", quality="tier_3", trait="benevolent"),
+        Emblem(stat="camps_stacked", quality="tier_3", trait=None),
+        Emblem(stat="stuns", quality="tier_3", trait=None),
+    ]
+    fit = advisor.fit_inventory(history("support", SUPPORT_STATS), inventory)
+    assert fit.used[1].trait == "benevolent"
+
+
+def test_vampiric_goes_to_the_edge(advisor):
+    """Vampiric отнимает у соседей, поэтому его место с краю."""
+    inventory = [
+        Emblem(stat="wards_placed", quality="tier_3", trait="vampiric"),
+        Emblem(stat="camps_stacked", quality="tier_3", trait=None),
+        Emblem(stat="stuns", quality="tier_3", trait=None),
+    ]
+    fit = advisor.fit_inventory(history("support", SUPPORT_STATS), inventory)
+    assert fit.used[0].trait == "vampiric"
+
+
+def test_inventory_fit_is_not_just_the_given_order(advisor):
+    """Раскладка действительно оптимальна, а не «как передали»."""
+    role_history = history("support", SUPPORT_STATS)
+    inventory = [
+        Emblem(stat="wards_placed", quality="tier_5", trait="benevolent"),
+        Emblem(stat="camps_stacked", quality="tier_2", trait=None),
+        Emblem(stat="stuns", quality="tier_3", trait=None),
+    ]
+    fit = advisor.fit_inventory(role_history, inventory)
+
+    values = {v.stat: v for v in advisor.stat_values(role_history, role="support")}
+    for order in ((0, 1, 2), (1, 0, 2)):
+        banner = Banner(emblems=tuple(inventory[i] for i in order), role="support")
+        multipliers = advisor.scorer.emblem_multipliers(banner)
+        total = sum(
+            values[e.stat].base_points * m
+            for e, m in zip(banner.emblems, multipliers, strict=True)
+        )
+        assert fit.expected_card_points >= total - 1e-6
+
+
+def test_inventory_refuses_a_role_it_cannot_fill(advisor):
+    inventory = [
+        Emblem(stat="gpm", quality="tier_3", trait=None),
+        Emblem(stat="kills", quality="tier_3", trait=None),
+        Emblem(stat="creep_score", quality="tier_3", trait=None),
+    ]
+    with pytest.raises(ValueError, match="не хватает"):
+        advisor.fit_inventory(history("support", SUPPORT_STATS), inventory)
+
+
+def test_rank_inventory_puts_the_best_pair_first(advisor):
+    inventory = [
+        Emblem(stat="wards_placed", quality="tier_3", trait=None),
+        Emblem(stat="camps_stacked", quality="tier_3", trait=None),
+        Emblem(stat="stuns", quality="tier_3", trait=None),
+    ]
+    weak = history("support", SUPPORT_STATS, team_id=1)
+    strong = history(
+        "support", {**SUPPORT_STATS, "wards_placed": 30, "camps_stacked": 12}, team_id=2
+    )
+
+    ranking = advisor.rank_inventory(inventory, [weak, strong])
+    assert [f.team_id for f in ranking] == [2, 1]
+    assert ranking[0].expected_card_points > ranking[1].expected_card_points
+
+
+def test_rank_inventory_skips_roles_without_matching_colors(advisor):
+    """Роль, которую инвентарь не закрывает, выпадает из рейтинга целиком."""
+    blue_and_green = [
+        Emblem(stat="wards_placed", quality="tier_3", trait=None),
+        Emblem(stat="camps_stacked", quality="tier_3", trait=None),
+        Emblem(stat="stuns", quality="tier_3", trait=None),
+    ]
+    ranking = advisor.rank_inventory(
+        blue_and_green,
+        [
+            history("support", SUPPORT_STATS, team_id=1),
+            history("core", CARRY_STATS, team_id=2),
+        ],
+    )
+    assert [f.role for f in ranking] == ["support"]
+
+
+# --- точечные данные ----------------------------------------------------------
+
+
+def test_player_values_split_the_pair(advisor):
+    """Роль считается по среднему пары, но виден и вклад каждого."""
+    games = [
+        RoleGame(
+            match_id=2000 + i,
+            start_time=NOW - timedelta(days=i),
+            series_key=f"s{i}",
+            player_stats={
+                10: {"wards_placed": 24, "camps_stacked": 2, "stuns": 30},
+                11: {"wards_placed": 6, "camps_stacked": 10, "stuns": 30},
+            },
+        )
+        for i in range(10)
+    ]
+    role_history = RoleHistory(
+        role="support",
+        team_id=1,
+        account_ids=(10, 11),
+        games=games,
+        player_names=("Warder", "Stacker"),
+    )
+
+    profiles = {p.name: p for p in advisor.player_values(role_history)}
+    assert profiles["Warder"].value("wards_placed").units_per_game == pytest.approx(24)
+    assert profiles["Stacker"].value("wards_placed").units_per_game == pytest.approx(6)
+
+    # Среднее по игрокам совпадает со значением роли — иначе разбивка врала бы.
+    role_value = {v.stat: v for v in advisor.stat_values(role_history)}["wards_placed"]
+    pair_mean = (
+        profiles["Warder"].value("wards_placed").base_points
+        + profiles["Stacker"].value("wards_placed").base_points
+    ) / 2
+    assert role_value.base_points == pytest.approx(pair_mean)
+
+
+def test_player_values_ignore_games_a_player_missed(advisor):
+    """Стенд-ин не должен обнулять средние тому, кого заменяли."""
+    games = [
+        RoleGame(
+            match_id=3000 + i,
+            start_time=NOW - timedelta(days=i),
+            series_key=f"s{i}",
+            player_stats=(
+                {10: {"wards_placed": 20}, 11: {"wards_placed": 20}}
+                if i < 5
+                else {10: {"wards_placed": 20}}
+            ),
+        )
+        for i in range(10)
+    ]
+    role_history = RoleHistory(
+        role="support",
+        team_id=1,
+        account_ids=(10, 11),
+        games=games,
+        player_names=("Main", "Sub"),
+    )
+    profiles = {p.name: p for p in advisor.player_values(role_history)}
+    assert profiles["Sub"].games == 5
+    assert profiles["Sub"].value("wards_placed").units_per_game == pytest.approx(20)
+
+
+def test_hit_rate_separates_rare_events_from_steady_ones(advisor):
+    """0,3 Рошана за карту — это «каждая третья игра», а не «понемногу каждую»."""
+    games = [
+        RoleGame(
+            match_id=4000 + i,
+            start_time=NOW - timedelta(days=i),
+            series_key=f"s{i}",
+            player_stats={10: {"stuns": 30, "roshan_kills": 1.0 if i % 3 == 0 else 0.0}},
+        )
+        for i in range(12)
+    ]
+    values = {
+        v.stat: v
+        for v in advisor.stat_values(
+            RoleHistory(role="support", team_id=1, account_ids=(10,), games=games)
+        )
+    }
+    assert values["stuns"].hit_rate == pytest.approx(1.0)
+    assert values["roshan_kills"].hit_rate == pytest.approx(4 / 12)
+
+
+def test_trend_compares_the_last_month_with_the_previous_two(advisor):
+    fresh = [
+        RoleGame(
+            match_id=5000 + i,
+            start_time=NOW - timedelta(days=i),
+            series_key=f"s{i}",
+            player_stats={10: {"wards_placed": 20}},
+        )
+        for i in range(6)
+    ]
+    stale = [
+        RoleGame(
+            match_id=6000 + i,
+            start_time=NOW - timedelta(days=45 + i),
+            series_key=f"o{i}",
+            player_stats={10: {"wards_placed": 10}},
+        )
+        for i in range(6)
+    ]
+    values = {
+        v.stat: v
+        for v in advisor.stat_values(
+            RoleHistory(role="support", team_id=1, account_ids=(10,), games=stale + fresh),
+            now=NOW,
+        )
+    }
+    assert values["wards_placed"].trend == pytest.approx(2.0)
+
+
+def test_trend_stays_none_without_enough_games(advisor):
+    values = {
+        v.stat: v
+        for v in advisor.stat_values(history("support", SUPPORT_STATS), now=NOW)
+    }
+    # Все карты в одном окне — сравнивать не с чем.
+    assert values["wards_placed"].trend is None

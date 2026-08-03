@@ -17,6 +17,11 @@
 3. **Кого брать под конкретный стат.** Обратная задача: если на баннере уже
    стоит Camps Stacked, кто из шестнадцати команд стакает больше всех.
 
+4. **Что делать с эмблемами, которые уже выпали.** Роллы конечны, и обычно
+   вопрос стоит не «какой баннер лучший вообще», а «под кого поставить то, что
+   есть». Инвентарь раскладывается по цветам слотов каждой роли, и все пары
+   TI15 ранжируются по очкам именно с этими эмблемами.
+
 Все оценки идут по правилу «две лучшие карты лучшей серии» — то есть по
 проекции, а не по среднему. Быстрая линейная оценка используется только для
 предварительного отсева, и это отмечено в названиях функций.
@@ -26,14 +31,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from itertools import product
 
 import numpy as np
 
-from .projection import Projection, RoleHistory, RoleProjector
-from .rules import Color, FantasyRules
+from .projection import Projection, RoleGame, RoleHistory, RoleProjector
+from .rules import FantasyRules
 from .scoring import Banner, Emblem
 
 log = logging.getLogger(__name__)
@@ -41,6 +46,10 @@ log = logging.getLogger(__name__)
 # Значение, которого хватает, чтобы стат вообще имело смысл ставить на баннер.
 # Ниже этого эмблема — почти пустой слот.
 NEGLIGIBLE_POINTS = 50.0
+
+# Окно «свежей формы» и минимум карт в каждой половине сравнения.
+TREND_WINDOW_DAYS = 30.0
+MIN_TREND_GAMES = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,10 +68,39 @@ class StatValue:
     p5_points: float
     availability: str
     games: int
+    # Медиана и квартиль: среднее по одной-двум разгромным картам обманчиво,
+    # а в зачёт идут две лучшие карты — важно видеть и центр, и верх.
+    median_points: float = 0.0
+    p75_points: float = 0.0
+    # Доля карт, где стат вообще случился. Для Roshan и Tormentor это половина
+    # ответа: 0.3 Рошана за карту — это «каждая третья игра», а не «понемногу
+    # каждую».
+    hit_rate: float = 0.0
+    # Форма: очки за последние 30 дней делить на очки за предыдущие 60.
+    # None — если одной из половин слишком мало карт, чтобы сравнение значило.
+    trend: float | None = None
 
     @property
     def is_negligible(self) -> bool:
         return self.base_points < NEGLIGIBLE_POINTS
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerProfile:
+    """Вклад одного игрока роли — то, что среднее по паре скрывает.
+
+    В зачёт Fantasy идёт среднее по игрокам роли, поэтому пара, где варды
+    ставит один человек, и пара, где оба, дают одинаковые очки — но разный
+    риск: у первой всё держится на одном игроке.
+    """
+
+    account_id: int
+    name: str | None
+    games: int
+    values: tuple[StatValue, ...]
+
+    def value(self, stat: str) -> StatValue | None:
+        return next((v for v in self.values if v.stat == stat), None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +151,24 @@ class BannerAdvice:
 
 
 @dataclass(frozen=True, slots=True)
+class InventoryFit:
+    """Лучшая раскладка имеющихся у игрока эмблем под конкретную роль команды."""
+
+    role: str
+    team_id: int
+    team_name: str | None
+    player_names: tuple[str, ...]
+    slots: tuple[SlotAdvice, ...]
+    expected_card_points: float
+    used: tuple[Emblem, ...]
+    unused: tuple[Emblem, ...]
+    games: int
+
+    def banner(self) -> Banner:
+        return Banner(emblems=self.used, role=self.role)
+
+
+@dataclass(frozen=True, slots=True)
 class PlayerRanking:
     """Строка рейтинга «кто лучше всего отрабатывает этот стат»."""
 
@@ -159,11 +215,30 @@ class EmblemAdvisor:
         include_unavailable: bool = False,
     ) -> list[StatValue]:
         """Во что превращается каждый доступный роли стат, по убыванию ценности."""
-        from ..ingest.stat_mapping import STAT_SOURCES
-
         role = role or history.role
         base = self.projector.base_matrix(history)
         weights = self.projector.recency_weights(history, now=now)
+        return self._values_from(
+            history, base, weights, role=role, now=now, include_unavailable=include_unavailable
+        )
+
+    def _values_from(
+        self,
+        history: RoleHistory,
+        base: np.ndarray,
+        weights: np.ndarray,
+        *,
+        role: str,
+        now: datetime | None,
+        include_unavailable: bool,
+        games: Sequence[RoleGame] | None = None,
+        account_ids: Sequence[int] | None = None,
+    ) -> list[StatValue]:
+        """Общая часть для роли целиком и для отдельного игрока."""
+        from ..ingest.stat_mapping import STAT_SOURCES
+
+        games = list(games if games is not None else history.games)
+        account_ids = tuple(account_ids if account_ids is not None else history.account_ids)
         allowed = self.rules.available_stats(role)
 
         values: list[StatValue] = []
@@ -185,42 +260,123 @@ class EmblemAdvisor:
             # Средние единицы стата: обратная операция к базовым очкам. Для
             # «deaths» и «teamfight» это нелинейно, поэтому считаем по-честному
             # из исходных статов.
-            units = self._mean_units(history, stat_key, weights)
+            units = self._unit_series(games, account_ids, stat_key)
 
             values.append(
                 StatValue(
                     stat=stat_key,
                     label=rule.label,
                     color=str(rule.color),
-                    units_per_game=units,
-                    base_points=float(weights @ column),
+                    units_per_game=float(weights @ units) if len(units) else 0.0,
+                    base_points=float(weights @ column) if len(column) else 0.0,
                     p95_points=float(np.percentile(column, 95)) if len(column) else 0.0,
                     p5_points=float(np.percentile(column, 5)) if len(column) else 0.0,
+                    median_points=float(np.median(column)) if len(column) else 0.0,
+                    p75_points=float(np.percentile(column, 75)) if len(column) else 0.0,
+                    hit_rate=float((units > 0).mean()) if len(units) else 0.0,
+                    trend=self._trend(games, column, now=now),
                     availability=source.availability if source else "exact",
-                    games=len(history.games),
+                    games=len(games),
                 )
             )
 
         values.sort(key=lambda v: -v.base_points)
         return values
 
-    def _mean_units(
-        self, history: RoleHistory, stat_key: str, weights: np.ndarray
-    ) -> float:
+    def _unit_series(
+        self,
+        games: Sequence[RoleGame],
+        account_ids: Sequence[int],
+        stat_key: str,
+    ) -> np.ndarray:
+        """Единицы стата по картам, усреднённые по игрокам роли."""
         per_game = []
-        for game in history.games:
-            players = [
-                game.player_stats[a] for a in history.account_ids if a in game.player_stats
-            ]
+        for game in games:
+            players = [game.player_stats[a] for a in account_ids if a in game.player_stats]
             if not players:
                 per_game.append(0.0)
                 continue
-            per_game.append(
-                sum(float(p.get(stat_key, 0.0)) for p in players) / len(players)
+            per_game.append(sum(float(p.get(stat_key, 0.0)) for p in players) / len(players))
+        return np.array(per_game, dtype=np.float64)
+
+    def _trend(
+        self,
+        games: Sequence[RoleGame],
+        column: np.ndarray,
+        *,
+        now: datetime | None = None,
+    ) -> float | None:
+        """Свежая форма относительно предыдущей: отношение средних очков.
+
+        Веса давности сглаживают историю, но не отвечают на вопрос «стало лучше
+        или хуже». Здесь сравниваются две непересекающиеся половины окна, и если
+        в любой из них меньше трёх карт — сравнивать нечего.
+        """
+        if len(column) != len(games) or not len(games):
+            return None
+        now = now or datetime.now(timezone.utc)
+        ages = np.array(
+            [(now - g.start_time).total_seconds() / 86400.0 for g in games], dtype=np.float64
+        )
+        recent = column[ages <= TREND_WINDOW_DAYS]
+        earlier = column[(ages > TREND_WINDOW_DAYS) & (ages <= TREND_WINDOW_DAYS * 3)]
+        if len(recent) < MIN_TREND_GAMES or len(earlier) < MIN_TREND_GAMES:
+            return None
+        before = float(earlier.mean())
+        if before <= 0:
+            return None
+        return float(recent.mean()) / before
+
+    def player_values(
+        self,
+        history: RoleHistory,
+        *,
+        role: str | None = None,
+        now: datetime | None = None,
+        names: Mapping[int, str] | None = None,
+    ) -> list[PlayerProfile]:
+        """Те же ценности статов, но по каждому игроку роли отдельно.
+
+        Карты, где игрок не выходил (замена, стенд-ин), в его выборку не идут —
+        иначе средние занижаются нулями за чужие игры.
+        """
+        role = role or history.role
+        names = names or dict(zip(history.account_ids, history.player_names, strict=False))
+
+        profiles: list[PlayerProfile] = []
+        for account_id in history.account_ids:
+            games = [g for g in history.games if account_id in g.player_stats]
+            if not games:
+                continue
+            solo = RoleHistory(
+                role=role,
+                team_id=history.team_id,
+                account_ids=(account_id,),
+                games=games,
+                team_name=history.team_name,
             )
-        if not per_game:
-            return 0.0
-        return float(weights @ np.array(per_game))
+            base = self.projector.base_matrix(solo)
+            weights = self.projector.recency_weights(solo, now=now)
+            profiles.append(
+                PlayerProfile(
+                    account_id=account_id,
+                    name=names.get(account_id),
+                    games=len(games),
+                    values=tuple(
+                        self._values_from(
+                            solo,
+                            base,
+                            weights,
+                            role=role,
+                            now=now,
+                            include_unavailable=False,
+                            games=games,
+                            account_ids=(account_id,),
+                        )
+                    ),
+                )
+            )
+        return profiles
 
     # --- 2. подбор баннера ----------------------------------------------------
 
@@ -424,7 +580,166 @@ class EmblemAdvisor:
             "delta_pct": (after / before - 1.0) * 100.0 if before else 0.0,
         }
 
-    # --- 3. кто лучше под стат ------------------------------------------------
+    # --- 3. свои эмблемы -> под кого их ставить -------------------------------
+
+    def inventory_gaps(
+        self, inventory: Sequence[Emblem], role: str
+    ) -> tuple[str, ...]:
+        """Каких цветов не хватает, чтобы вообще заполнить баннер этой роли.
+
+        Зависит только от инвентаря и роли, не от команды: цвета слотов
+        фиксированы ролью, и если синих эмблем всего одна, саппорта не собрать
+        ни с кем.
+        """
+        colors = [str(c) for c in self.rules.slot_colors(role)]
+        need: dict[str, int] = {}
+        for color in colors:
+            need[color] = need.get(color, 0) + 1
+
+        have: dict[str, int] = {}
+        for emblem in inventory:
+            rule = self.rules.stats.get(emblem.stat)
+            if rule is None:
+                continue
+            have[str(rule.color)] = have.get(str(rule.color), 0) + 1
+
+        return tuple(
+            f"{color}: нужно {count}, есть {have.get(color, 0)}"
+            for color, count in need.items()
+            if have.get(color, 0) < count
+        )
+
+    def fit_inventory(
+        self,
+        history: RoleHistory,
+        inventory: Sequence[Emblem],
+        *,
+        role: str | None = None,
+        now: datetime | None = None,
+        values: Mapping[str, StatValue] | None = None,
+    ) -> InventoryFit:
+        """Разложить имеющиеся эмблемы по слотам роли наилучшим образом.
+
+        Обратная задача к `optimise_banner`: там перебирались все эмблемы, какие
+        бывают, здесь — только те, что у игрока уже есть. Качества и трейты
+        заданы, менять нечего, но остаётся выбор, какие три эмблемы поставить и
+        в каком порядке: Benevolent и Vampiric действуют на соседей, поэтому
+        порядок решает.
+
+        Перебор ограничен цветом: в красный слот кандидатами идут только красные
+        эмблемы инвентаря. Это превращает сотни тысяч перестановок в десятки.
+
+        Статы, которых нет в данных OpenDota (Madstone, Watchers), оцениваются в
+        ноль очков: в игре они считаются, у нас их измерить нечем. Такая эмблема
+        встанет на баннер только если ставить больше нечего.
+        """
+        role = role or history.role
+        colors = [str(c) for c in self.rules.slot_colors(role)]
+        gaps = self.inventory_gaps(inventory, role)
+        if gaps:
+            raise ValueError(f"инвентаря не хватает на роль {role}: {'; '.join(gaps)}")
+
+        if values is None:
+            values = {v.stat: v for v in self.stat_values(history, role=role, now=now)}
+
+        # Индексы инвентаря по цвету слота: перебираем только подходящее.
+        by_slot: list[list[int]] = []
+        for color in colors:
+            by_slot.append(
+                [
+                    i
+                    for i, e in enumerate(inventory)
+                    if e.stat in self.rules.stats
+                    and str(self.rules.stats[e.stat].color) == color
+                ]
+            )
+
+        allow_duplicates = self.rules.banner.allow_duplicate_stats
+        best_total = -np.inf
+        best_indices: tuple[int, ...] = ()
+
+        def walk(slot: int, chosen: list[int]) -> None:
+            nonlocal best_total, best_indices
+            if slot == len(colors):
+                emblems = tuple(inventory[i] for i in chosen)
+                banner = Banner(emblems=emblems, role=role)
+                multipliers = self.scorer.emblem_multipliers(banner)
+                total = sum(
+                    values[e.stat].base_points * m
+                    for e, m in zip(emblems, multipliers, strict=True)
+                    if e.stat in values
+                )
+                if total > best_total:
+                    best_total = total
+                    best_indices = tuple(chosen)
+                return
+            for index in by_slot[slot]:
+                if index in chosen:
+                    continue  # одна эмблема — один слот
+                if not allow_duplicates and any(
+                    inventory[index].stat == inventory[c].stat for c in chosen
+                ):
+                    continue
+                chosen.append(index)
+                walk(slot + 1, chosen)
+                chosen.pop()
+
+        walk(0, [])
+        if not best_indices:
+            raise ValueError(
+                f"из инвентаря не собрать баннер роли {role}: не хватает разных статов"
+            )
+
+        used = tuple(inventory[i] for i in best_indices)
+        banner = Banner(emblems=used, role=role)
+        multipliers = self.scorer.emblem_multipliers(banner)
+        slots = tuple(
+            SlotAdvice(
+                slot=index,
+                color=colors[index],
+                emblem=emblem,
+                percent=multiplier * 100.0,
+                base_points=values[emblem.stat].base_points if emblem.stat in values else 0.0,
+                points=(values[emblem.stat].base_points if emblem.stat in values else 0.0)
+                * multiplier,
+            )
+            for index, (emblem, multiplier) in enumerate(
+                zip(used, multipliers, strict=True)
+            )
+        )
+
+        return InventoryFit(
+            role=role,
+            team_id=history.team_id,
+            team_name=history.team_name,
+            player_names=history.player_names,
+            slots=slots,
+            expected_card_points=float(best_total),
+            used=used,
+            unused=tuple(e for i, e in enumerate(inventory) if i not in best_indices),
+            games=len(history.games),
+        )
+
+    def rank_inventory(
+        self,
+        inventory: Sequence[Emblem],
+        histories: Iterable[RoleHistory],
+        *,
+        now: datetime | None = None,
+        min_games: int = 5,
+    ) -> list[InventoryFit]:
+        """Кому из участников TI15 эти эмблемы принесут больше всего очков."""
+        fits: list[InventoryFit] = []
+        for history in histories:
+            if len(history.games) < min_games:
+                continue
+            if self.inventory_gaps(inventory, history.role):
+                continue  # этой роли инвентарь не хватает ни в какой команде
+            fits.append(self.fit_inventory(history, inventory, now=now))
+        fits.sort(key=lambda f: -f.expected_card_points)
+        return fits
+
+    # --- 4. кто лучше под стат ------------------------------------------------
 
     def rank_for_stat(
         self,
@@ -458,7 +773,9 @@ class EmblemAdvisor:
                     team_name=team_names.get(history.team_id, history.team_name),
                     role=history.role,
                     player_names=history.player_names,
-                    units_per_game=self._mean_units(history, stat, weights),
+                    units_per_game=float(
+                        weights @ self._unit_series(history.games, history.account_ids, stat)
+                    ),
                     base_points=float(weights @ column),
                     p95_points=float(np.percentile(column, 95)),
                     games=len(history.games),

@@ -28,7 +28,12 @@ export default function EmblemCard({ slot }: { slot: SlotAdvice }) {
   const icon = emblemIcon(slot.stat);
   const color = GROUP_COLOR[slot.color];
 
-  // Разложение процента: 100 базовых + качество + всё остальное (трейт и соседи).
+  // Разложение процента: 100 базовых + качество + всё остальное.
+  //
+  // Остаток намеренно не подписывается трейтом этой эмблемы: он складывается из
+  // её собственного трейта и трейтов соседей. Benevolent даёт +20% соседям и
+  // ничего себе — приписав остаток самой эмблеме, карточка показывала бы «без
+  // трейта +20%» у соседней и «Benevolent 0%» у той, что этот бонус раздаёт.
   const qualityBonus =
     { tier_1: 10, tier_2: 30, tier_3: 60, tier_4: 100, tier_5: 150 }[slot.quality] ?? 0;
   const traitBonus = slot.percent - 100 - qualityBonus;
@@ -73,10 +78,15 @@ export default function EmblemCard({ slot }: { slot: SlotAdvice }) {
             <span className="tabular">{sign(qualityBonus)}</span>
           </span>
           <span aria-hidden>·</span>
-          <span>
-            {slot.trait ? (TRAIT_LABEL[slot.trait] ?? slot.trait) : "без трейта"}{" "}
-            <span className="tabular">{sign(traitBonus)}</span>
-          </span>
+          <span>{slot.trait ? (TRAIT_LABEL[slot.trait] ?? slot.trait) : "без трейта"}</span>
+          {Math.round(traitBonus) !== 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span title="Собственный трейт и трейты соседних эмблем">
+                трейты <span className="tabular">{sign(traitBonus)}</span>
+              </span>
+            </>
+          )}
         </div>
       </div>
 

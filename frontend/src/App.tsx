@@ -3,6 +3,7 @@ import DataPanel from "./components/DataPanel";
 import EmblemAnalyzer from "./components/EmblemAnalyzer";
 import FantasyPanel from "./components/FantasyPanel";
 import GroupPanel from "./components/GroupPanel";
+import InventoryAnalyzer from "./components/InventoryAnalyzer";
 import RosterPanel from "./components/RosterPanel";
 import TeamsPanel from "./components/TeamsPanel";
 import { STATIC_MODE, formatGeneratedAt, loadSnapshot } from "./snapshot";
@@ -11,6 +12,7 @@ import { STATIC_MODE, formatGeneratedAt, loadSnapshot } from "./snapshot";
 // «Данные» грузят матчи, «Рейтинги» строят историю из базы.
 const TABS = [
   { key: "emblems", label: "Эмблемы", element: <EmblemAnalyzer />, live: false },
+  { key: "inventory", label: "Мои эмблемы", element: <InventoryAnalyzer />, live: false },
   { key: "roster", label: "Ростер", element: <RosterPanel />, live: false },
   { key: "predictions", label: "Predictions", element: <GroupPanel />, live: false },
   { key: "teams", label: "Рейтинги", element: <TeamsPanel />, live: true },

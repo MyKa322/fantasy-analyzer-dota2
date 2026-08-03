@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
+  Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,6 +16,8 @@ import {
 import {
   api,
   type BannerAdvice,
+  type PlayerProfile,
+  type RoleTimeline,
   type StatRanking,
   type StatValue,
   type Team,
@@ -35,6 +42,8 @@ export default function EmblemAnalyzer() {
 
   const [advices, setAdvices] = useState<BannerAdvice[]>([]);
   const [stats, setStats] = useState<StatValue[]>([]);
+  const [players, setPlayers] = useState<PlayerProfile[]>([]);
+  const [timeline, setTimeline] = useState<RoleTimeline | null>(null);
   const [titles, setTitles] = useState<TitleAdvice[]>([]);
   const [ranking, setRanking] = useState<StatRanking[]>([]);
   const [rankedStat, setRankedStat] = useState<string | null>(null);
@@ -60,7 +69,7 @@ export default function EmblemAnalyzer() {
     setError(null);
     try {
       const payload = { team_id: teamId, role, history_days: 180 };
-      const [banner, report, titleAdvice] = await Promise.all([
+      const [banner, report, titleAdvice, profiles, form] = await Promise.all([
         api.bestBanner({
           ...payload,
           qualities: restrict ? qualities : null,
@@ -71,10 +80,14 @@ export default function EmblemAnalyzer() {
         }),
         api.statReport(payload),
         api.titles(payload),
+        api.playerReport(payload),
+        api.timeline(payload),
       ]);
       setAdvices(banner);
       setStats(report);
       setTitles(titleAdvice);
+      setPlayers(profiles);
+      setTimeline(form);
       setRanking([]);
       setRankedStat(null);
     } catch (e) {
@@ -102,6 +115,54 @@ export default function EmblemAnalyzer() {
     .filter((s) => !s.negligible)
     .slice(0, 10)
     .map((s) => ({ ...s, name: s.label }));
+
+  // Форма: очки за каждую карту плюс скользящее среднее по пяти. Без сглаживания
+  // за разбросом отдельных карт тренда не видно, а без самих карт — не видно
+  // разброса, ради которого в Fantasy и берут нестабильных игроков.
+  const formData = useMemo(() => {
+    const points = timeline?.points ?? [];
+    return points.map((point, index) => {
+      const window = points.slice(Math.max(0, index - 4), index + 1);
+      return {
+        ...point,
+        avg: Math.round(window.reduce((sum, p) => sum + p.p, 0) / window.length),
+      };
+    });
+  }, [timeline]);
+
+  const formMean = formData.length
+    ? formData.reduce((sum, p) => sum + p.p, 0) / formData.length
+    : 0;
+
+  // Кто в паре что делает: строки — статы, столбцы — игроки.
+  const playerRows = useMemo(
+    () =>
+      stats
+        .filter((s) => !s.negligible)
+        .slice(0, 8)
+        .map((s) => ({
+          stat: s.stat,
+          label: s.label,
+          color: s.color,
+          cells: players.map((p) => p.values.find((v) => v.stat === s.stat) ?? null),
+        })),
+    [stats, players],
+  );
+
+  // Насколько роль держится на одном человеке — по очкам того самого баннера.
+  const bannerShare = useMemo(() => {
+    if (!best || !players.length) return [];
+    const totals = players.map((player) => ({
+      name: player.name ?? String(player.account_id),
+      games: player.games,
+      points: best.slots.reduce((sum, slot) => {
+        const value = player.values.find((v) => v.stat === slot.stat);
+        return sum + (value ? value.base_points * (slot.percent / 100) : 0);
+      }, 0),
+    }));
+    const sum = totals.reduce((s, t) => s + t.points, 0);
+    return totals.map((t) => ({ ...t, share: sum ? t.points / sum : 0 }));
+  }, [players, best]);
 
   return (
     <div className="space-y-4">
@@ -319,8 +380,18 @@ export default function EmblemAnalyzer() {
                   <tr>
                     <th className="py-1 text-left">Стат</th>
                     <th className="py-1 text-right">За карту</th>
+                    <th className="py-1 text-right" title="Доля карт, где стат вообще был">
+                      Карт со статом
+                    </th>
+                    <th className="py-1 text-right">Медиана</th>
                     <th className="py-1 text-right">Очков</th>
                     <th className="py-1 text-right">Потолок</th>
+                    <th
+                      className="py-1 text-right"
+                      title="Последние 30 дней к предыдущим 60"
+                    >
+                      Форма
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -338,17 +409,171 @@ export default function EmblemAnalyzer() {
                           maximumFractionDigits: 2,
                         })}
                       </td>
+                      <td className="tabular py-1 text-right text-neutral-500">
+                        {s.hit_rate != null ? `${Math.round(s.hit_rate * 100)}%` : "—"}
+                      </td>
+                      <td className="tabular py-1 text-right text-neutral-400">
+                        {s.median_points != null
+                          ? Math.round(s.median_points).toLocaleString("ru")
+                          : "—"}
+                      </td>
                       <td className="tabular py-1 text-right text-neutral-200">
                         {Math.round(s.base_points).toLocaleString("ru")}
                       </td>
                       <td className="tabular py-1 text-right text-neutral-500">
                         {Math.round(s.p95_points).toLocaleString("ru")}
                       </td>
+                      <td className="tabular py-1 text-right">
+                        {s.trend == null ? (
+                          <span className="text-neutral-600" title="карт для сравнения мало">
+                            —
+                          </span>
+                        ) : (
+                          <span
+                            className={
+                              s.trend >= 1.05
+                                ? "text-emerald-400"
+                                : s.trend <= 0.95
+                                  ? "text-red-400"
+                                  : "text-neutral-400"
+                            }
+                          >
+                            {s.trend >= 1 ? "↑" : "↓"}{" "}
+                            {Math.abs(Math.round((s.trend - 1) * 100))}%
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </Panel>
+
+            {formData.length > 3 && (
+              <Panel
+                title="Форма по картам"
+                subtitle={`Очки за каждую карту с нейтральным баннером (${timeline?.banner.map((e) => e.stat).join(", ")}). Линия — среднее по пяти последним. В зачёт идут две лучшие карты серии, поэтому важен не только уровень, но и разброс.`}
+              >
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={formData} margin={{ left: 10, right: 10 }}>
+                    <CartesianGrid stroke="#20232c" vertical={false} />
+                    <XAxis dataKey="d" stroke="#7C858F" fontSize={10} minTickGap={40} />
+                    <YAxis stroke="#7C858F" fontSize={11} width={50} />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#16181C",
+                        border: "1px solid #2C3138",
+                        fontSize: 12,
+                      }}
+                      formatter={(value, name) => [
+                        Math.round(Number(value)).toLocaleString("ru"),
+                        name === "p" ? "карта" : "среднее по 5",
+                      ]}
+                    />
+                    <ReferenceLine
+                      y={formMean}
+                      stroke="#c8a24a"
+                      strokeDasharray="4 4"
+                      label={{
+                        value: "среднее",
+                        fill: "#c8a24a",
+                        fontSize: 10,
+                        position: "insideTopRight",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="p"
+                      stroke="#3d7fb8"
+                      fill="#3d7fb833"
+                      strokeWidth={1}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="avg"
+                      stroke="#c8a24a"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Panel>
+            )}
+
+            {playerRows.length > 0 && players.length > 1 && (
+              <Panel
+                title="Кто в паре что делает"
+                subtitle="В зачёт идёт среднее по игрокам роли, поэтому пара, где всё делает один, стоит столько же, сколько пара, где оба, — но проваливается заметнее, если этот один сыграет плохо."
+              >
+                <table className="w-full text-xs">
+                  <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
+                    <tr>
+                      <th className="py-1 text-left">Стат</th>
+                      {players.map((p) => (
+                        <th key={p.account_id} className="py-1 text-right">
+                          {p.name ?? p.account_id}
+                          <div className="text-[10px] normal-case text-neutral-600">
+                            {p.games} карт
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playerRows.map((row) => {
+                      const top = Math.max(
+                        ...row.cells.map((c) => c?.units_per_game ?? 0),
+                      );
+                      return (
+                        <tr key={row.stat} className="border-t border-[#20232c]">
+                          <td className="py-1" style={{ color: GROUP_COLOR[row.color] }}>
+                            {row.label}
+                          </td>
+                          {row.cells.map((cell, i) => (
+                            <td
+                              key={i}
+                              className={`tabular py-1 text-right ${
+                                cell && cell.units_per_game === top && top > 0
+                                  ? "text-neutral-100"
+                                  : "text-neutral-500"
+                              }`}
+                            >
+                              {cell
+                                ? cell.units_per_game.toLocaleString("ru", {
+                                    maximumFractionDigits: 2,
+                                  })
+                                : "—"}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {bannerShare.length > 1 && (
+                  <div className="mt-3 space-y-1">
+                    <div className="text-[11px] tracking-wide text-neutral-500 uppercase">
+                      Вклад в очки этого баннера
+                    </div>
+                    {bannerShare.map((entry) => (
+                      <div key={entry.name} className="flex items-center gap-2 text-xs">
+                        <span className="w-28 truncate text-neutral-300">{entry.name}</span>
+                        <span className="h-2 flex-1 overflow-hidden rounded bg-[#20232c]">
+                          <span
+                            className="block h-full rounded bg-[#c8a24a]"
+                            style={{ width: `${Math.round(entry.share * 100)}%` }}
+                          />
+                        </span>
+                        <span className="tabular w-10 text-right text-neutral-400">
+                          {Math.round(entry.share * 100)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+            )}
 
             {rankedStat && ranking.length > 0 && (
               <Panel

@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
       "port": 5173
+    },
+    {
+      "name": "frontend-static",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:static", "--prefix", "frontend"],
+      "port": 5173
     }
   ]
 }

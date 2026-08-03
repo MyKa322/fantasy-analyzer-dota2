@@ -5,6 +5,8 @@
 // считают в браузере. Компоненты разницы не видят.
 
 import {
+  fitInventory,
+  inventoryGaps,
   optimiseBanner,
   scoreBanner,
   type Availability,
@@ -198,6 +200,57 @@ export interface BannerAdvice {
   period_ceiling: number | null;
 }
 
+export interface PlayerStatValue {
+  stat: string;
+  label: string;
+  color: GroupColor;
+  units_per_game: number;
+  base_points: number;
+  p95_points: number;
+  hit_rate: number;
+  trend: number | null;
+}
+
+/** Разбивка роли по игрокам: кто именно набирает очки внутри пары. */
+export interface PlayerProfile {
+  account_id: number;
+  name: string | null;
+  games: number;
+  values: PlayerStatValue[];
+}
+
+export interface TimelinePoint {
+  d: string;
+  p: number;
+  w: number | null;
+}
+
+export interface RoleTimeline {
+  role: string;
+  team_id: number;
+  banner: Emblem[];
+  points: TimelinePoint[];
+}
+
+export interface InventoryFit {
+  role: string;
+  team_id: number;
+  team_name: string | null;
+  player_names: string[];
+  slots: SlotAdvice[];
+  expected_card_points: number;
+  period_mean: number | null;
+  period_ceiling: number | null;
+  unused: Emblem[];
+  games: number;
+}
+
+export interface InventoryResponse {
+  fits: InventoryFit[];
+  /** Роли, которые из этого инвентаря не собрать: цвет -> чего не хватает. */
+  gaps: Record<string, string[]>;
+}
+
 export interface StatRanking {
   stat: string;
   team_id: number;
@@ -348,6 +401,30 @@ const live = {
     series?: number;
   }) =>
     request<BannerAdvice[]>("/fantasy/best-banner", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  playerReport: (payload: { team_id: number; role: string; history_days?: number }) =>
+    request<PlayerProfile[]>("/fantasy/players", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  timeline: (payload: { team_id: number; role: string; history_days?: number }) =>
+    request<RoleTimeline>("/fantasy/timeline", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  inventory: (payload: {
+    inventory: Emblem[];
+    role?: string | null;
+    history_days?: number;
+    min_games?: number;
+    top_n?: number;
+  }) =>
+    request<InventoryResponse>("/fantasy/inventory", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -571,6 +648,73 @@ const staticApi: typeof live = {
       period_mean: option.total * role.period_ratio,
       period_ceiling: option.total * role.ceiling_ratio,
     }));
+  },
+
+  playerReport: async (payload) => {
+    const snapshot = await loadSnapshot();
+    const role = findRole(snapshot, payload.team_id, payload.role);
+    if (!role) return offline();
+    const meta = new Map(role.stats.map((s) => [s.stat, s]));
+    return role.player_stats.map((player) => ({
+      account_id: player.account_id,
+      name: player.name,
+      games: player.games,
+      values: player.stats.map((v) => ({
+        ...v,
+        label: meta.get(v.stat)?.label ?? v.stat,
+        color: meta.get(v.stat)?.color ?? ("red" as GroupColor),
+      })),
+    }));
+  },
+
+  timeline: async (payload) => {
+    const snapshot = await loadSnapshot();
+    const role = findRole(snapshot, payload.team_id, payload.role);
+    if (!role) return offline();
+    return {
+      role: role.role,
+      team_id: role.team_id,
+      banner: neutralBannerFor(role.role, snapshot.rules),
+      points: role.timeline,
+    };
+  },
+
+  inventory: async (payload) => {
+    const snapshot = await loadSnapshot();
+
+    // Нехватка цветов зависит только от инвентаря и роли, поэтому считается до
+    // перебора команд: саппорта без двух синих не собрать ни с кем.
+    const gaps: Record<string, string[]> = {};
+    for (const role of Object.keys(snapshot.rules.role_slots)) {
+      if (payload.role && role !== payload.role) continue;
+      const missing = inventoryGaps(payload.inventory, role, snapshot.rules);
+      if (missing.length) {
+        gaps[role] = missing.map((m) => `${m.color}: нужно ${m.need}, есть ${m.have}`);
+      }
+    }
+
+    const fits: InventoryFit[] = [];
+    for (const role of snapshot.roles) {
+      if (payload.role && role.role !== payload.role) continue;
+      if (gaps[role.role]) continue;
+      if (role.games < (payload.min_games ?? 5)) continue;
+      const fit = fitInventory(role.role, payload.inventory, role.stats, snapshot.rules);
+      if (!fit) continue;
+      fits.push({
+        role: role.role,
+        team_id: role.team_id,
+        team_name: role.team_name,
+        player_names: role.players,
+        slots: fit.slots.map((s) => ({ ...s, alternatives: [] })),
+        expected_card_points: fit.total,
+        period_mean: fit.total * role.period_ratio,
+        period_ceiling: fit.total * role.ceiling_ratio,
+        unused: fit.unused,
+        games: role.games,
+      });
+    }
+    fits.sort((a, b) => b.expected_card_points - a.expected_card_points);
+    return { fits: fits.slice(0, payload.top_n ?? 48), gaps };
   },
 
   statRanking: async (stat: string, role?: string) => {

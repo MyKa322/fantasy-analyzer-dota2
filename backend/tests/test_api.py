@@ -427,3 +427,109 @@ def test_projection_rejects_unknown_role(client):
         },
     )
     assert response.status_code == 400
+
+
+# --- разбивка по игрокам и свой инвентарь --------------------------------------
+
+
+def seed_ti_role_history(session_factory, *, copies: int = 8) -> tuple[int, list[int]]:
+    """Тот же матч, но за команду-участницу TI15: без этого её нет в кандидатах.
+
+    Возвращает id команды и account_id её игроков — рейтинг инвентаря идёт по
+    размеченным ростерам, а не по всем, кто попал в базу.
+    """
+    from app.services.analysis import ti_team_ids
+
+    team_id = next(iter(ti_team_ids()))
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    payload["radiant_team_id"] = team_id
+    payload["radiant_team"] = {"team_id": team_id, "name": "TI Team", "tag": "TI"}
+    accounts = [p["account_id"] for p in payload["players"] if p["isRadiant"]]
+
+    with session_factory() as session:
+        for offset in range(copies):
+            clone = dict(payload)
+            clone["match_id"] = payload["match_id"] + offset
+            clone["start_time"] = payload["start_time"] + offset * 3600
+            clone["series_id"] = payload["series_id"] + offset // 2
+            upsert_match(session, clone)
+        session.commit()
+    return team_id, accounts
+
+
+def test_player_report_splits_the_role(client, session_factory):
+    seed_role_history(session_factory)
+    response = client.post(
+        "/api/fantasy/players",
+        json={"team_id": 10207962, "role": "core", "history_days": 3650},
+    )
+    assert response.status_code == 200, response.text
+    profiles = response.json()
+    assert len(profiles) == 2  # core duo
+    for profile in profiles:
+        assert profile["games"] > 0
+        assert profile["values"]
+        assert {v["color"] for v in profile["values"]} <= {"red", "green"}
+
+
+def test_stat_report_carries_pinpoint_numbers(client, session_factory):
+    seed_role_history(session_factory)
+    stats = client.post(
+        "/api/fantasy/stat-report",
+        json={"team_id": 10207962, "role": "support", "history_days": 3650},
+    ).json()
+    wards = next(s for s in stats if s["stat"] == "wards_placed")
+    assert wards["hit_rate"] > 0
+    assert wards["p5_points"] <= wards["median_points"] <= wards["p95_points"]
+    assert wards["median_points"] <= wards["p75_points"] <= wards["p95_points"]
+
+
+def test_inventory_ranks_pairs_for_the_emblems_you_own(client, session_factory):
+    team_id, accounts = seed_ti_role_history(session_factory)
+    with session_factory() as session:
+        for account_id in accounts[:2]:
+            session.add(
+                TeamRosterSlot(team_id=team_id, account_id=account_id, role="support")
+            )
+        session.commit()
+
+    response = client.post(
+        "/api/fantasy/inventory",
+        json={
+            "history_days": 3650,
+            "min_games": 1,
+            "inventory": [
+                {"stat": "wards_placed", "quality": "tier_4", "trait": "benevolent"},
+                {"stat": "camps_stacked", "quality": "tier_2", "trait": None},
+                {"stat": "stuns", "quality": "tier_3", "trait": None},
+                {"stat": "gpm", "quality": "tier_5", "trait": None},
+            ],
+        },
+        params={"simulate_top": 1, "simulations": 300},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["fits"], payload
+    fit = payload["fits"][0]
+    assert fit["role"] == "support"
+    assert [s["color"] for s in fit["slots"]] == ["blue", "blue", "green"]
+    assert fit["expected_card_points"] > 0
+    assert fit["period_mean"] is not None  # первому в списке считается период
+    # Красная эмблема саппорту не подходит и остаётся в запасе.
+    assert [e["stat"] for e in fit["unused"]] == ["gpm"]
+    # Роли, на которые инвентаря не хватает, названы явно.
+    assert "core" in payload["gaps"] and payload["gaps"]["core"]
+
+
+def test_inventory_rejects_empty_and_unknown(client, session_factory):
+    assert (
+        client.post("/api/fantasy/inventory", json={"inventory": []}).status_code == 400
+    )
+    seed_ti_role_history(session_factory, copies=2)
+    response = client.post(
+        "/api/fantasy/inventory",
+        json={"inventory": [{"stat": "nonsense", "quality": "tier_3"}]},
+    )
+    assert response.status_code == 400
+    assert "nonsense" in response.json()["detail"]

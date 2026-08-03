@@ -79,11 +79,25 @@ jobs:
           if git diff --staged --quiet; then
             echo "данные не изменились — коммит не нужен"
             echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            git commit -m "data: обновление снапшота $(date -u +%Y-%m-%d)"
-            git push
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          git commit -m "data: обновление снапшота $(date -u +%Y-%m-%d)"
+
+          # Загрузка идёт минутами, за это время в main могли уехать правки с
+          # ноутбука — тогда push отклоняется. Подтягиваем и пробуем снова:
+          # снапшот генерируется заново каждый запуск, конфликтовать в нём
+          # нечему, ребейз проходит поверх чужих коммитов.
+          for attempt in 1 2 3; do
+            if git push; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "push отклонён (попытка $attempt), подтягиваю main"
+            git pull --rebase=true --strategy-option=theirs origin "${GITHUB_REF_NAME}"
+          done
+          echo "не удалось отправить снапшот за три попытки" >&2
+          exit 1
 
       - name: Опубликовать обновлённую страницу
         if: steps.commit.outputs.changed == 'true'
