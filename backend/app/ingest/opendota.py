@@ -251,6 +251,10 @@ class OpenDotaClient:
             return exact
         return [t for t in all_teams if needle in (t.get("name") or "").casefold()]
 
+    async def heroes(self) -> list[dict[str, Any]]:
+        """Справочник героев: в матче лежит только hero_id, имени там нет."""
+        return await self._get("/heroes")
+
     async def player_matches(
         self, account_id: int, *, limit: int = 50, **filters: Any
     ) -> list[dict[str, Any]]:

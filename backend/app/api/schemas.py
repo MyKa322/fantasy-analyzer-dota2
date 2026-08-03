@@ -323,6 +323,100 @@ class TitleAdviceOut(BaseModel):
     note: str
 
 
+# --- профили команд и игроков -------------------------------------------------
+
+
+class MatchRowOut(BaseModel):
+    """Строка в списке матчей. Пустые поля — матч без разобранного реплея."""
+
+    match_id: int
+    start_time: datetime
+    duration: int
+    league_name: str | None = None
+    opponent_id: int | None = None
+    opponent_name: str | None = None
+    won: bool | None = None
+    is_parsed: bool
+    hero_id: int | None = None
+    hero_name: str | None = None
+    kills: float | None = None
+    deaths: float | None = None
+    assists: float | None = None
+    gpm: float | None = None
+    xpm: float | None = None
+    net_worth: float | None = None
+
+
+class HeroRowOut(BaseModel):
+    hero_id: int
+    name: str
+    games: int
+    wins: int
+
+
+class PlayerPageOut(BaseModel):
+    """Страница игрока: обычная статистика отдельно, Fantasy-единицы отдельно."""
+
+    account_id: int
+    name: str | None = None
+    team_id: int | None = None
+    team_name: str | None = None
+    role: str | None = None
+    position: int | None = None
+    games: int
+    parsed_games: int
+    wins: int
+    win_rate: float
+    first_game: datetime | None = None
+    last_game: datetime | None = None
+    averages: dict[str, float] = {}
+    fantasy_units: dict[str, float] = {}
+    heroes: list[HeroRowOut] = []
+    matches: list[MatchRowOut] = []
+
+
+class TeamPageOut(BaseModel):
+    team_id: int
+    name: str
+    compendium_name: str | None = None
+    tag: str | None = None
+    rating: float | None = None
+    rd: float | None = None
+    volatility: float | None = None
+    rating_history: list[dict[str, float | str]] = []
+    games: int
+    parsed_games: int
+    wins: int
+    win_rate: float
+    first_game: datetime | None = None
+    last_game: datetime | None = None
+    roster: list[PlayerPageOut] = []
+    matches: list[MatchRowOut] = []
+    team_averages: dict[str, float] = {}
+    opponents: list[dict[str, str | int]] = []
+
+
+class TeamListItemOut(BaseModel):
+    team_id: int
+    name: str
+    opendota_name: str | None = None
+    tag: str | None = None
+    is_ti: bool
+    games: int
+    rating: float | None = None
+    rd: float | None = None
+
+
+class PlayerListItemOut(BaseModel):
+    account_id: int
+    name: str | None = None
+    team_id: int | None = None
+    team_name: str | None = None
+    role: str | None = None
+    is_ti: bool
+    games: int
+
+
 class RolesOut(BaseModel):
     team_id: int
     team_name: str | None = None

@@ -15,6 +15,15 @@ import {
   type StatValue,
 } from "./engine/scoring";
 import { STATIC_MODE, findRole, loadSnapshot } from "./snapshot";
+import {
+  loadProfiles,
+  type ProfileHero,
+  type ProfileMatch,
+  type ProfilePlayer,
+  type ProfileTeam,
+} from "./profiles";
+
+export type { ProfileHero, ProfileMatch, ProfilePlayer, ProfileTeam };
 
 export type { Availability, GroupColor, StatValue };
 
@@ -274,11 +283,140 @@ export interface TitleAdvice {
   note: string;
 }
 
+export interface TeamListItem {
+  team_id: number;
+  name: string;
+  opendota_name?: string | null;
+  tag: string | null;
+  is_ti: boolean;
+  games: number;
+  rating: number | null;
+  rd: number | null;
+}
+
+export interface PlayerListItem {
+  account_id: number;
+  name: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  role: string | null;
+  is_ti: boolean;
+  games: number;
+}
+
 export interface TeamRoles {
   team_id: number;
   team_name: string | null;
   roles: Record<string, number[]>;
   player_names: Record<string, string | null>;
+}
+
+// --- профили ------------------------------------------------------------------
+// Живой бэкенд отдаёт развёрнутые имена полей, статический снапшот — короткие
+// (в нём эти строки повторяются сотнями тысяч раз). Компоненты работают с одной
+// формой, поэтому ответы API приводятся к формату снапшота прямо здесь.
+
+interface MatchRowResponse {
+  match_id: number;
+  start_time: string;
+  duration: number;
+  league_name: string | null;
+  opponent_id: number | null;
+  opponent_name: string | null;
+  won: boolean | null;
+  is_parsed: boolean;
+  hero_name: string | null;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  gpm: number | null;
+  xpm: number | null;
+  net_worth: number | null;
+}
+
+interface PlayerPageResponse {
+  account_id: number;
+  name: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  role: string | null;
+  games: number;
+  parsed_games: number;
+  wins: number;
+  first_game: string | null;
+  last_game: string | null;
+  averages: Record<string, number>;
+  fantasy_units: Record<string, number>;
+  heroes: ProfileHero[];
+  matches: MatchRowResponse[];
+}
+
+interface TeamPageResponse {
+  team_id: number;
+  name: string;
+  compendium_name: string | null;
+  tag: string | null;
+  rating: number | null;
+  rd: number | null;
+  games: number;
+  parsed_games: number;
+  wins: number;
+  first_game: string | null;
+  last_game: string | null;
+  team_averages: Record<string, number>;
+  opponents: { name: string; games: number; wins: number }[];
+  rating_history: { as_of: string; rating: number; rd: number }[];
+  roster: PlayerPageResponse[];
+  matches: MatchRowResponse[];
+}
+
+function liveMatch(row: MatchRowResponse): ProfileMatch {
+  return {
+    id: row.match_id,
+    d: row.start_time.slice(0, 10),
+    dur: row.duration,
+    opp: row.opponent_name,
+    opp_id: row.opponent_id,
+    won: row.won == null ? null : Number(row.won),
+    parsed: Number(row.is_parsed),
+    league: row.league_name ?? undefined,
+    hero: row.hero_name ?? undefined,
+    k: row.kills ?? undefined,
+    d_: row.deaths ?? undefined,
+    a: row.assists ?? undefined,
+    gpm: row.gpm ?? undefined,
+    xpm: row.xpm ?? undefined,
+    nw: row.net_worth ?? undefined,
+  };
+}
+
+function livePlayer(page: PlayerPageResponse): ProfilePlayer {
+  return { ...page, matches: page.matches.map(liveMatch) };
+}
+
+function liveTeam(page: TeamPageResponse): ProfileTeam {
+  return {
+    team_id: page.team_id,
+    name: page.compendium_name ?? page.name,
+    tag: page.tag,
+    is_ti: page.compendium_name != null,
+    rating: page.rating,
+    rd: page.rd,
+    games: page.games,
+    parsed_games: page.parsed_games,
+    wins: page.wins,
+    first_game: page.first_game?.slice(0, 10) ?? null,
+    last_game: page.last_game?.slice(0, 10) ?? null,
+    team_averages: page.team_averages,
+    opponents: page.opponents,
+    rating_history: page.rating_history.map((point) => ({
+      d: point.as_of.slice(0, 10),
+      r: point.rating,
+      rd: point.rd,
+    })),
+    roster: page.roster.map((p) => p.account_id),
+    matches: page.matches.map(liveMatch),
+  };
 }
 
 export class ApiError extends Error {
@@ -440,6 +578,27 @@ const live = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  profileTeams: () => request<TeamListItem[]>("/profiles/teams"),
+  profilePlayers: (tiOnly = false) =>
+    request<PlayerListItem[]>(`/profiles/players?ti_only=${tiOnly}`),
+
+  teamPage: async (teamId: number, days = 180) => {
+    const page = await request<TeamPageResponse>(
+      `/profiles/teams/${teamId}?days=${days}`,
+    );
+    return {
+      team: liveTeam(page),
+      roster: page.roster.map(livePlayer),
+    };
+  },
+
+  playerPage: async (accountId: number, days = 180) => {
+    const page = await request<PlayerPageResponse>(
+      `/profiles/players/${accountId}?days=${days}`,
+    );
+    return livePlayer(page);
+  },
 
   ingestProFeed: (daysBack = 30, maxPages = 10) =>
     request<{ requested: number; parsed: number; unparsed: number }>(
@@ -741,6 +900,55 @@ const staticApi: typeof live = {
     const snapshot = await loadSnapshot();
     const role = findRole(snapshot, payload.team_id, payload.role);
     return role ? role.titles : offline();
+  },
+
+  profileTeams: async () => {
+    const profiles = await loadProfiles();
+    return profiles.teams.map((team) => ({
+      team_id: team.team_id,
+      name: team.name,
+      opendota_name: team.name,
+      tag: team.tag,
+      is_ti: team.is_ti,
+      games: team.games,
+      rating: team.rating,
+      rd: team.rd,
+    }));
+  },
+
+  profilePlayers: async (tiOnly = false) => {
+    const profiles = await loadProfiles();
+    const ti = new Set(profiles.teams.filter((t) => t.is_ti).map((t) => t.team_id));
+    return profiles.players
+      .map((player) => ({
+        account_id: player.account_id,
+        name: player.name,
+        team_id: player.team_id,
+        team_name: player.team_name,
+        role: player.role,
+        is_ti: player.team_id != null && ti.has(player.team_id),
+        games: player.games,
+      }))
+      .filter((player) => !tiOnly || player.is_ti);
+  },
+
+  teamPage: async (teamId: number) => {
+    const profiles = await loadProfiles();
+    const team = profiles.teams.find((t) => t.team_id === teamId);
+    if (!team) return offline();
+    const byId = new Map(profiles.players.map((p) => [p.account_id, p]));
+    return {
+      team,
+      roster: team.roster
+        .map((id) => byId.get(id))
+        .filter((p): p is ProfilePlayer => p != null),
+    };
+  },
+
+  playerPage: async (accountId: number) => {
+    const profiles = await loadProfiles();
+    const player = profiles.players.find((p) => p.account_id === accountId);
+    return player ?? offline();
   },
 
   ingestProFeed: async () => offline(),

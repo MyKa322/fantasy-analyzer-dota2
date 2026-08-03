@@ -71,8 +71,34 @@ def get_db() -> Iterator[Session]:
         yield session
 
 
+# Колонки, добавленные к уже существующим таблицам. Полноценные миграции для
+# личной SQLite-базы — лишний слой, но и терять накопленную историю матчей
+# из-за одного нового поля нельзя: `create_all` существующие таблицы не трогает.
+_ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("matches", "stats_version", "INTEGER DEFAULT 0"),
+    ("player_match_stats", "profile", "JSON"),
+)
+
+
+def _ensure_columns(engine: Engine) -> None:
+    if not engine.url.drivername.startswith("sqlite"):
+        return
+    from sqlalchemy import text
+
+    with engine.begin() as connection:
+        for table, column, definition in _ADDED_COLUMNS:
+            existing = {
+                row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")
+            }
+            if not existing or column in existing:
+                continue
+            connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+
+
 def init_db() -> None:
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    _ensure_columns(engine)
 
 
 def reset_engine() -> None:

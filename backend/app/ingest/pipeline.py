@@ -19,7 +19,13 @@ from sqlalchemy.orm import Session
 
 from ..db.models import IngestState, Match, Player, PlayerMatchStat, Team
 from .opendota import OpenDotaClient
-from .stat_mapping import extract_player_stats, is_parsed, series_key
+from .stat_mapping import (
+    STATS_VERSION,
+    extract_player_stats,
+    extract_profile_stats,
+    is_parsed,
+    series_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +96,7 @@ def upsert_match(session: Session, match: dict[str, Any]) -> Match:
     row.radiant_win = match.get("radiant_win")
     row.patch = match.get("patch")
     row.is_parsed = parsed
+    row.stats_version = STATS_VERSION
 
     if not parsed:
         # Без разобранного реплея статов игроков нет — записываем только факт матча,
@@ -132,6 +139,7 @@ def upsert_match(session: Session, match: dict[str, Any]) -> Match:
         stat.won = won
         stat.lane_role = player_payload.get("lane_role")
         stat.stats = extract_player_stats(player_payload)
+        stat.profile = extract_profile_stats(player_payload)
         stat.start_time = start_time
 
     return row
@@ -148,10 +156,15 @@ async def ingest_matches(
     """Забрать матчи по списку id и записать в базу."""
     wanted = [int(m) for m in match_ids]
     if skip_existing_parsed:
+        # Пропускаем только матчи, записанные текущим набором полей. Матч из
+        # старой версии перечитывается: он уже разобран, но без ассистов и
+        # нетворта, и без перезабора профиль игрока остался бы неполным.
         known_parsed = set(
             session.scalars(
                 select(Match.match_id).where(
-                    Match.match_id.in_(wanted), Match.is_parsed.is_(True)
+                    Match.match_id.in_(wanted),
+                    Match.is_parsed.is_(True),
+                    Match.stats_version >= STATS_VERSION,
                 )
             )
         )

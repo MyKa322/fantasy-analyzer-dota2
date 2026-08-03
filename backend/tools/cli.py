@@ -142,6 +142,121 @@ async def cmd_ingest_ti(args: argparse.Namespace) -> None:
         print(f"  {name:<18} {', '.join(parts)}{flag}")
 
 
+# Запасной источник справочника героев. `/api/heroes` у OpenDota периодически
+# отвечает 522 (таймаут её origin), а сам эндпоинт собран из этого же файла —
+# репозиторий констант odota и есть его исходник.
+HEROES_FALLBACK_URL = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/heroes.json"
+
+
+async def cmd_ingest_heroes(_: argparse.Namespace) -> None:
+    """Обновить справочник героев: в матче есть только hero_id, имени нет."""
+    import json
+
+    from app.services.profiles import HEROES_PATH
+
+    try:
+        async with client() as api:
+            heroes = await api.heroes()
+    except RuntimeError as error:
+        print(f"OpenDota недоступна ({error}), беру справочник из констант odota")
+        import httpx
+
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:
+            response = await http.get(HEROES_FALLBACK_URL)
+            response.raise_for_status()
+            payload = response.json()
+        heroes = list(payload.values()) if isinstance(payload, dict) else payload
+
+    mapping = {int(h["id"]): h.get("localized_name") or h["name"] for h in heroes}
+    HEROES_PATH.write_text(
+        json.dumps(mapping, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8"
+    )
+    print(f"{HEROES_PATH}: {len(mapping)} героев")
+
+
+def cmd_backfill(args: argparse.Namespace) -> None:
+    """Перечитать матчи из локального кэша ответов OpenDota — без сети.
+
+    Нужно, когда набор сохраняемых полей расширился: тела матчей уже лежат на
+    диске, и перезабирать их из API незачем. В CI кэша нет — там матчи со старым
+    `stats_version` перезабираются обычным `ingest-ti`.
+    """
+    import json
+
+    from app.ingest.pipeline import upsert_match
+    from app.settings import settings
+
+    cache_dir = Path(settings.cache_dir)
+    files = sorted(cache_dir.glob("match_*.json"))
+    if not files:
+        print(f"кэш пуст: {cache_dir}")
+        return
+
+    updated = skipped = broken = 0
+    with session_scope() as session:
+        for index, path in enumerate(files, 1):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                broken += 1
+                continue
+            if not payload.get("match_id"):
+                skipped += 1
+                continue
+            upsert_match(session, payload)
+            updated += 1
+            if index % 200 == 0:
+                session.flush()
+                print(f"  {index}/{len(files)}")
+
+    print(f"перечитано {updated}, пропущено {skipped}, битых файлов {broken}")
+
+
+def cmd_profile(args: argparse.Namespace) -> None:
+    """Показать профиль команды или игрока — то же, что на странице."""
+    from app.services.profiles import player_profile, team_profile
+
+    with session_scope() as session:
+        if args.kind == "team":
+            profile = team_profile(session, args.id)
+            if profile is None:
+                print("команда не найдена")
+                return
+            print(profile.name if not profile.tag else f"{profile.name} [{profile.tag}]")
+            rating = f"{profile.rating:.0f}±{profile.rd:.0f}" if profile.rating else "—"
+            print(f"рейтинг {rating}, карт {profile.games} ({profile.wins} побед)")
+            print(f"разобрано реплеев: {profile.parsed_games}")
+            for player in profile.roster:
+                print(
+                    f"  {player.name or player.account_id:<18}{player.role or '—':<9}"
+                    f"{player.games:>4} карт  {player.win_rate:>5.0%}"
+                )
+            print("\nпоследние матчи:")
+            for row in profile.matches[:10]:
+                mark = "W" if row.won else "L" if row.won is False else "?"
+                print(
+                    f"  {row.start_time:%Y-%m-%d} {mark} vs {row.opponent_name or '—':<18}"
+                    f"{'' if row.is_parsed else ' (без реплея)'}"
+                )
+        else:
+            profile = player_profile(session, args.id)
+            if profile is None:
+                print("игрок не найден")
+                return
+            print(f"{profile.name or profile.account_id} — {profile.team_name or '—'}")
+            print(
+                f"роль {profile.role or '—'}, карт {profile.games} "
+                f"({profile.win_rate:.0%} побед), разобрано {profile.parsed_games}"
+            )
+            avg = profile.averages
+            print(
+                f"в среднем: {profile.fantasy_units.get('kills', 0):.1f}/"
+                f"{profile.fantasy_units.get('deaths', 0):.1f}/{avg.get('assists', 0):.1f}, "
+                f"GPM {profile.fantasy_units.get('gpm', 0):.0f}, XPM {avg.get('xpm', 0):.0f}"
+            )
+            print("герои:", ", ".join(f"{h.name} ({h.games})" for h in profile.heroes[:8]))
+
+
 def cmd_roster(args: argparse.Namespace) -> None:
     """Подобрать состав Fantasy: core duo, mid и support duo из разных команд."""
     from app.fantasy.projection import RoleProjector, recommend_roster
@@ -305,6 +420,19 @@ def main() -> int:
     p = sub.add_parser("ingest-ti", help="загрузить историю всех участников TI15")
     p.add_argument("--days", type=int, default=120)
     p.set_defaults(func=cmd_ingest_ti, is_async=True)
+
+    p = sub.add_parser("ingest-heroes", help="обновить справочник героев")
+    p.set_defaults(func=cmd_ingest_heroes, is_async=True)
+
+    p = sub.add_parser(
+        "backfill", help="перечитать матчи из локального кэша (без обращений к API)"
+    )
+    p.set_defaults(func=cmd_backfill, is_async=False)
+
+    p = sub.add_parser("profile", help="профиль команды или игрока")
+    p.add_argument("kind", choices=("team", "player"))
+    p.add_argument("id", type=int)
+    p.set_defaults(func=cmd_profile, is_async=False)
 
     p = sub.add_parser("roster", help="подобрать состав Fantasy из игроков TI15")
     p.add_argument("--banner", type=str, default=None, help="статы через запятую")

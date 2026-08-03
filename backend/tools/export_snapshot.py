@@ -282,12 +282,169 @@ def export_roles(session, *, history_days: int, simulations: int, series: int) -
     return rows
 
 
+def _match_rows(rows) -> list[dict]:
+    out = []
+    for row in rows:
+        entry = {
+            "id": row.match_id,
+            "d": row.start_time.date().isoformat(),
+            "dur": row.duration,
+            "opp": row.opponent_name,
+            "opp_id": row.opponent_id,
+            "won": None if row.won is None else int(row.won),
+            "parsed": int(row.is_parsed),
+        }
+        if row.league_name:
+            entry["league"] = row.league_name
+        if row.hero_name:
+            entry["hero"] = row.hero_name
+        for key, value in (
+            ("k", row.kills),
+            ("d_", row.deaths),
+            ("a", row.assists),
+            ("gpm", row.gpm),
+            ("xpm", row.xpm),
+            ("nw", row.net_worth),
+        ):
+            if value is not None:
+                entry[key] = round(float(value))
+        out.append(entry)
+    return out
+
+
+def _player_page(profile) -> dict:
+    return {
+        "account_id": profile.account_id,
+        "name": profile.name,
+        "team_id": profile.team_id,
+        "team_name": profile.team_name,
+        "role": profile.role,
+        "games": profile.games,
+        "parsed_games": profile.parsed_games,
+        "wins": profile.wins,
+        "first_game": profile.first_game.date().isoformat() if profile.first_game else None,
+        "last_game": profile.last_game.date().isoformat() if profile.last_game else None,
+        "averages": {k: round(v, 2) for k, v in profile.averages.items()},
+        "fantasy_units": {k: round(v, 3) for k, v in profile.fantasy_units.items()},
+        "heroes": [
+            {"id": h.hero_id, "name": h.name, "games": h.games, "wins": h.wins}
+            for h in profile.heroes
+        ],
+        "matches": _match_rows(profile.matches),
+    }
+
+
+def export_profiles(
+    session,
+    *,
+    days: int,
+    min_games: int,
+    ti_matches: int,
+    other_matches: int,
+) -> dict:
+    """Страницы команд и игроков для статического режима.
+
+    Полностью выгружаются участники TI15 и их составы — это то, ради чего
+    страница существует. Остальные команды и игроки из базы (соперники по
+    квалификациям, стенд-ины) выгружаются короче: средние, герои и несколько
+    последних матчей. Без порога по числу карт снапшот распух бы вдвое ради
+    профилей, где две игры и никакой статистики.
+    """
+    from app.services.profiles import (  # noqa: PLC0415
+        load_heroes,
+        player_directory,
+        player_profile,
+        team_directory,
+        team_profile,
+    )
+
+    heroes = load_heroes()
+    if not heroes:
+        log.warning("справочник героев пуст — выполните `cli.py ingest-heroes`")
+
+    teams_out: list[dict] = []
+    for entry in team_directory(session):
+        is_ti = bool(entry["is_ti"])
+        if not is_ti and int(entry["games"]) < min_games:
+            continue
+        profile = team_profile(
+            session,
+            int(entry["team_id"]),
+            days=days,
+            match_limit=ti_matches if is_ti else other_matches,
+            roster_limit=8 if is_ti else 5,
+            heroes=heroes,
+        )
+        if profile is None or not profile.games:
+            continue
+        teams_out.append(
+            {
+                "team_id": profile.team_id,
+                "name": profile.name,
+                "tag": profile.tag,
+                "is_ti": is_ti,
+                "rating": round(profile.rating, 1) if profile.rating else None,
+                "rd": round(profile.rd, 1) if profile.rd else None,
+                "games": profile.games,
+                "parsed_games": profile.parsed_games,
+                "wins": profile.wins,
+                "first_game": profile.first_game.date().isoformat()
+                if profile.first_game
+                else None,
+                "last_game": profile.last_game.date().isoformat()
+                if profile.last_game
+                else None,
+                "team_averages": {k: round(v, 2) for k, v in profile.team_averages.items()},
+                "opponents": [
+                    {"name": name, "games": games, "wins": wins}
+                    for name, games, wins in profile.opponents
+                ],
+                # История рейтинга прореживается: точек бывает под сотню, а на
+                # графике шириной в панель разница не видна.
+                "rating_history": [
+                    {"d": as_of.date().isoformat(), "r": round(rating, 1), "rd": round(rd, 1)}
+                    for as_of, rating, rd in profile.rating_history[::2]
+                ],
+                "roster": [p.account_id for p in profile.roster],
+                "matches": _match_rows(profile.matches),
+            }
+        )
+
+    ti_teams = {t["team_id"] for t in teams_out if t["is_ti"]}
+    players_out: list[dict] = []
+    for entry in player_directory(session):
+        is_ti = bool(entry["is_ti"]) or entry["team_id"] in ti_teams
+        if not is_ti and int(entry["games"]) < min_games:
+            continue
+        profile = player_profile(
+            session,
+            int(entry["account_id"]),
+            days=days,
+            match_limit=ti_matches if is_ti else other_matches,
+            hero_limit=12 if is_ti else 6,
+            heroes=heroes,
+        )
+        if profile is None or not profile.games:
+            continue
+        players_out.append(_player_page(profile))
+
+    log.info("профили: команд %d, игроков %d", len(teams_out), len(players_out))
+    return {"days": days, "min_games": min_games, "teams": teams_out, "players": players_out}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--simulations", type=int, default=20_000)
     parser.add_argument("--role-simulations", type=int, default=4000)
     parser.add_argument("--history-days", type=int, default=180)
     parser.add_argument("--series", type=int, default=5)
+    parser.add_argument(
+        "--profile-min-games",
+        type=int,
+        default=10,
+        help="порог по картам для команд и игроков вне TI15",
+    )
+    parser.add_argument("--profile-matches", type=int, default=15)
     parser.add_argument("--output", type=Path, default=OUTPUT)
     args = parser.parse_args()
 
@@ -305,20 +462,43 @@ def main() -> int:
                 series=args.series,
             ),
         }
+        profiles = export_profiles(
+            session,
+            days=args.history_days,
+            min_games=args.profile_min_games,
+            ti_matches=args.profile_matches,
+            other_matches=max(5, args.profile_matches // 2),
+        )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-    )
-    size = args.output.stat().st_size / 1024
+    write(args.output, snapshot)
     log.info(
         "%s: %.0f КБ, команд %d, ролей %d",
         args.output,
-        size,
+        args.output.stat().st_size / 1024,
         len(snapshot["teams"]),
         len(snapshot["roles"]),
     )
+
+    # Профили лежат отдельным файлом: они втрое тяжелее аналитики, а нужны
+    # только на вкладке «Профили». Грузить их вместе со стартовой страницей —
+    # платить два мегабайта за то, что большинство не откроет.
+    profiles_path = args.output.with_name("profiles.json")
+    write(profiles_path, profiles)
+    log.info(
+        "%s: %.0f КБ, команд %d, игроков %d",
+        profiles_path,
+        profiles_path.stat().st_size / 1024,
+        len(profiles["teams"]),
+        len(profiles["players"]),
+    )
     return 0
+
+
+def write(path: Path, payload: dict) -> None:
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":

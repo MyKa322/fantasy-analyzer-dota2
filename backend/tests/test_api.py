@@ -533,3 +533,53 @@ def test_inventory_rejects_empty_and_unknown(client, session_factory):
     )
     assert response.status_code == 400
     assert "nonsense" in response.json()["detail"]
+
+
+# --- страницы команд и игроков -------------------------------------------------
+
+
+def test_profile_directories_list_what_is_in_the_base(client, session_factory):
+    seed_role_history(session_factory)
+
+    teams = client.get("/api/profiles/teams").json()
+    assert teams
+    assert all(row["games"] > 0 or row["is_ti"] for row in teams)
+
+    players = client.get("/api/profiles/players").json()
+    assert len(players) >= 10  # обе стороны матча
+    assert all(row["games"] > 0 for row in players)
+
+
+def test_team_page_returns_roster_matches_and_averages(client, session_factory):
+    seed_role_history(session_factory)
+    response = client.get("/api/profiles/teams/10207962", params={"days": 3650})
+    assert response.status_code == 200, response.text
+    page = response.json()
+
+    assert page["games"] == 8
+    assert page["parsed_games"] == 8
+    assert len(page["roster"]) == 5
+    assert page["matches"][0]["opponent_name"]
+    assert page["team_averages"]["kills"] > 0
+    assert page["win_rate"] in (0.0, 1.0)  # один и тот же матч восемь раз
+
+
+def test_player_page_separates_profile_and_fantasy_numbers(client, session_factory):
+    seed_role_history(session_factory)
+    account_id = client.get("/api/profiles/players").json()[0]["account_id"]
+
+    page = client.get(f"/api/profiles/players/{account_id}", params={"days": 3650}).json()
+    assert page["games"] == 8
+    # Ассисты — обычная статистика, килы — Fantasy-стат: они в разных полях,
+    # чтобы очки компендиума не смешивались с обычными числами.
+    assert "assists" in page["averages"]
+    assert "kills" in page["fantasy_units"]
+    assert "kills" not in page["averages"]
+    assert page["heroes"]
+    assert page["matches"][0]["match_id"]
+
+
+def test_profile_pages_404_on_unknown_ids(client, session_factory):
+    seed_role_history(session_factory, copies=1)
+    assert client.get("/api/profiles/teams/4242").status_code == 404
+    assert client.get("/api/profiles/players/4242").status_code == 404

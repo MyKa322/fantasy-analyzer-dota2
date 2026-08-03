@@ -36,6 +36,12 @@ from ..services.analysis import (
     recompute_ratings,
     ti_candidates,
 )
+from ..services.profiles import (
+    player_directory,
+    player_profile,
+    team_directory,
+    team_profile,
+)
 from ..settings import settings
 from . import schemas
 
@@ -948,6 +954,125 @@ def title_advice(
         )
         for t in EmblemAdvisor().title_advice(history)
     ]
+
+
+# --- профили команд и игроков -------------------------------------------------
+
+
+def _match_row_out(row) -> schemas.MatchRowOut:
+    return schemas.MatchRowOut(
+        match_id=row.match_id,
+        start_time=row.start_time,
+        duration=row.duration,
+        league_name=row.league_name,
+        opponent_id=row.opponent_id,
+        opponent_name=row.opponent_name,
+        won=row.won,
+        is_parsed=row.is_parsed,
+        hero_id=row.hero_id,
+        hero_name=row.hero_name,
+        kills=row.kills,
+        deaths=row.deaths,
+        assists=row.assists,
+        gpm=row.gpm,
+        xpm=row.xpm,
+        net_worth=row.net_worth,
+    )
+
+
+def _player_page_out(profile) -> schemas.PlayerPageOut:
+    return schemas.PlayerPageOut(
+        account_id=profile.account_id,
+        name=profile.name,
+        team_id=profile.team_id,
+        team_name=profile.team_name,
+        role=profile.role,
+        position=profile.position,
+        games=profile.games,
+        parsed_games=profile.parsed_games,
+        wins=profile.wins,
+        win_rate=round(profile.win_rate, 4),
+        first_game=profile.first_game,
+        last_game=profile.last_game,
+        averages={k: round(v, 2) for k, v in profile.averages.items()},
+        fantasy_units={k: round(v, 3) for k, v in profile.fantasy_units.items()},
+        heroes=[
+            schemas.HeroRowOut(hero_id=h.hero_id, name=h.name, games=h.games, wins=h.wins)
+            for h in profile.heroes
+        ],
+        matches=[_match_row_out(m) for m in profile.matches],
+    )
+
+
+@router.get("/profiles/teams", response_model=list[schemas.TeamListItemOut])
+def profile_team_list(session: Session = Depends(get_db)) -> list[schemas.TeamListItemOut]:
+    """Справочник команд: участники TI сверху, дальше все, у кого есть матчи."""
+    return [schemas.TeamListItemOut(**row) for row in team_directory(session)]
+
+
+@router.get("/profiles/players", response_model=list[schemas.PlayerListItemOut])
+def profile_player_list(
+    session: Session = Depends(get_db),
+    ti_only: bool = Query(False, description="только размеченные игроки TI15"),
+) -> list[schemas.PlayerListItemOut]:
+    """Справочник игроков: ник, команда, роль, сколько карт в базе."""
+    return [
+        schemas.PlayerListItemOut(**row) for row in player_directory(session, ti_only=ti_only)
+    ]
+
+
+@router.get("/profiles/teams/{team_id}", response_model=schemas.TeamPageOut)
+def profile_team(
+    team_id: int,
+    session: Session = Depends(get_db),
+    days: int | None = Query(180, ge=7, le=3650),
+    matches: int = Query(30, ge=0, le=200),
+) -> schemas.TeamPageOut:
+    """Полный профиль команды: рейтинг с историей, матчи, состав, средние."""
+    profile = team_profile(session, team_id, days=days, match_limit=matches)
+    if profile is None:
+        raise HTTPException(404, f"команда {team_id} не найдена")
+
+    return schemas.TeamPageOut(
+        team_id=profile.team_id,
+        name=profile.name,
+        compendium_name=profile.compendium_name,
+        tag=profile.tag,
+        rating=round(profile.rating, 1) if profile.rating else None,
+        rd=round(profile.rd, 1) if profile.rd else None,
+        volatility=round(profile.volatility, 4) if profile.volatility else None,
+        rating_history=[
+            {"as_of": as_of.date().isoformat(), "rating": round(rating, 1), "rd": round(rd, 1)}
+            for as_of, rating, rd in profile.rating_history
+        ],
+        games=profile.games,
+        parsed_games=profile.parsed_games,
+        wins=profile.wins,
+        win_rate=round(profile.win_rate, 4),
+        first_game=profile.first_game,
+        last_game=profile.last_game,
+        roster=[_player_page_out(p) for p in profile.roster],
+        matches=[_match_row_out(m) for m in profile.matches],
+        team_averages={k: round(v, 2) for k, v in profile.team_averages.items()},
+        opponents=[
+            {"name": name, "games": games, "wins": wins}
+            for name, games, wins in profile.opponents
+        ],
+    )
+
+
+@router.get("/profiles/players/{account_id}", response_model=schemas.PlayerPageOut)
+def profile_player(
+    account_id: int,
+    session: Session = Depends(get_db),
+    days: int | None = Query(180, ge=7, le=3650),
+    matches: int = Query(25, ge=0, le=200),
+) -> schemas.PlayerPageOut:
+    """Полный профиль игрока: средние, герои, матчи, команда и роль."""
+    profile = player_profile(session, account_id, days=days, match_limit=matches)
+    if profile is None:
+        raise HTTPException(404, f"игрок {account_id} не найден")
+    return _player_page_out(profile)
 
 
 # --- ingest -------------------------------------------------------------------

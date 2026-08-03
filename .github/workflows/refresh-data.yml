@@ -60,6 +60,15 @@ jobs:
         working-directory: backend
         run: python tools/cli.py ratings --days 200
 
+      # Справочник героев нужен страницам игроков: в матче лежит только hero_id.
+      # Не критично, если источник недоступен, — тогда останется прежний файл.
+      - name: Обновить справочник героев
+        working-directory: backend
+        continue-on-error: true
+        env:
+          ANALYZER_OPENDOTA_API_KEY: ${{ secrets.OPENDOTA_API_KEY }}
+        run: python tools/cli.py ingest-heroes
+
       - name: Экспортировать снапшот
         working-directory: backend
         run: python tools/export_snapshot.py --simulations 20000
@@ -75,7 +84,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/public/data/snapshot.json
+          git add frontend/public/data/snapshot.json frontend/public/data/profiles.json \
+                  backend/config/heroes.json
           if git diff --staged --quiet; then
             echo "данные не изменились — коммит не нужен"
             echo "changed=false" >> "$GITHUB_OUTPUT"

@@ -149,6 +149,54 @@ def extract_player_stats(player: Mapping[str, Any]) -> dict[str, float]:
     }
 
 
+# Версия набора данных о матче. Растёт, когда мы начинаем сохранять что-то
+# новое: по ней ingest понимает, что матч уже в базе, но записан старым кодом и
+# его надо перечитать. Без этого профиль игрока навсегда остался бы половинчатым
+# — старые матчи никто бы не перезабрал.
+STATS_VERSION = 2
+
+# Поля профиля: в Fantasy они не участвуют, но именно из них состоит обычная
+# статистика игрока — та, которую ждут на странице «сколько он фармит и как
+# играет», а не «сколько очков приносит».
+PROFILE_FIELDS = (
+    "assists",
+    "xpm",
+    "net_worth",
+    "hero_damage",
+    "tower_damage",
+    "hero_healing",
+    "last_hits",
+    "denies",
+    "obs_placed",
+    "sen_placed",
+    "level",
+    "gold_spent",
+)
+
+
+def extract_profile_stats(player: Mapping[str, Any]) -> dict[str, float]:
+    """Обычная статистика игрока за карту — то, чего нет в Fantasy-наборе.
+
+    Хранится отдельным полем, а не рядом с Fantasy-статами: у этих чисел другая
+    роль. Fantasy-статы — вход движка очков, и любое лишнее поле в них рано или
+    поздно попадёт в расчёт по ошибке.
+    """
+    return {
+        "assists": _num(player.get("assists")),
+        "xpm": _num(player.get("xp_per_min")),
+        "net_worth": _num(player.get("net_worth") or player.get("total_gold")),
+        "hero_damage": _num(player.get("hero_damage")),
+        "tower_damage": _num(player.get("tower_damage")),
+        "hero_healing": _num(player.get("hero_healing")),
+        "last_hits": _num(player.get("last_hits")),
+        "denies": _num(player.get("denies")),
+        "obs_placed": _num(player.get("obs_placed") or player.get("observers_placed")),
+        "sen_placed": _num(player.get("sen_placed") or player.get("sentries_placed")),
+        "level": _num(player.get("level")),
+        "gold_spent": _num(player.get("gold_spent")),
+    }
+
+
 def is_parsed(match: Mapping[str, Any]) -> bool:
     """Есть ли у матча разобранный реплей.
 

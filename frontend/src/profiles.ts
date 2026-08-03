@@ -1,0 +1,127 @@
+// Профили команд и игроков для статического режима.
+//
+// Лежат отдельным файлом от snapshot.json и грузятся только при заходе на
+// вкладку «Профили»: это полтора мегабайта матчей и героев, которые вкладке с
+// эмблемами не нужны совсем.
+
+export interface ProfileMatch {
+  id: number;
+  /** Дата, YYYY-MM-DD. */
+  d: string;
+  /** Длительность, секунды. */
+  dur: number;
+  opp: string | null;
+  opp_id: number | null;
+  won: number | null;
+  /** 1, если реплей разобран: у остальных нет ни вардов, ни станов. */
+  parsed: number;
+  league?: string;
+  hero?: string;
+  k?: number;
+  /** Смерти. Ключ с подчёркиванием, потому что `d` уже занято датой. */
+  d_?: number;
+  a?: number;
+  gpm?: number;
+  xpm?: number;
+  nw?: number;
+}
+
+export interface ProfileHero {
+  id: number;
+  name: string;
+  games: number;
+  wins: number;
+}
+
+export interface ProfilePlayer {
+  account_id: number;
+  name: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  role: string | null;
+  games: number;
+  parsed_games: number;
+  wins: number;
+  first_game: string | null;
+  last_game: string | null;
+  /** Обычная статистика: ассисты, XPM, нетворт, урон. */
+  averages: Record<string, number>;
+  /** Fantasy-статы в единицах (килы, варды, секунды стана), не в очках. */
+  fantasy_units: Record<string, number>;
+  heroes: ProfileHero[];
+  matches: ProfileMatch[];
+}
+
+export interface ProfileTeam {
+  team_id: number;
+  name: string;
+  tag: string | null;
+  is_ti: boolean;
+  rating: number | null;
+  rd: number | null;
+  games: number;
+  parsed_games: number;
+  wins: number;
+  first_game: string | null;
+  last_game: string | null;
+  team_averages: Record<string, number>;
+  opponents: { name: string; games: number; wins: number }[];
+  rating_history: { d: string; r: number; rd: number }[];
+  roster: number[];
+  matches: ProfileMatch[];
+}
+
+export interface Profiles {
+  days: number;
+  min_games: number;
+  teams: ProfileTeam[];
+  players: ProfilePlayer[];
+}
+
+let cached: Profiles | null = null;
+let pending: Promise<Profiles> | null = null;
+
+declare const __BUILD_ID__: string;
+
+export async function loadProfiles(): Promise<Profiles> {
+  if (cached) return cached;
+  // Один запрос на всех: вкладка дёргает загрузку из нескольких мест сразу.
+  pending ??= fetch(`${import.meta.env.BASE_URL}data/profiles.json?v=${__BUILD_ID__}`).then(
+    async (response) => {
+      if (!response.ok) {
+        throw new Error(`не удалось загрузить профили: ${response.status}`);
+      }
+      cached = (await response.json()) as Profiles;
+      return cached;
+    },
+  );
+  try {
+    return await pending;
+  } finally {
+    pending = null;
+  }
+}
+
+/** Победы в процентах — единообразно для команд и игроков. */
+export function winRate(wins: number, games: number): number {
+  return games ? wins / games : 0;
+}
+
+export function formatDuration(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  return `${minutes} мин`;
+}
+
+/** «1 карта», «104 карты», «5 карт» — иначе числа читаются как машинный вывод. */
+export function plural(count: number, one: string, few: string, many: string): string {
+  const mod100 = Math.abs(count) % 100;
+  const mod10 = mod100 % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
+export function games(count: number): string {
+  return `${count} ${plural(count, "карта", "карты", "карт")}`;
+}

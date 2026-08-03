@@ -94,6 +94,10 @@ class Match(Base):
     patch: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     # Разобран ли реплей: без этого нет вардов, станов и тимфайтов.
     is_parsed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # Каким набором полей записан матч (STATS_VERSION на момент записи). Матч,
+    # записанный старым кодом, надо перечитать — иначе профиль игрока останется
+    # без ассистов и нетворта навсегда.
+    stats_version: Mapped[int] = mapped_column(Integer, default=0, index=True)
     is_lan: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -124,6 +128,9 @@ class PlayerMatchStat(Base):
     lane_role: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Fantasy-статы в терминах конфига компендиума: {"kills": 8.0, "gpm": 712.0, ...}
     stats: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Обычная статистика матча (ассисты, XPM, нетворт, урон) — она не участвует
+    # в очках Fantasy и лежит отдельно, чтобы случайно туда не попасть.
+    profile: Mapped[dict] = mapped_column(JSON, default=dict)
     # Денормализованное время матча — чтобы фильтровать окно без join.
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
