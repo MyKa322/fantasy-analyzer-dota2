@@ -60,7 +60,6 @@ class MatchRow:
     gpm: float | None = None
     xpm: float | None = None
     net_worth: float | None = None
-    fantasy_points: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
