@@ -9,7 +9,7 @@ import { formatDuration } from "../profiles";
 export const AVERAGE_LABEL: Record<string, string> = {
   assists: "Ассисты",
   xpm: "XPM",
-  net_worth: "Нетворт",
+  net_worth: "Нетворс",
   hero_damage: "Урон по героям",
   tower_damage: "Урон по строениям",
   hero_healing: "Лечение",
