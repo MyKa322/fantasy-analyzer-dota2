@@ -24,6 +24,14 @@ const QUALITIES = ["tier_1", "tier_2", "tier_3", "tier_4", "tier_5"];
 const TRAITS = ["fractal", "benevolent", "vampiric", "unique", "friendly"];
 const STORAGE_KEY = "compendium.inventory.v1";
 
+// Цвет эмблемы = цвет слота, куда её вообще можно поставить. В списке статы
+// сгруппированы по нему: иначе непонятно, почему GPM не подходит саппорту.
+const COLOR_GROUP: Record<string, string> = {
+  red: "Красные — Core и Mid",
+  blue: "Синие — Mid и Support",
+  green: "Зелёные — любая роль",
+};
+
 // Стартовый набор — пример, а не рекомендация: сразу видно, как это работает,
 // и что красные эмблемы саппорту не подойдут ни при каких раскладах.
 const EXAMPLE: Emblem[] = [
@@ -182,7 +190,7 @@ export default function InventoryAnalyzer() {
                 aria-label="Стат"
               >
                 {(["red", "blue", "green"] as const).map((color) => (
-                  <optgroup key={color} label={color}>
+                  <optgroup key={color} label={COLOR_GROUP[color]}>
                     {statsByColor[color]?.map((stat) => (
                       <option key={stat.key} value={stat.key}>
                         {stat.label}
