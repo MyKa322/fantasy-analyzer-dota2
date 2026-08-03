@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type GroupPrediction, type PredictionsConfig } from "../api";
+import { STATIC_MODE } from "../snapshot";
 import { Button, Field, Notice, Panel, Stat, selectClass } from "./ui";
 
 function heat(probability: number): string {
@@ -33,37 +34,51 @@ export default function GroupPanel() {
     }
   };
 
+  // На опубликованной странице симуляция уже посчитана и лежит в снапшоте:
+  // разыграть турнир заново браузеру нечем. Поэтому там нет ни выбора числа
+  // прогонов, ни кнопки — прогноз показывается сразу.
+  useEffect(() => {
+    if (STATIC_MODE) void run();
+  }, []);
+
   const buckets = config?.buckets ?? [];
 
   return (
     <div className="space-y-4">
       <Panel
         title="Групповой этап"
-        subtitle="Swiss 16 команд: до 4 побед или 4 поражений, затем Elimination Round. Каждый прогон разыгрывает турнир целиком."
+        subtitle={
+          STATIC_MODE
+            ? "Swiss 16 команд: до 4 побед или 4 поражений, затем Elimination Round. Прогноз посчитан заранее вместе с данными — браузер турнир не разыгрывает."
+            : "Swiss 16 команд: до 4 побед или 4 поражений, затем Elimination Round. Каждый прогон разыгрывает турнир целиком."
+        }
         actions={
-          <div className="flex items-end gap-3">
-            <Field label="Симуляций">
-              <select
-                className={selectClass}
-                value={simulations}
-                onChange={(e) => setSimulations(Number(e.target.value))}
-              >
-                <option value={2000}>2 000</option>
-                <option value={20000}>20 000</option>
-                <option value={100000}>100 000</option>
-              </select>
-            </Field>
-            <Button onClick={run} disabled={busy}>
-              {busy ? "Симулирую…" : "Рассчитать"}
-            </Button>
-          </div>
+          STATIC_MODE ? undefined : (
+            <div className="flex items-end gap-3">
+              <Field label="Симуляций">
+                <select
+                  className={selectClass}
+                  value={simulations}
+                  onChange={(e) => setSimulations(Number(e.target.value))}
+                >
+                  <option value={2000}>2 000</option>
+                  <option value={20000}>20 000</option>
+                  <option value={100000}>100 000</option>
+                </select>
+              </Field>
+              <Button onClick={run} disabled={busy}>
+                {busy ? "Симулирую…" : "Рассчитать"}
+              </Button>
+            </div>
+          )
         }
       >
         {error && <Notice kind="error">{error}</Notice>}
         {!prediction && !error && (
           <Notice>
-            Нужны рейтинги 16 участников. Загрузите матчи, пересчитайте рейтинги и
-            запустите расчёт.
+            {busy
+              ? "Загружаю прогноз…"
+              : "Нужны рейтинги 16 участников. Загрузите матчи, пересчитайте рейтинги и запустите расчёт."}
           </Notice>
         )}
 
@@ -132,6 +147,12 @@ export default function GroupPanel() {
                 </tbody>
               </table>
             </div>
+
+            <p className="mt-2 text-[11px] text-neutral-500">
+              {prediction.simulations.toLocaleString("ru")} разыгранных турниров. Вероятности
+              суммируются в 100% по каждой команде: корзины — это взаимоисключающие исходы,
+              а не отдельные ставки.
+            </p>
           </>
         )}
       </Panel>

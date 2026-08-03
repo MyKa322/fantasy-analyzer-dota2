@@ -718,11 +718,18 @@ const staticApi: typeof live = {
     const candidates: Record<string, RosterCandidate[]> = {};
     const byRole: Record<string, { team_id: number; team_name: string; mean: number }[]> = {};
 
+    // Число серий за период — не косметика: в зачёт идёт лучшая серия, и каждая
+    // дополнительная попытка поднимает ожидание. Коэффициенты на каждый вариант
+    // посчитаны при экспорте; если их нет (старый снапшот), берём базовый.
+    const series = String(payload?.series ?? 5);
+
     for (const role of snapshot.roles) {
       const banner = neutralBannerFor(role.role, snapshot.rules);
       const values = new Map(role.stats.map((s) => [s.stat, s]));
       const card = scoreBanner(banner, values, snapshot.rules).total;
-      const mean = card * role.period_ratio;
+      const periodRatio = role.period_ratios?.[series] ?? role.period_ratio;
+      const ceilingRatio = role.ceiling_ratios?.[series] ?? role.ceiling_ratio;
+      const mean = card * periodRatio;
       candidates[role.role] ??= [];
       candidates[role.role].push({
         role: role.role,
@@ -731,7 +738,7 @@ const staticApi: typeof live = {
         player_names: role.players,
         mean,
         floor_p5: mean * 0.85,
-        ceiling_p95: card * role.ceiling_ratio,
+        ceiling_p95: card * ceilingRatio,
         games_used: role.games,
       });
       byRole[role.role] ??= [];

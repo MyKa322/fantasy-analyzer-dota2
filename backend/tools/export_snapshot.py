@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import sys
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -193,15 +194,28 @@ def _timeline(projector: RoleProjector, history, banner) -> list[dict]:
     ]
 
 
-def export_roles(session, *, history_days: int, simulations: int, series: int) -> list[dict]:
+def export_roles(
+    session,
+    *,
+    history_days: int,
+    simulations: int,
+    series: int,
+    series_options: Sequence[int] = (4, 5, 6, 7),
+) -> list[dict]:
     """Для каждой роли каждой команды: ценность статов, проекция, титулы.
 
     Браузеру этого достаточно, чтобы пересчитывать любые баннеры самому: очки
     эмблемы линейны по базовым очкам стата, а проценты считаются аддитивно.
+
+    Коэффициент периода считается для каждого числа серий из `series_options`, а
+    не только для базового: на странице ростера это переключатель, и без всех
+    вариантов он бы ничего не менял. Разница существенная — в зачёт идёт лучшая
+    серия периода, и каждая дополнительная серия поднимает ожидание.
     """
     advisor = EmblemAdvisor(RoleProjector(seed=11))
     since = datetime.now(timezone.utc) - timedelta(days=history_days)
     candidates = ti_candidates(session)
+    all_series = sorted({series, *series_options})
 
     rows: list[dict] = []
     for role, entries in candidates.items():
@@ -212,12 +226,16 @@ def export_roles(session, *, history_days: int, simulations: int, series: int) -
                 continue
 
             values = advisor.stat_values(history, role=role)
-            projection = advisor.projector.project(
-                history,
-                neutral_banner(role),
-                simulations=simulations,
-                series_distribution={series: 1.0},
-            )
+            projections = {
+                count: advisor.projector.project(
+                    history,
+                    neutral_banner(role),
+                    simulations=simulations,
+                    series_distribution={count: 1.0},
+                )
+                for count in all_series
+            }
+            projection = projections[series]
             neutral_card = advisor.projector.expected_card_score(history, neutral_banner(role))
 
             rows.append(
@@ -261,6 +279,16 @@ def export_roles(session, *, history_days: int, simulations: int, series: int) -
                     "ceiling_ratio": round(projection.ceiling / neutral_card, 4)
                     if neutral_card
                     else 0.0,
+                    # То же самое для каждого числа серий: переключатель на
+                    # странице ростера выбирает отсюда.
+                    "period_ratios": {
+                        str(count): round(p.mean / neutral_card, 4) if neutral_card else 0.0
+                        for count, p in projections.items()
+                    },
+                    "ceiling_ratios": {
+                        str(count): round(p.ceiling / neutral_card, 4) if neutral_card else 0.0
+                        for count, p in projections.items()
+                    },
                     "titles": [
                         {
                             "key": t.key,

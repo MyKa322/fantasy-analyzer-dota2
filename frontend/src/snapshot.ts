@@ -42,8 +42,12 @@ export interface RoleSnapshot {
   stats: StatValue[];
   player_stats: PlayerStats[];
   timeline: TimelinePoint[];
+  /** Во сколько раз счёт за период больше счёта за карту (базовое число серий). */
   period_ratio: number;
   ceiling_ratio: number;
+  /** То же по каждому числу серий: "4" | "5" | "6" | "7". */
+  period_ratios?: Record<string, number>;
+  ceiling_ratios?: Record<string, number>;
   titles: {
     key: string;
     label: string;
