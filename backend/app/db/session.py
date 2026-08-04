@@ -76,6 +76,7 @@ def get_db() -> Iterator[Session]:
 # из-за одного нового поля нельзя: `create_all` существующие таблицы не трогает.
 _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("matches", "stats_version", "INTEGER DEFAULT 0"),
+    ("matches", "first_blood_time", "INTEGER"),
     ("player_match_stats", "profile", "JSON"),
 )
 

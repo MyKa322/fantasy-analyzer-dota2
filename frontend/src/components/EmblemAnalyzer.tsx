@@ -16,6 +16,7 @@ import {
 import {
   api,
   type BannerAdvice,
+  type HeroPick,
   type PlayerProfile,
   type RoleTimeline,
   type StatRanking,
@@ -25,7 +26,9 @@ import {
 } from "../api";
 import { GROUP_COLOR, ROLE_LABEL, teamCrest } from "../assets";
 import EmblemCard from "./EmblemCard";
+import HeroPool from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
+import TitleTable from "./TitleTable";
 import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
 const ROLES = ["core", "mid", "support"];
@@ -43,6 +46,7 @@ export default function EmblemAnalyzer() {
   const [advices, setAdvices] = useState<BannerAdvice[]>([]);
   const [stats, setStats] = useState<StatValue[]>([]);
   const [players, setPlayers] = useState<PlayerProfile[]>([]);
+  const [heroes, setHeroes] = useState<HeroPick[]>([]);
   const [timeline, setTimeline] = useState<RoleTimeline | null>(null);
   const [titles, setTitles] = useState<TitleAdvice[]>([]);
   const [ranking, setRanking] = useState<StatRanking[]>([]);
@@ -69,7 +73,7 @@ export default function EmblemAnalyzer() {
     setError(null);
     try {
       const payload = { team_id: teamId, role, history_days: 180 };
-      const [banner, report, titleAdvice, profiles, form] = await Promise.all([
+      const [banner, report, titleAdvice, profiles, form, pool] = await Promise.all([
         api.bestBanner({
           ...payload,
           qualities: restrict ? qualities : null,
@@ -82,12 +86,14 @@ export default function EmblemAnalyzer() {
         api.titles(payload),
         api.playerReport(payload),
         api.timeline(payload),
+        api.heroPool(payload),
       ]);
       setAdvices(banner);
       setStats(report);
       setTitles(titleAdvice);
       setPlayers(profiles);
       setTimeline(form);
+      setHeroes(pool);
       setRanking([]);
       setRankedStat(null);
     } catch (e) {
@@ -133,6 +139,14 @@ export default function EmblemAnalyzer() {
   const formMean = formData.length
     ? formData.reduce((sum, p) => sum + p.p, 0) / formData.length
     : 0;
+
+  const rosterNames = useMemo(
+    () =>
+      Object.fromEntries(
+        players.map((p) => [p.account_id, p.name ?? String(p.account_id)]),
+      ),
+    [players],
+  );
 
   // Кто в паре что делает: строки — статы, столбцы — игроки.
   const playerRows = useMemo(
@@ -617,35 +631,21 @@ export default function EmblemAnalyzer() {
               </Panel>
             )}
 
+            {heroes.length > 0 && (
+              <Panel
+                title="Кого берёт эта роль"
+                subtitle="Пул героев за период. От него зависят префиксы титулов: каждый даёт процент за героя из своего списка."
+              >
+                <HeroPool heroes={heroes} names={rosterNames} limit={10} />
+              </Panel>
+            )}
+
             {titles.length > 0 && (
               <Panel
                 title="Coaching Titles"
-                subtitle="Титулы меняются бесплатно, поэтому их стоит подбирать под конкретную роль. Ожидаемый бонус = процент × доля игр, где условие выполнялось."
+                subtitle="Титулы меняются бесплатно, поэтому их стоит подбирать под конкретную роль."
               >
-                <table className="w-full text-xs">
-                  <tbody>
-                    {titles.slice(0, 8).map((t) => (
-                      <tr key={t.key} className="border-t border-[#20232c]">
-                        <td className="py-1 text-neutral-200">{t.label}</td>
-                        <td className="py-1 text-neutral-500">{t.condition}</td>
-                        <td className="tabular py-1 text-right text-neutral-400">
-                          +{Math.round(t.bonus * 100)}%
-                        </td>
-                        <td className="tabular py-1 text-right">
-                          {t.expected_bonus != null ? (
-                            <span className="text-[#c8a24a]">
-                              ≈+{(t.expected_bonus * 100).toFixed(1)}%
-                            </span>
-                          ) : (
-                            <span className="text-neutral-600" title={t.note}>
-                              не оценить
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <TitleTable titles={titles} limit={10} />
               </Panel>
             )}
           </div>

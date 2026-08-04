@@ -32,6 +32,15 @@ export interface TimelinePoint {
   w: number | null;
 }
 
+/** Герой в пуле роли, команды или игрока. */
+export interface HeroPick {
+  id: number;
+  name: string;
+  games: number;
+  wins: number;
+  players?: { account_id: number; games: number }[];
+}
+
 export interface RoleSnapshot {
   team_id: number;
   team_name: string;
@@ -41,6 +50,7 @@ export interface RoleSnapshot {
   last_game: string;
   stats: StatValue[];
   player_stats: PlayerStats[];
+  heroes: HeroPick[];
   timeline: TimelinePoint[];
   /** Во сколько раз счёт за период больше счёта за карту (базовое число серий). */
   period_ratio: number;

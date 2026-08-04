@@ -97,6 +97,8 @@ def upsert_match(session: Session, match: dict[str, Any]) -> Match:
     row.patch = match.get("patch")
     row.is_parsed = parsed
     row.stats_version = STATS_VERSION
+    first_blood = match.get("first_blood_time")
+    row.first_blood_time = int(first_blood) if first_blood is not None else None
 
     if not parsed:
         # Без разобранного реплея статов игроков нет — записываем только факт матча,

@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -170,6 +171,24 @@ def _stat_row(value) -> dict:
     }
 
 
+def _titles(advice) -> list[dict]:
+    return [
+        {
+            "key": t.key,
+            "label": t.label,
+            "bonus": t.bonus,
+            "condition": t.condition,
+            "hit_rate": round(t.hit_rate, 3) if t.hit_rate is not None else None,
+            "expected_bonus": round(t.expected_bonus, 4)
+            if t.expected_bonus is not None
+            else None,
+            "estimator": t.estimator,
+            "note": t.note,
+        }
+        for t in advice
+    ]
+
+
 def _timeline(projector: RoleProjector, history, banner) -> list[dict]:
     """Очки за каждую карту с нейтральным баннером — форма роли во времени.
 
@@ -212,7 +231,10 @@ def export_roles(
     вариантов он бы ничего не менял. Разница существенная — в зачёт идёт лучшая
     серия периода, и каждая дополнительная серия поднимает ожидание.
     """
+    from app.services.profiles import load_heroes  # noqa: PLC0415
+
     advisor = EmblemAdvisor(RoleProjector(seed=11))
+    heroes = load_heroes()
     since = datetime.now(timezone.utc) - timedelta(days=history_days)
     candidates = ti_candidates(session)
     all_series = sorted({series, *series_options})
@@ -289,21 +311,22 @@ def export_roles(
                         str(count): round(p.ceiling / neutral_card, 4) if neutral_card else 0.0
                         for count, p in projections.items()
                     },
-                    "titles": [
+                    # Кого эта роль берёт: по этому же пулу оцениваются префиксы
+                    # титулов, поэтому список и оценка едут вместе.
+                    "heroes": [
                         {
-                            "key": t.key,
-                            "label": t.label,
-                            "bonus": t.bonus,
-                            "condition": t.condition,
-                            "hit_rate": round(t.hit_rate, 3) if t.hit_rate is not None else None,
-                            "expected_bonus": round(t.expected_bonus, 4)
-                            if t.expected_bonus is not None
-                            else None,
-                            "estimator": t.estimator,
-                            "note": t.note,
+                            "id": pick.hero_id,
+                            "name": pick.name,
+                            "games": pick.games,
+                            "wins": pick.wins,
+                            "players": [
+                                {"account_id": account, "games": count}
+                                for account, count in pick.players
+                            ],
                         }
-                        for t in advisor.title_advice(history)
+                        for pick in advisor.hero_pool(history, heroes=heroes, limit=15)
                     ],
+                    "titles": _titles(advisor.title_advice(history, heroes=heroes)),
                 }
             )
 
@@ -340,10 +363,49 @@ def _match_rows(rows) -> list[dict]:
     return out
 
 
-def _player_page(profile) -> dict:
+def _team_heroes(profile, limit: int = 15) -> list[dict]:
+    """Пул героев команды: чьи это герои, видно по разбивке на игроков."""
+    games: Counter[int] = Counter()
+    wins: Counter[int] = Counter()
+    names: dict[int, str] = {}
+    by_player: dict[int, Counter[int]] = {}
+    for player in profile.roster:
+        for hero in player.heroes:
+            games[hero.hero_id] += hero.games
+            wins[hero.hero_id] += hero.wins
+            names[hero.hero_id] = hero.name
+            by_player.setdefault(hero.hero_id, Counter())[player.account_id] += hero.games
+
+    return [
+        {
+            "id": hero_id,
+            "name": names.get(hero_id, str(hero_id)),
+            "games": count,
+            "wins": wins[hero_id],
+            "players": [
+                {"account_id": account, "games": played}
+                for account, played in by_player[hero_id].most_common()
+            ],
+        }
+        for hero_id, count in games.most_common(limit)
+    ]
+
+
+def _player_page(profile, advisor=None, heroes=None) -> dict:
+    titles = []
+    if advisor is not None and profile.history is not None and profile.history.games:
+        titles = _titles(
+            advisor.title_advice(
+                profile.history,
+                heroes=heroes,
+                account_ids=(profile.account_id,),
+            )
+        )[:8]
+
     return {
         "account_id": profile.account_id,
         "name": profile.name,
+        "titles": titles,
         "team_id": profile.team_id,
         "team_name": profile.team_name,
         "role": profile.role,
@@ -389,6 +451,7 @@ def export_profiles(
     heroes = load_heroes()
     if not heroes:
         log.warning("справочник героев пуст — выполните `cli.py ingest-heroes`")
+    advisor = EmblemAdvisor(RoleProjector(seed=13))
 
     teams_out: list[dict] = []
     for entry in team_directory(session):
@@ -434,6 +497,8 @@ def export_profiles(
                     for as_of, rating, rd in profile.rating_history[::2]
                 ],
                 "roster": [p.account_id for p in profile.roster],
+                # Пул героев команды — сумма выборов всего состава за период.
+                "heroes": _team_heroes(profile),
                 "matches": _match_rows(profile.matches),
             }
         )
@@ -454,7 +519,12 @@ def export_profiles(
         )
         if profile is None or not profile.games:
             continue
-        players_out.append(_player_page(profile))
+        # Титулы считаем только участникам: их выбирают в состав, а соперник по
+        # квалификации попал в базу заодно с матчами, и восемь строк на каждого
+        # из четырёхсот весят больше, чем стоят.
+        players_out.append(
+            _player_page(profile, advisor=advisor if is_ti else None, heroes=heroes)
+        )
 
     log.info("профили: команд %d, игроков %d", len(teams_out), len(players_out))
     return {"days": days, "min_games": min_games, "teams": teams_out, "players": players_out}

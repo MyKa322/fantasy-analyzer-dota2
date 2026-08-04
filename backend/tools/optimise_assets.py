@@ -26,6 +26,8 @@ FRONTEND_ASSETS = ROOT / "frontend" / "public" / "assets"
 PORTRAIT_SIZE = 256
 CREST_SIZE = 192
 EMBLEM_SIZE = 128
+# Иконка героя стоит в строке таблицы и в списке пула — крупнее 96 не нужна.
+HERO_SIZE = 96
 WEBP_QUALITY = 82
 
 
@@ -67,6 +69,7 @@ def main() -> int:
         ("портреты", ROOT / "players", FRONTEND_ASSETS / "players", PORTRAIT_SIZE, False),
         ("логотипы", ROOT / "teams", FRONTEND_ASSETS / "teams", CREST_SIZE, True),
         ("эмблемы", ROOT / "fantasy_craft", FRONTEND_ASSETS / "emblems", EMBLEM_SIZE, True),
+        ("герои", ROOT / "heroes" / "icons", FRONTEND_ASSETS / "heroes", HERO_SIZE, True),
     ]
 
     grand_before = grand_after = 0

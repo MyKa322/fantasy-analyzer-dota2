@@ -270,10 +270,14 @@ def build_role_history(
                 "is_lan": match.is_lan,
                 "duration": match.duration,
                 "won": stat.won,
+                "first_blood_time": match.first_blood_time,
                 "players": {},
+                "heroes": {},
             },
         )
         entry["players"][stat.account_id] = dict(stat.stats)
+        if stat.hero_id is not None:
+            entry["heroes"][stat.account_id] = stat.hero_id
 
     names = {
         p.account_id: p.name
@@ -297,6 +301,8 @@ def build_role_history(
                 is_lan=entry["is_lan"],
                 duration=entry["duration"],
                 won=entry["won"],
+                first_blood_time=entry["first_blood_time"],
+                heroes=entry["heroes"],
             )
             for match_id, entry in sorted(games.items(), key=lambda kv: kv[1]["start_time"])
         ],

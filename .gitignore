@@ -17,6 +17,7 @@ backend/.env
 /players/
 /teams/
 /fantasy_craft/
+/heroes/
 dota2-fantasy-design-main/players/
 dota2-fantasy-design-main/teams/
 dota2-fantasy-design-main/fantasy_craft/

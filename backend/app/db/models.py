@@ -98,6 +98,10 @@ class Match(Base):
     # записанный старым кодом, надо перечитать — иначе профиль игрока останется
     # без ассистов и нетворта навсегда.
     stats_version: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    # Секунда первой крови от начала игры. Нужна двум титулам сразу: «the
+    # Patient» (+23%, если первой крови не было до 10:00) и «the Flayed Twins
+    # Acolyte» (+9%, если она пролилась до стартового горна, то есть в минусе).
+    first_blood_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_lan: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

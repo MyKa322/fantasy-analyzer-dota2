@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -181,6 +182,22 @@ class PlayerRanking:
     base_points: float
     p95_points: float
     games: int
+
+
+@dataclass(frozen=True, slots=True)
+class HeroPick:
+    """Герой в пуле роли или игрока: сколько карт, сколько побед, кто играл."""
+
+    hero_id: int
+    name: str
+    games: int
+    wins: int
+    # (account_id, карт) — у пары видно, чей это герой.
+    players: tuple[tuple[int, int], ...] = ()
+
+    @property
+    def win_rate(self) -> float:
+        return self.wins / self.games if self.games else 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -787,7 +804,13 @@ class EmblemAdvisor:
 
     # --- Coaching Titles ------------------------------------------------------
 
-    def title_advice(self, history: RoleHistory) -> list[TitleAdvice]:
+    def title_advice(
+        self,
+        history: RoleHistory,
+        *,
+        heroes: Mapping[int, str] | None = None,
+        account_ids: Sequence[int] | None = None,
+    ) -> list[TitleAdvice]:
         """Какие титулы выгодны этой роли — по её же матчам.
 
         Часть условий из данных не проверить (смерть от Торментора, килл в
@@ -795,16 +818,9 @@ class EmblemAdvisor:
         оцениваются наугад.
         """
         games = history.games
-        durations = [g.duration for g in games if g.duration]
-        losses = [g.won for g in games if g.won is not None]
-
-        estimates: dict[str, tuple[float, str]] = {}
-        if durations:
-            short = sum(1 for d in durations if d < 25 * 60) / len(durations)
-            estimates["decisive"] = (short, f"{short:.0%} игр короче 25 минут")
-        if losses:
-            lost = sum(1 for won in losses if not won) / len(losses)
-            estimates["underdog"] = (lost, f"{lost:.0%} игр проиграно")
+        accounts = tuple(account_ids) if account_ids else history.account_ids
+        estimates = self._suffix_estimates(games)
+        estimates.update(self._prefix_estimates(games, accounts, heroes))
 
         advice: list[TitleAdvice] = []
         for group in ("prefixes", "suffixes"):
@@ -814,10 +830,12 @@ class EmblemAdvisor:
                 estimator = title.get("estimator", "unmodelled")
                 hit_rate, note = estimates.get(key, (None, ""))
 
-                if estimator == "hero_pool":
-                    note = note or "зависит от пула героев — данных о цветах героев нет"
+                if estimator == "hero_pool" and hit_rate is None:
+                    note = note or "нет справочника героев — выполните `cli.py ingest-heroes`"
                 elif estimator == "unmodelled" and not note:
-                    note = "условие вне наших данных"
+                    # Почему именно не оценивается — сказано в конфиге рядом с
+                    # титулом: причина у каждого своя, и она важнее самого факта.
+                    note = title.get("note") or "условие вне наших данных"
                 elif hit_rate is None:
                     note = note or "недостаточно данных"
 
@@ -837,3 +855,137 @@ class EmblemAdvisor:
         # Сначала то, что реально посчитано, по убыванию ожидаемого вклада.
         advice.sort(key=lambda t: (t.expected_bonus is None, -(t.expected_bonus or 0.0)))
         return advice
+
+    def _suffix_estimates(
+        self, games: Sequence[RoleGame]
+    ) -> dict[str, tuple[float | None, str]]:
+        """Суффиксы, которые видно в данных матча."""
+        estimates: dict[str, tuple[float | None, str]] = {}
+
+        durations = [g.duration for g in games if g.duration]
+        if durations:
+            short = sum(1 for d in durations if d < 25 * 60) / len(durations)
+            estimates["decisive"] = (short, f"{short:.0%} игр короче 25 минут")
+            # «the Lucky» — последняя цифра длительности. На табло время идёт как
+            # мм:сс, так что речь про последнюю цифру секунд: чистая лотерея
+            # около 10%, и это само по себе ответ — титул не подкрутить.
+            lucky = sum(1 for d in durations if d % 10 == 8) / len(durations)
+            estimates["lucky"] = (lucky, f"{lucky:.0%} игр закончились на цифру 8")
+
+        losses = [g.won for g in games if g.won is not None]
+        if losses:
+            lost = sum(1 for won in losses if not won) / len(losses)
+            estimates["underdog"] = (lost, f"{lost:.0%} игр проиграно")
+
+        # Время первой крови: ноль OpenDota ставит и когда события не поймала,
+        # поэтому такие карты из выборки выбрасываем, а не считаем «до гонга».
+        first_bloods = [g.first_blood_time for g in games if g.first_blood_time]
+        if first_bloods:
+            patient = sum(1 for t in first_bloods if t >= 600) / len(first_bloods)
+            estimates["patient"] = (
+                patient,
+                f"{patient:.0%} игр без первой крови до 10:00 "
+                f"(по {len(first_bloods)} картам из {len(games)})",
+            )
+
+        deciders = self._decider_share(games)
+        if deciders is not None:
+            estimates["clutch"] = (
+                deciders,
+                f"{deciders:.0%} карт были последними возможными в серии",
+            )
+
+        return estimates
+
+    def _decider_share(self, games: Sequence[RoleGame]) -> float | None:
+        """Доля карт, которые были решающими в своей серии.
+
+        Решающая — последняя возможная: третья в Bo3 и пятая в Bo5. Формат серии
+        в данных не записан, но выводится из числа сыгранных карт: серия из трёх
+        карт могла быть только Bo3, дошедшим до конца.
+        """
+        if not games:
+            return None
+        by_series: dict[str, list[RoleGame]] = {}
+        for game in games:
+            by_series.setdefault(game.series_key, []).append(game)
+
+        deciders = 0
+        for series in by_series.values():
+            if len(series) not in (3, 5):
+                continue
+            last = max(series, key=lambda g: g.start_time)
+            deciders += 1 if last in series else 0
+        return deciders / len(games)
+
+    def _prefix_estimates(
+        self,
+        games: Sequence[RoleGame],
+        accounts: Sequence[int],
+        heroes: Mapping[int, str] | None,
+    ) -> dict[str, tuple[float | None, str]]:
+        """Префиксы: доля карт, сыгранных на герое из списка титула.
+
+        Считается по выборам конкретных игроков роли, а не по всем десяти в
+        матче: титул привязан к карточке игрока.
+        """
+        if not heroes:
+            return {}
+
+        picks = [
+            heroes.get(game.heroes[account])
+            for game in games
+            for account in accounts
+            if account in game.heroes
+        ]
+        picks = [name for name in picks if name]
+        if not picks:
+            return {}
+
+        estimates: dict[str, tuple[float | None, str]] = {}
+        for title in self.rules.titles.get("prefixes", []) or []:
+            listed = {str(name) for name in (title.get("heroes") or [])}
+            if not listed:
+                continue
+            hits = sum(1 for name in picks if name in listed)
+            share = hits / len(picks)
+            estimates[title["key"]] = (
+                share,
+                f"{share:.0%} выборов — герои из списка ({hits} из {len(picks)})",
+            )
+        return estimates
+
+    def hero_pool(
+        self,
+        history: RoleHistory,
+        *,
+        heroes: Mapping[int, str] | None = None,
+        account_ids: Sequence[int] | None = None,
+        limit: int = 15,
+    ) -> list[HeroPick]:
+        """Кого берёт эта роль: герой, сколько карт, сколько побед, кто играл."""
+        accounts = tuple(account_ids) if account_ids else history.account_ids
+        heroes = heroes or {}
+
+        games: Counter[int] = Counter()
+        wins: Counter[int] = Counter()
+        by_player: dict[int, Counter[int]] = {}
+        for game in history.games:
+            for account in accounts:
+                hero_id = game.heroes.get(account)
+                if hero_id is None:
+                    continue
+                games[hero_id] += 1
+                wins[hero_id] += int(bool(game.won))
+                by_player.setdefault(hero_id, Counter())[account] += 1
+
+        return [
+            HeroPick(
+                hero_id=hero_id,
+                name=heroes.get(hero_id, f"hero {hero_id}"),
+                games=count,
+                wins=wins[hero_id],
+                players=tuple(sorted(by_player[hero_id].items(), key=lambda kv: -kv[1])),
+            )
+            for hero_id, count in games.most_common(limit)
+        ]

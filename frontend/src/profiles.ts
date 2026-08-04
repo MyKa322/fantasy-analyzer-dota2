@@ -33,9 +33,22 @@ export interface ProfileHero {
   wins: number;
 }
 
+export interface ProfileTitle {
+  key: string;
+  label: string;
+  bonus: number;
+  condition: string;
+  hit_rate: number | null;
+  expected_bonus: number | null;
+  estimator: string;
+  note: string;
+}
+
 export interface ProfilePlayer {
   account_id: number;
   name: string | null;
+  /** Титулы считаются только участникам TI15 — их выбирают в состав. */
+  titles?: ProfileTitle[];
   team_id: number | null;
   team_name: string | null;
   role: string | null;
@@ -68,6 +81,14 @@ export interface ProfileTeam {
   opponents: { name: string; games: number; wins: number }[];
   rating_history: { d: string; r: number; rd: number }[];
   roster: number[];
+  /** Пул героев всего состава: у каждого героя видно, кто из игроков его берёт. */
+  heroes?: {
+    id: number;
+    name: string;
+    games: number;
+    wins: number;
+    players?: { account_id: number; games: number }[];
+  }[];
   matches: ProfileMatch[];
 }
 

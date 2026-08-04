@@ -642,3 +642,167 @@ def test_trend_stays_none_without_enough_games(advisor):
     }
     # Все карты в одном окне — сравнивать не с чем.
     assert values["wards_placed"].trend is None
+
+
+# --- герои и титулы -----------------------------------------------------------
+
+
+def hero_history(
+    picks: list[tuple[int, bool]],
+    *,
+    role: str = "core",
+    account_ids: tuple[int, ...] = (10,),
+    duration: int = 2100,
+    first_blood: int | None = 120,
+    series_size: int = 1,
+) -> RoleHistory:
+    """История с заданными героями: (hero_id, победа) на каждую карту."""
+    games = []
+    for i, (hero_id, won) in enumerate(picks):
+        games.append(
+            RoleGame(
+                match_id=7000 + i,
+                start_time=NOW - timedelta(days=len(picks) - i),
+                series_key=f"series:{i // series_size}",
+                player_stats={a: {"kills": 5, "gpm": 500} for a in account_ids},
+                duration=duration,
+                won=won,
+                first_blood_time=first_blood,
+                heroes={a: hero_id for a in account_ids},
+            )
+        )
+    return RoleHistory(role=role, team_id=1, account_ids=account_ids, games=games)
+
+
+AXE, LINA, PUDGE = 2, 25, 14  # красные по списку Crimson
+CM = 5  # Crystal Maiden — синяя, но не красная
+HERO_NAMES = {AXE: "Axe", LINA: "Lina", PUDGE: "Pudge", CM: "Crystal Maiden"}
+
+
+def test_hero_pool_counts_games_and_wins(advisor):
+    history = hero_history([(AXE, True), (AXE, False), (LINA, True)])
+    pool = advisor.hero_pool(history, heroes=HERO_NAMES)
+
+    assert [p.name for p in pool] == ["Axe", "Lina"]
+    assert pool[0].games == 2
+    assert pool[0].wins == 1
+    assert pool[0].win_rate == pytest.approx(0.5)
+    assert pool[0].players == ((10, 2),)
+
+
+def test_hero_pool_splits_a_duo(advisor):
+    """У пары видно, чей это герой, — иначе пул выглядит общим."""
+    games = [
+        RoleGame(
+            match_id=8000 + i,
+            start_time=NOW - timedelta(days=i),
+            series_key=f"s{i}",
+            player_stats={10: {"kills": 5}, 11: {"kills": 5}},
+            won=True,
+            heroes={10: AXE, 11: LINA},
+        )
+        for i in range(4)
+    ]
+    history = RoleHistory(role="core", team_id=1, account_ids=(10, 11), games=games)
+    pool = {p.name: p for p in advisor.hero_pool(history, heroes=HERO_NAMES)}
+
+    assert pool["Axe"].players == ((10, 4),)
+    assert pool["Lina"].players == ((11, 4),)
+
+
+def test_prefix_estimated_from_hero_pool(advisor):
+    """Crimson даёт +6% за красного героя — значит, считаем долю таких карт."""
+    history = hero_history([(AXE, True), (LINA, True), (CM, True), (CM, False)])
+    titles = {t.key: t for t in advisor.title_advice(history, heroes=HERO_NAMES)}
+
+    # Axe и Lina есть в списке Crimson, Crystal Maiden — нет.
+    assert titles["crimson"].hit_rate == pytest.approx(0.5)
+    assert titles["crimson"].expected_bonus == pytest.approx(0.06 * 0.5)
+    # Crystal Maiden в списке Cerulean, остальные трое — нет.
+    assert titles["cerulean"].hit_rate == pytest.approx(0.5)
+
+
+def test_prefixes_stay_unestimated_without_hero_directory(advisor):
+    history = hero_history([(AXE, True)])
+    titles = {t.key: t for t in advisor.title_advice(history)}
+    assert titles["crimson"].expected_bonus is None
+    assert "справочник" in titles["crimson"].note
+
+
+def test_lucky_counts_durations_ending_in_eight(advisor):
+    history = hero_history([(AXE, True), (AXE, True)], duration=1508)
+    titles = {t.key: t for t in advisor.title_advice(history, heroes=HERO_NAMES)}
+    assert titles["lucky"].hit_rate == pytest.approx(1.0)
+
+    history = hero_history([(AXE, True)], duration=1500)
+    titles = {t.key: t for t in advisor.title_advice(history, heroes=HERO_NAMES)}
+    assert titles["lucky"].hit_rate == pytest.approx(0.0)
+
+
+def test_patient_looks_at_first_blood_time(advisor):
+    late = hero_history([(AXE, True), (AXE, True)], first_blood=700)
+    titles = {t.key: t for t in advisor.title_advice(late, heroes=HERO_NAMES)}
+    assert titles["patient"].hit_rate == pytest.approx(1.0)
+    assert titles["patient"].expected_bonus == pytest.approx(0.23)
+
+    early = hero_history([(AXE, True)], first_blood=90)
+    titles = {t.key: t for t in advisor.title_advice(early, heroes=HERO_NAMES)}
+    assert titles["patient"].hit_rate == pytest.approx(0.0)
+
+
+def test_patient_ignores_matches_without_first_blood_time(advisor):
+    """Ноль у OpenDota значит и «до гонга», и «событие не поймано»."""
+    mixed = hero_history([(AXE, True), (AXE, True)], first_blood=700)
+    mixed.games[0] = RoleGame(
+        match_id=mixed.games[0].match_id,
+        start_time=mixed.games[0].start_time,
+        series_key=mixed.games[0].series_key,
+        player_stats=mixed.games[0].player_stats,
+        duration=mixed.games[0].duration,
+        won=mixed.games[0].won,
+        first_blood_time=0,
+        heroes=mixed.games[0].heroes,
+    )
+    titles = {t.key: t for t in advisor.title_advice(mixed, heroes=HERO_NAMES)}
+    # Карта с нулём выброшена, а не засчитана как «первая кровь на нулевой секунде».
+    assert titles["patient"].hit_rate == pytest.approx(1.0)
+    assert "1 картам из 2" in titles["patient"].note
+
+
+def test_clutch_counts_deciders_of_full_series(advisor):
+    """Решающая карта — последняя возможная: третья в Bo3, пятая в Bo5."""
+    bo3 = hero_history([(AXE, True)] * 3, series_size=3)
+    titles = {t.key: t for t in advisor.title_advice(bo3, heroes=HERO_NAMES)}
+    assert titles["clutch"].hit_rate == pytest.approx(1 / 3)
+
+    # Серия 2-0 решающей карты не имела.
+    swept = hero_history([(AXE, True)] * 2, series_size=2)
+    titles = {t.key: t for t in advisor.title_advice(swept, heroes=HERO_NAMES)}
+    assert titles["clutch"].hit_rate == pytest.approx(0.0)
+
+
+def test_unmodelled_titles_explain_themselves(advisor):
+    titles = {
+        t.key: t
+        for t in advisor.title_advice(hero_history([(AXE, True)]), heroes=HERO_NAMES)
+    }
+    # Причина у каждого своя и живёт в конфиге рядом с титулом.
+    assert titles["flayed"].expected_bonus is None
+    assert "нулём" in titles["flayed"].note
+    assert titles["cruel"].expected_bonus is None
+    assert titles["tormented"].note
+
+
+def test_every_prefix_lists_known_heroes():
+    """Опечатка в списке героев молча выкинула бы его из оценки титула."""
+    from app.fantasy.rules import load_rules
+    from app.services.profiles import load_heroes
+
+    known = set(load_heroes().values())
+    assert known, "справочник героев не собран"
+
+    for title in load_rules().titles["prefixes"]:
+        listed = title.get("heroes") or []
+        assert listed, f"у префикса {title['key']} нет списка героев"
+        unknown = [name for name in listed if name not in known]
+        assert not unknown, f"{title['key']}: неизвестные герои {unknown}"

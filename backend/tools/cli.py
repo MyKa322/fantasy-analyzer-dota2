@@ -167,7 +167,11 @@ async def cmd_ingest_heroes(_: argparse.Namespace) -> None:
             payload = response.json()
         heroes = list(payload.values()) if isinstance(payload, dict) else payload
 
-    mapping = {int(h["id"]): h.get("localized_name") or h["name"] for h in heroes}
+    # Внутреннее имя (`npc_dota_hero_axe`) нужно для иконок: файлы названы им.
+    mapping = {
+        int(h["id"]): {"name": h.get("localized_name") or h["name"], "npc": h["name"]}
+        for h in heroes
+    }
     HEROES_PATH.write_text(
         json.dumps(mapping, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8"
     )

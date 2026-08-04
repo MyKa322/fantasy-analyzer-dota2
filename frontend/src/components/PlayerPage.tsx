@@ -1,20 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { api, type ProfilePlayer } from "../api";
 import { GROUP_COLOR, ROLE_LABEL, teamCrest } from "../assets";
-import { games, winRate } from "../profiles";
+import { winRate } from "../profiles";
 import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
+import HeroPool from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
+import TitleTable from "./TitleTable";
 import { AVERAGE_LABEL, MatchTable, StatGrid, UNIT_LABEL, formatNumber } from "./profileBits";
-import { Button, Notice, Panel, Stat, chartTooltip } from "./ui";
+import { Button, Notice, Panel, Stat } from "./ui";
 
 export default function PlayerPage({
   accountId,
@@ -98,10 +91,11 @@ export default function PlayerPage({
 
   const losses = player.games - player.wins;
   const crest = teamCrest(player.team_name);
-  const heroData = player.heroes.slice(0, 10).map((hero) => ({
-    ...hero,
-    rate: hero.games ? hero.wins / hero.games : 0,
-  }));
+  // Сигнатурный — не просто частый: на одной-двух картах процент побед ничего
+  // не значит, поэтому нужен и объём, и результат.
+  const signature = player.heroes
+    .filter((hero) => hero.games >= 3 && hero.wins / hero.games > 0.5)
+    .slice(0, 4);
 
   return (
     <div className="space-y-4">
@@ -174,44 +168,34 @@ export default function PlayerPage({
         </Panel>
       </div>
 
-      {heroData.length > 0 && (
-        <Panel
-          title="Пул героев"
-          subtitle="Карт за период и доля побед на каждом. Цвет столбца — победы: зелёный выше половины, красный ниже."
-        >
-          <ResponsiveContainer width="100%" height={Math.max(200, heroData.length * 26)}>
-            <BarChart data={heroData} layout="vertical" margin={{ left: 30 }}>
-              <XAxis type="number" stroke="#7C858F" fontSize={11} allowDecimals={false} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                stroke="#9AA3AE"
-                fontSize={11}
-                width={140}
-              />
-              <Tooltip
-                {...chartTooltip}
-                cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                // Имя героя уже стоит заголовком подсказки — во второй раз в
-                // строке оно ни к чему, поэтому и разделитель пустой.
-                separator=""
-                formatter={(value, _name, item) => [
-                  `${games(Number(value))} · ${Math.round((item.payload.rate ?? 0) * 100)}% побед`,
-                  "",
-                ]}
-              />
-              <Bar dataKey="games" radius={[0, 3, 3, 0]}>
-                {heroData.map((hero) => (
-                  <Cell
-                    key={hero.id}
-                    fill={hero.rate >= 0.5 ? "var(--group-green)" : "var(--group-red)"}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </Panel>
-      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {player.heroes.length > 0 && (
+          <Panel
+            title="Сигнатурные герои"
+            subtitle="Кого берёт чаще всего за период. Полоса — доля карт от самого частого героя, цвет и число справа — победы на нём."
+          >
+            <HeroPool heroes={player.heroes} limit={12} />
+            {signature.length > 0 && (
+              <p className="mt-3 text-[11px] text-neutral-500">
+                Визитная карточка:{" "}
+                <span className="text-neutral-300">
+                  {signature.map((h) => h.name).join(", ")}
+                </span>{" "}
+                — не меньше трёх карт и больше половины побед.
+              </p>
+            )}
+          </Panel>
+        )}
+
+        {(player.titles?.length ?? 0) > 0 && (
+          <Panel
+            title="Лучшие титулы"
+            subtitle="Coaching Titles меняются бесплатно, поэтому их стоит подбирать под конкретного игрока: префиксы зависят от того, за кого он играет."
+          >
+            <TitleTable titles={player.titles ?? []} limit={8} />
+          </Panel>
+        )}
+      </div>
 
       {fantasy && (
         <Panel

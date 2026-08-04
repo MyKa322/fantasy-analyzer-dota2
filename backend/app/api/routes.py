@@ -37,6 +37,7 @@ from ..services.analysis import (
     ti_candidates,
 )
 from ..services.profiles import (
+    load_heroes,
     player_directory,
     player_profile,
     team_directory,
@@ -953,7 +954,33 @@ def title_advice(
             estimator=t.estimator,
             note=t.note,
         )
-        for t in EmblemAdvisor().title_advice(history)
+        for t in EmblemAdvisor().title_advice(history, heroes=load_heroes())
+    ]
+
+
+@router.post("/fantasy/heroes", response_model=list[schemas.HeroPickOut])
+def role_hero_pool(
+    request: schemas.StatReportRequest = Body(...),
+    session: Session = Depends(get_db),
+    limit: int = Query(15, ge=1, le=50),
+) -> list[schemas.HeroPickOut]:
+    """Кого эта роль берёт: герои, карты, победы и кто из пары их играет.
+
+    По этому же пулу оцениваются префиксы титулов — «Crimson» и остальные дают
+    процент за героя определённого цвета, и цвет решает не вкус, а список.
+    """
+    history, _ = _role_history(session, request)
+    return [
+        schemas.HeroPickOut(
+            hero_id=pick.hero_id,
+            name=pick.name,
+            games=pick.games,
+            wins=pick.wins,
+            players=[
+                {"account_id": account, "games": count} for account, count in pick.players
+            ],
+        )
+        for pick in EmblemAdvisor().hero_pool(history, heroes=load_heroes(), limit=limit)
     ]
 
 

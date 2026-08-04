@@ -356,6 +356,16 @@ class HeroRowOut(BaseModel):
     wins: int
 
 
+class HeroPickOut(BaseModel):
+    """Герой в пуле роли или команды — с разбивкой, кто из игроков его берёт."""
+
+    hero_id: int
+    name: str
+    games: int
+    wins: int
+    players: list[dict[str, int]] = []
+
+
 class PlayerPageOut(BaseModel):
     """Страница игрока: обычная статистика отдельно, Fantasy-единицы отдельно."""
 

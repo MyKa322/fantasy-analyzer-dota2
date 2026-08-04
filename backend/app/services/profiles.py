@@ -30,6 +30,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db.models import Match, Player, PlayerMatchStat, Team, TeamRating, TeamRosterSlot
+from ..fantasy.projection import RoleGame, RoleHistory
 from ..ingest.stat_mapping import PROFILE_FIELDS
 
 log = logging.getLogger(__name__)
@@ -93,6 +94,9 @@ class PlayerProfile:
     fantasy_units: dict[str, float] = field(default_factory=dict)
     heroes: list[HeroRow] = field(default_factory=list)
     matches: list[MatchRow] = field(default_factory=list)
+    # Те же карты в форме, понятной анализатору: по ним считаются титулы. Данные
+    # уже прочитаны, второй раз в базу за ними ходить незачем.
+    history: RoleHistory | None = None
 
     @property
     def win_rate(self) -> float:
@@ -126,12 +130,8 @@ class TeamProfile:
         return self.wins / self.games if self.games else 0.0
 
 
-def load_heroes(path: Path | str = HEROES_PATH) -> dict[int, str]:
-    """id -> имя героя. Справочник обновляется командой `cli.py ingest-heroes`.
-
-    Файл лежит в репозитории, потому что герои меняются раз в патч, а страница
-    игрока должна открываться и без сети.
-    """
+def _load_hero_file(path: Path | str = HEROES_PATH) -> dict[int, dict[str, str]]:
+    """Справочник героев как есть. Понимает и старый формат (id -> имя)."""
     path = Path(path)
     if not path.exists():
         return {}
@@ -140,7 +140,32 @@ def load_heroes(path: Path | str = HEROES_PATH) -> dict[int, str]:
     except (json.JSONDecodeError, OSError):
         log.warning("не удалось прочитать справочник героев %s", path)
         return {}
-    return {int(key): str(value) for key, value in raw.items()}
+
+    heroes: dict[int, dict[str, str]] = {}
+    for key, value in raw.items():
+        if isinstance(value, dict):
+            heroes[int(key)] = {"name": str(value.get("name", key)), "npc": str(value.get("npc", ""))}
+        else:
+            heroes[int(key)] = {"name": str(value), "npc": ""}
+    return heroes
+
+
+def load_heroes(path: Path | str = HEROES_PATH) -> dict[int, str]:
+    """id -> имя героя. Справочник обновляется командой `cli.py ingest-heroes`.
+
+    Файл лежит в репозитории, потому что герои меняются раз в патч, а страница
+    игрока должна открываться и без сети.
+    """
+    return {hero_id: entry["name"] for hero_id, entry in _load_hero_file(path).items()}
+
+
+def load_hero_npc_names(path: Path | str = HEROES_PATH) -> dict[int, str]:
+    """id -> внутреннее имя (`npc_dota_hero_axe`): по нему названы файлы иконок."""
+    return {
+        hero_id: entry["npc"]
+        for hero_id, entry in _load_hero_file(path).items()
+        if entry["npc"]
+    }
 
 
 def _since(days: int | None) -> datetime | None:
@@ -318,6 +343,29 @@ def player_profile(
         for stat, match in rows[:match_limit]
     ]
 
+    history = RoleHistory(
+        role=(slot.role if slot else None) or "core",
+        team_id=team_id or 0,
+        account_ids=(account_id,),
+        team_name=team_names.get(team_id) if team_id else None,
+        player_names=(player.name,) if player and player.name else (),
+        games=[
+            RoleGame(
+                match_id=match.match_id,
+                start_time=_utc(stat.start_time),
+                series_key=match.series_key,
+                player_stats={account_id: dict(stat.stats or {})},
+                patch=match.patch,
+                is_lan=match.is_lan,
+                duration=match.duration,
+                won=stat.won,
+                first_blood_time=match.first_blood_time,
+                heroes={account_id: stat.hero_id} if stat.hero_id is not None else {},
+            )
+            for stat, match in reversed(parsed)
+        ],
+    )
+
     return PlayerProfile(
         account_id=account_id,
         name=player.name if player else None,
@@ -342,6 +390,7 @@ def player_profile(
             for hero_id, games in hero_games.most_common(hero_limit)
         ],
         matches=matches,
+        history=history,
     )
 
 

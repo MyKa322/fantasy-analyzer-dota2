@@ -14,7 +14,9 @@ import { ROLE_LABEL, teamCrest } from "../assets";
 import { optimiseBanner } from "../engine/scoring";
 import { games, winRate } from "../profiles";
 import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
+import HeroPool, { HeroIcon } from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
+import TitleTable from "./TitleTable";
 import { AVERAGE_LABEL, MatchTable, StatGrid, UNIT_LABEL, formatNumber } from "./profileBits";
 import { Button, Notice, Panel, Stat, chartTooltip } from "./ui";
 
@@ -38,6 +40,7 @@ export default function TeamPage({
   const [team, setTeam] = useState<ProfileTeam | null>(null);
   const [roster, setRoster] = useState<ProfilePlayer[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [titleRole, setTitleRole] = useState("core");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,10 +76,22 @@ export default function TeamPage({
           period: (best?.total ?? 0) * role.period_ratio,
           ceiling: (best?.total ?? 0) * role.ceiling_ratio,
           emblems: best?.slots ?? [],
+          titles: role.titles,
+          heroes: role.heroes ?? [],
         };
       })
       .sort((a, b) => b.period - a.period);
   }, [snapshot, teamId]);
+
+  // Титулы у ролей разные: у саппорта другой пул героев, а значит и другие
+  // префиксы. Показываем по одной роли за раз, с переключателем.
+  const roleTitles = useMemo(
+    () =>
+      analysis.find((row) => row.role === titleRole)?.titles ??
+      analysis[0]?.titles ??
+      [],
+    [analysis, titleRole],
+  );
 
   const group = useMemo(
     () => snapshot?.group?.teams.find((t) => t.team_id === teamId) ?? null,
@@ -108,6 +123,9 @@ export default function TeamPage({
 
   const crest = teamCrest(team.name);
   const losses = team.games - team.wins;
+  const rosterNames = Object.fromEntries(
+    roster.map((player) => [player.account_id, player.name ?? String(player.account_id)]),
+  );
 
   return (
     <div className="space-y-4">
@@ -188,6 +206,13 @@ export default function TeamPage({
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <Panel
+          title="Кого берёт команда"
+          subtitle="Пул героев всего состава за период. Полоса — как часто берут относительно самого частого, цвет — доля побед. По этому же пулу считаются префиксы титулов."
+        >
+          <HeroPool heroes={team.heroes ?? []} names={rosterNames} limit={12} />
+        </Panel>
+
         <Panel
           title="Состав"
           subtitle="Порядок — по числу карт за период: стенд-ины видно, но они не вытесняют основу."
@@ -271,9 +296,46 @@ export default function TeamPage({
                   ))}
                 </div>
                 <div className="mt-2 text-[11px] text-neutral-600">{games(row.games)} в выборке</div>
+
+                {row.heroes.length > 0 && (
+                  <div className="mt-2 border-t border-[#20232c] pt-2">
+                    <div className="mb-1 text-[10px] tracking-wide text-neutral-600 uppercase">
+                      Чаще всего берут
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {row.heroes.slice(0, 6).map((hero) => (
+                        <HeroIcon key={hero.id} id={hero.id} name={hero.name} size={26} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          {roleTitles.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-2 flex flex-wrap items-end gap-2">
+                <span className="text-[11px] tracking-wide text-neutral-500 uppercase">
+                  Титулы по роли
+                </span>
+                {analysis.map((row) => (
+                  <button
+                    key={row.role}
+                    onClick={() => setTitleRole(row.role)}
+                    className={`rounded border px-2 py-0.5 text-[11px] ${
+                      titleRole === row.role
+                        ? "border-[#c8a24a] text-[#c8a24a]"
+                        : "border-[#2C3138] text-neutral-500"
+                    }`}
+                  >
+                    {ROLE_LABEL[row.role] ?? row.role}
+                  </button>
+                ))}
+              </div>
+              <TitleTable titles={roleTitles} />
+            </div>
+          )}
 
           {group && (
             <div className="mt-4">

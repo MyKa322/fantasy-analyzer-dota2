@@ -1,12 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { loadPortraitManifest } from "./assets";
+import { loadHeroManifest, loadPortraitManifest } from "./assets";
 import "./index.css";
 
-// Манифест портретов подгружается до первого рендера: без него имена файлов с
-// ника не вывести, и вместо лиц были бы инициалы.
-loadPortraitManifest().finally(() => {
+// Манифесты подгружаются до первого рендера: имя файла портрета с ника не
+// вывести, а иконку героя — с его id, и без них вместо картинок были бы
+// инициалы и голые названия.
+Promise.all([loadPortraitManifest(), loadHeroManifest()]).finally(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <App />

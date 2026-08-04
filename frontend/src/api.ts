@@ -14,7 +14,9 @@ import {
   type RulesSnapshot,
   type StatValue,
 } from "./engine/scoring";
-import { STATIC_MODE, findRole, loadSnapshot } from "./snapshot";
+import { STATIC_MODE, findRole, loadSnapshot, type HeroPick } from "./snapshot";
+
+export type { HeroPick };
 import {
   loadProfiles,
   type ProfileHero,
@@ -556,6 +558,25 @@ const live = {
       body: JSON.stringify(payload),
     }),
 
+  // Живой бэкенд называет поле hero_id, снапшот — id: у него эти строки
+  // повторяются тысячами. Компоненты работают с формой снапшота.
+  heroPool: async (payload: {
+    team_id: number;
+    role: string;
+    history_days?: number;
+  }): Promise<HeroPick[]> => {
+    const picks = await request<
+      {
+        hero_id: number;
+        name: string;
+        games: number;
+        wins: number;
+        players: { account_id: number; games: number }[];
+      }[]
+    >("/fantasy/heroes", { method: "POST", body: JSON.stringify(payload) });
+    return picks.map(({ hero_id, ...rest }) => ({ id: hero_id, ...rest }));
+  },
+
   inventory: (payload: {
     inventory: Emblem[];
     role?: string | null;
@@ -833,6 +854,12 @@ const staticApi: typeof live = {
         color: meta.get(v.stat)?.color ?? ("red" as GroupColor),
       })),
     }));
+  },
+
+  heroPool: async (payload) => {
+    const snapshot = await loadSnapshot();
+    const role = findRole(snapshot, payload.team_id, payload.role);
+    return role?.heroes ?? [];
   },
 
   timeline: async (payload) => {

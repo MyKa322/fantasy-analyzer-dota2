@@ -86,6 +86,28 @@ export async function loadPortraitManifest(): Promise<void> {
   }
 }
 
+/**
+ * Иконки героев. В матче лежит только hero_id, а файлы названы внутренним
+ * именем героя, поэтому связка идёт через манифест — он собирается скриптом
+ * `backend/tools/build_hero_manifest.py`.
+ */
+let heroFiles: Record<string, string> = {};
+
+export async function loadHeroManifest(): Promise<void> {
+  try {
+    const response = await fetch(`${asset_("heroes/manifest.json")}?v=${__BUILD_ID__}`);
+    if (response.ok) heroFiles = await response.json();
+  } catch {
+    // без манифеста в списках останутся названия без картинок
+  }
+}
+
+export function heroIcon(heroId: number | null | undefined): string | null {
+  if (heroId == null) return null;
+  const file = heroFiles[String(heroId)];
+  return file ? asset_(`heroes/${file}`) : null;
+}
+
 /** Ник -> сравнимая форма: только латиница и цифры. */
 export function normaliseNickname(nickname: string): string {
   return nickname

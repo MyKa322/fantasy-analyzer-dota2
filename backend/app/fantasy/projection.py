@@ -50,9 +50,12 @@ class RoleGame:
     patch: int | None = None
     is_lan: bool | None = None
     # Нужны для оценки Coaching Titles: "the Decisive" смотрит на длительность,
-    # "the Underdog" — на поражение.
+    # "the Underdog" — на поражение, "the Patient" — на время первой крови, а
+    # префиксы вроде "Crimson" — на то, за кого играли.
     duration: int | None = None
     won: bool | None = None
+    first_blood_time: int | None = None
+    heroes: Mapping[int, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
