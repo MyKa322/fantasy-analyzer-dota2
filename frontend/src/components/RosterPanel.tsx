@@ -12,7 +12,7 @@ import {
 import { api, type RosterResponse } from "../api";
 import { ROLE_LABEL, teamCrest } from "../assets";
 import PlayerPortrait from "./PlayerPortrait";
-import { Button, Field, Notice, Panel, Stat, selectClass } from "./ui";
+import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
 export default function RosterPanel() {
   const [data, setData] = useState<RosterResponse | null>(null);
@@ -157,11 +157,7 @@ export default function RosterPanel() {
                   width={120}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: "#16181e",
-                    border: "1px solid #2a2e3a",
-                    fontSize: 12,
-                  }}
+                  {...chartTooltip}
                   formatter={(value) => Math.round(Number(value)).toLocaleString("ru")}
                 />
                 <Bar dataKey="mean" radius={[0, 3, 3, 0]}>

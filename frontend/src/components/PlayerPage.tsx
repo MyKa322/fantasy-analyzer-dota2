@@ -14,7 +14,7 @@ import { games, winRate } from "../profiles";
 import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
 import PlayerPortrait from "./PlayerPortrait";
 import { AVERAGE_LABEL, MatchTable, StatGrid, UNIT_LABEL, formatNumber } from "./profileBits";
-import { Button, Notice, Panel, Stat } from "./ui";
+import { Button, Notice, Panel, Stat, chartTooltip } from "./ui";
 
 export default function PlayerPage({
   accountId,
@@ -190,15 +190,14 @@ export default function PlayerPage({
                 width={140}
               />
               <Tooltip
+                {...chartTooltip}
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                contentStyle={{
-                  background: "#16181C",
-                  border: "1px solid #2C3138",
-                  fontSize: 12,
-                }}
+                // Имя героя уже стоит заголовком подсказки — во второй раз в
+                // строке оно ни к чему, поэтому и разделитель пустой.
+                separator=""
                 formatter={(value, _name, item) => [
                   `${games(Number(value))} · ${Math.round((item.payload.rate ?? 0) * 100)}% побед`,
-                  item.payload.name,
+                  "",
                 ]}
               />
               <Bar dataKey="games" radius={[0, 3, 3, 0]}>

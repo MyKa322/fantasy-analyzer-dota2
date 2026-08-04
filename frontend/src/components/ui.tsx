@@ -118,6 +118,29 @@ export function Stat({
   );
 }
 
+/**
+ * Оформление всплывающей подсказки на графиках.
+ *
+ * Recharts рисует заголовок и строки подсказки чёрным независимо от фона, и
+ * одним `contentStyle` это не лечится: заголовок берёт цвет из `labelStyle`, а
+ * строки — из `itemStyle`. На тёмной панели без них получается чёрное по
+ * тёмному, то есть пустой прямоугольник.
+ *
+ * Курсор здесь не задаётся намеренно: у столбиковых диаграмм это заливка, у
+ * линейных — вертикальная линия, и общего значения у них нет.
+ */
+export const chartTooltip = {
+  contentStyle: {
+    background: "#16181e",
+    border: "1px solid #2a2e3a",
+    borderRadius: 4,
+    fontSize: 12,
+    color: "#e5e5e5",
+  },
+  labelStyle: { color: "#c8a24a", marginBottom: 2 },
+  itemStyle: { color: "#d4d4d4", padding: 0 },
+} as const;
+
 export const COLOR_CLASS: Record<string, string> = {
   red: "text-red-400",
   blue: "text-sky-400",

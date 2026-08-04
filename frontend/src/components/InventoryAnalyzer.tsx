@@ -18,7 +18,7 @@ import {
 import { GROUP_COLOR, QUALITY_LABEL, ROLE_LABEL, TRAIT_LABEL, teamCrest } from "../assets";
 import EmblemCard from "./EmblemCard";
 import PlayerPortrait from "./PlayerPortrait";
-import { Button, Field, Notice, Panel, Stat, selectClass } from "./ui";
+import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
 const QUALITIES = ["tier_1", "tier_2", "tier_3", "tier_4", "tier_5"];
 const TRAITS = ["fractal", "benevolent", "vampiric", "unique", "friendly"];
@@ -341,11 +341,7 @@ export default function InventoryAnalyzer() {
                   />
                   <Tooltip
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                    contentStyle={{
-                      background: "#16181C",
-                      border: "1px solid #2C3138",
-                      fontSize: 12,
-                    }}
+                    {...chartTooltip}
                     formatter={(value) => Math.round(Number(value)).toLocaleString("ru")}
                   />
                   <Bar dataKey="points" radius={[0, 3, 3, 0]}>

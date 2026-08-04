@@ -16,7 +16,7 @@ import { games, winRate } from "../profiles";
 import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
 import PlayerPortrait from "./PlayerPortrait";
 import { AVERAGE_LABEL, MatchTable, StatGrid, UNIT_LABEL, formatNumber } from "./profileBits";
-import { Button, Notice, Panel, Stat } from "./ui";
+import { Button, Notice, Panel, Stat, chartTooltip } from "./ui";
 
 const TEAM_AVERAGE_LABEL: Record<string, string> = {
   ...UNIT_LABEL,
@@ -173,11 +173,7 @@ export default function TeamPage({
               <XAxis dataKey="d" stroke="#7C858F" fontSize={10} minTickGap={40} />
               <YAxis stroke="#7C858F" fontSize={11} width={50} domain={["auto", "auto"]} />
               <Tooltip
-                contentStyle={{
-                  background: "#16181C",
-                  border: "1px solid #2C3138",
-                  fontSize: 12,
-                }}
+                {...chartTooltip}
                 formatter={(value, name) =>
                   Array.isArray(value)
                     ? [`${Math.round(value[0])} – ${Math.round(value[1])}`, "разброс"]

@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import { api, type RatingHistory, type Team } from "../api";
-import { Button, Notice, Panel } from "./ui";
+import { Button, Notice, Panel, chartTooltip } from "./ui";
 
 export default function TeamsPanel() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -139,11 +139,7 @@ export default function TeamsPanel() {
               <XAxis dataKey="date" stroke="#6b7280" fontSize={11} />
               <YAxis stroke="#6b7280" fontSize={11} domain={["auto", "auto"]} />
               <Tooltip
-                contentStyle={{
-                  background: "#16181e",
-                  border: "1px solid #2a2e3a",
-                  fontSize: 12,
-                }}
+                {...chartTooltip}
               />
               <Line type="monotone" dataKey="high" stroke="#3f4451" dot={false} />
               <Line type="monotone" dataKey="rating" stroke="#c8a24a" strokeWidth={2} dot={false} />

@@ -26,7 +26,7 @@ import {
 import { GROUP_COLOR, ROLE_LABEL, teamCrest } from "../assets";
 import EmblemCard from "./EmblemCard";
 import PlayerPortrait from "./PlayerPortrait";
-import { Button, Field, Notice, Panel, Stat, selectClass } from "./ui";
+import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
 const ROLES = ["core", "mid", "support"];
 const QUALITIES = ["tier_1", "tier_2", "tier_3", "tier_4", "tier_5"];
@@ -355,11 +355,7 @@ export default function EmblemAnalyzer() {
                   />
                   <Tooltip
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                    contentStyle={{
-                      background: "#16181C",
-                      border: "1px solid #2C3138",
-                      fontSize: 12,
-                    }}
+                    {...chartTooltip}
                     formatter={(value) => Math.round(Number(value)).toLocaleString("ru")}
                   />
                   <Bar
@@ -460,11 +456,7 @@ export default function EmblemAnalyzer() {
                     <XAxis dataKey="d" stroke="#7C858F" fontSize={10} minTickGap={40} />
                     <YAxis stroke="#7C858F" fontSize={11} width={50} />
                     <Tooltip
-                      contentStyle={{
-                        background: "#16181C",
-                        border: "1px solid #2C3138",
-                        fontSize: 12,
-                      }}
+                      {...chartTooltip}
                       formatter={(value, name) => [
                         Math.round(Number(value)).toLocaleString("ru"),
                         name === "p" ? "карта" : "среднее по 5",
