@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Base, Match, Player, PlayerMatchStat, Team, TeamRosterSlot
@@ -548,3 +549,37 @@ def test_no_filtering_without_a_marked_roster(session):
 
     history = build_role_history(session, LIQUID, "core", (101, 102))
     assert len(history.games) == 8 + 4
+
+
+def test_marking_stamps_compendium_name_from_config(empty_session):
+    """Регрессия: снапшот уезжал вообще без команд.
+
+    Название компендиума проставляла только ручная команда `resolve-teams`, а
+    автоматика собирала базу с нуля и её не запускала. Роли и рейтинги при этом
+    считались, поэтому поломка была не видна до самой страницы: выбор команды в
+    анализаторе эмблем оказывался пустым.
+    """
+    seed(empty_session)
+    empty_session.get(Team, LIQUID).compendium_name = None  # база после ingest
+    empty_session.flush()
+
+    mark_ti_participants(empty_session)
+
+    assert empty_session.get(Team, LIQUID).compendium_name == "Team Liquid"
+    marked = empty_session.scalars(
+        select(Team.team_id).where(Team.compendium_name.is_not(None))
+    ).all()
+    assert LIQUID in marked
+
+
+def test_marking_keeps_manual_name(empty_session):
+    seed(empty_session)
+    mark_ti_participants(empty_session)
+    assert empty_session.get(Team, LIQUID).compendium_name == "Team Liquid"
+
+
+def test_marking_warns_about_a_team_without_matches(empty_session, caplog):
+    """Участник без единого матча — повод предупредить, но не падать."""
+    with caplog.at_level(logging.WARNING):
+        mark_ti_participants(empty_session)
+    assert "нет ни одного матча" in caplog.text

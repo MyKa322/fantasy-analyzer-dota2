@@ -394,6 +394,16 @@ def mark_ti_participants(
 
     result: dict[str, dict[str, tuple[int, ...]]] = {}
     for team_id, name in teams.items():
+        # Название компендиума проставляется здесь, а не только при ручном
+        # `resolve-teams`: связка «team_id -> участник TI15» задана конфигом и
+        # сомнений не вызывает, а без метки команда выпадает из выгрузки — база,
+        # собранная автоматикой с нуля, оказывалась вообще без участников.
+        team = session.get(Team, team_id)
+        if team is None:
+            log.warning("команда %s (%s) не найдена в базе — нет ни одного матча", name, team_id)
+        elif team.compendium_name != name:
+            team.compendium_name = name
+
         roles = infer_team_roles(session, team_id, since=since, min_games=min_games)
         if name in overrides:
             roles = _apply_roster_override(session, team_id, name, roles, overrides[name])

@@ -498,6 +498,22 @@ def main() -> int:
             other_matches=max(5, args.profile_matches // 2),
         )
 
+    # Снапшот без команд формально валиден, но страница по нему пустая: не из
+    # чего выбрать в анализаторе эмблем и некого показать в профилях. Такое уже
+    # уезжало в деплой незаметно, поэтому лучше уронить прогон, чем опубликовать.
+    problems = []
+    if not snapshot["teams"]:
+        problems.append("в выгрузке нет ни одной команды-участницы")
+    if not snapshot["roles"]:
+        problems.append("в выгрузке нет ни одной роли")
+    if problems:
+        log.error("снапшот не записан: %s", "; ".join(problems))
+        log.error(
+            "участники размечаются командой `python tools/cli.py ingest-ti` — "
+            "она проставляет и названия компендиума, и составы по ролям"
+        )
+        return 1
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     write(args.output, snapshot)
     log.info(
