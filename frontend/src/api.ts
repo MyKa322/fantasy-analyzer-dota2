@@ -65,6 +65,7 @@ export interface PredictionPick {
   key: string;
   pick: string;
   label: string | null;
+  team_id?: number | null;
 }
 
 export interface GroupPrediction {
@@ -692,6 +693,7 @@ const staticApi: typeof live = {
         pick: p.bucket,
         label:
           snapshot.group?.buckets.find((b) => b.key === p.bucket)?.label ?? p.bucket,
+        team_id: p.team_id,
       })),
       expected_points: snapshot.group.expected_points,
       expected_correct: snapshot.group.expected_correct,

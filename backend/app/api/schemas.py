@@ -45,6 +45,8 @@ class PredictionPickOut(BaseModel):
     key: str
     pick: str
     label: str | None = None
+    # Чтобы связать ставку со строкой таблицы вероятностей, не сверяя названия.
+    team_id: int | None = None
 
 
 class GroupPredictionOut(BaseModel):

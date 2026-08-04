@@ -83,6 +83,13 @@ export default function TeamPage({
     [snapshot, teamId],
   );
   const buckets = snapshot?.group?.buckets ?? [];
+  // На какую корзину мы ставим именно эту команду. Показывать вероятности без
+  // ставки — значит оставить читателя гадать, почему рекомендация расходится с
+  // самым вероятным исходом.
+  const pick = useMemo(
+    () => snapshot?.group?.plan.find((p) => p.team_id === teamId)?.bucket ?? null,
+    [snapshot, teamId],
+  );
 
   if (error) {
     return (
@@ -281,20 +288,40 @@ export default function TeamPage({
                 {buckets.map((bucket) => (
                   <span
                     key={bucket.key}
-                    className="rounded border border-[#2C3138] px-2 py-1 text-neutral-400"
-                    title={bucket.description}
+                    className={`rounded border px-2 py-1 ${
+                      pick === bucket.key
+                        ? "border-[#c8a24a] bg-[#1f1c14] text-[#c8a24a]"
+                        : "border-[#2C3138] text-neutral-400"
+                    }`}
+                    title={
+                      pick === bucket.key
+                        ? `${bucket.description} — наша ставка на эту команду`
+                        : bucket.description
+                    }
                   >
                     {bucket.label}{" "}
-                    <span className="tabular text-neutral-200">
+                    <span
+                      className={`tabular ${pick === bucket.key ? "" : "text-neutral-200"}`}
+                    >
                       {Math.round((group.probabilities[bucket.key] ?? 0) * 100)}%
                     </span>
+                    {pick === bucket.key && <span className="ml-1">· ставка</span>}
                   </span>
                 ))}
-                <span className="rounded border border-[#c8a24a] px-2 py-1 text-[#c8a24a]">
+                <span className="rounded border border-[#2C3138] px-2 py-1 text-emerald-400">
                   проходит дальше{" "}
                   <span className="tabular">{Math.round(group.advance * 100)}%</span>
                 </span>
               </div>
+
+              {pick && (
+                <p className="mt-2 text-[11px] text-neutral-500">
+                  Ставка не обязана совпадать с самым вероятным исходом команды: слотов в
+                  каждой корзине фиксированное число ({buckets.map((b) => b.slots).join("/")}),
+                  и расстановка подбирается целиком, под максимум угаданных, а не по каждой
+                  команде отдельно.
+                </p>
+              )}
             </div>
           )}
         </Panel>

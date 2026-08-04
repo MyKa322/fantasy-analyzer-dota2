@@ -43,6 +43,15 @@ export default function GroupPanel() {
 
   const buckets = config?.buckets ?? [];
 
+  // Ставка по каждой команде — чтобы отметить её прямо в таблице вероятностей.
+  // Иначе рекомендация выглядит противоречием: у Team Yandex 4-1 вероятнее, чем
+  // 4-0, а ставим мы на 4-0.
+  const pickByTeam = new Map<number, string>(
+    (prediction?.plan ?? [])
+      .filter((pick) => pick.team_id != null)
+      .map((pick) => [pick.team_id as number, pick.pick]),
+  );
+
   return (
     <div className="space-y-4">
       <Panel
@@ -126,10 +135,18 @@ export default function GroupPanel() {
                       <td className="py-1.5">{team.name ?? team.team_id}</td>
                       {buckets.map((b) => {
                         const value = team.probabilities[b.key] ?? 0;
+                        const picked = pickByTeam.get(team.team_id) === b.key;
                         return (
                           <td key={b.key} className="px-1 py-1 text-center">
                             <span
-                              className={`tabular inline-block w-14 rounded px-1 py-0.5 text-xs ${heat(value)}`}
+                              title={
+                                picked
+                                  ? "Наша ставка на эту команду"
+                                  : `${b.label}: ${(value * 100).toFixed(1)}%`
+                              }
+                              className={`tabular inline-block w-14 rounded px-1 py-0.5 text-xs ${heat(value)} ${
+                                picked ? "ring-2 ring-[#c8a24a] ring-offset-1 ring-offset-[#16181e]" : ""
+                              }`}
                             >
                               {(value * 100).toFixed(1)}%
                             </span>
@@ -152,6 +169,16 @@ export default function GroupPanel() {
               {prediction.simulations.toLocaleString("ru")} разыгранных турниров. Вероятности
               суммируются в 100% по каждой команде: корзины — это взаимоисключающие исходы,
               а не отдельные ставки.
+            </p>
+            <p className="mt-1 text-[11px] text-neutral-500">
+              <span className="mr-1 inline-block rounded px-1 ring-2 ring-[#c8a24a]">
+                обведена
+              </span>
+              корзина, на которую мы ставим. Это не всегда самый вероятный исход команды:
+              слотов фиксированное число ({buckets.map((b) => b.slots).join("/")}), и каждый
+              нужно кем-то занять. Единственный слот 4-0 достаётся тому, у кого шанс на него
+              выше всех из шестнадцати, даже если ей самой вероятнее закончить 4-1 — иначе
+              этот слот уйдёт команде с меньшим шансом, и суммарно угаданных станет меньше.
             </p>
           </>
         )}

@@ -278,6 +278,7 @@ def predict_group(
                 key=str(names.get(int(team), team)),
                 pick=str(bucket),
                 label=bucket_labels.get(str(bucket)),
+                team_id=int(team),
             )
             for team, bucket in plan.assignment.items()
         ],
