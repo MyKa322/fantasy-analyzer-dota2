@@ -24,18 +24,19 @@ import {
   type Team,
   type TitleAdvice,
 } from "../api";
-import { GROUP_COLOR, ROLE_LABEL, teamCrest } from "../assets";
+import { GROUP_COLOR, ROLES, teamCrest } from "../assets";
+import { useT } from "../i18n";
 import EmblemCard from "./EmblemCard";
 import HeroPool from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
 import TitleTable from "./TitleTable";
 import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
-const ROLES = ["core", "mid", "support"];
 const QUALITIES = ["tier_1", "tier_2", "tier_3", "tier_4", "tier_5"];
 const TRAITS = ["fractal", "benevolent", "vampiric", "unique", "friendly"];
 
 export default function EmblemAnalyzer() {
+  const { t, tryT, tp, n, role: roleLabel } = useT();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamId, setTeamId] = useState<number | null>(null);
   const [role, setRole] = useState("core");
@@ -181,11 +182,11 @@ export default function EmblemAnalyzer() {
   return (
     <div className="space-y-4">
       <Panel
-        title="Анализатор эмблем"
-        subtitle="Цвет каждого слота задан ролью и не рероллится — меняются только стат внутри цвета, качество и трейт. Перебор идёт по всем комбинациям сразу, потому что трейты зависят друг от друга."
+        title={t("emblems.title")}
+        subtitle={t("emblems.subtitle")}
         actions={
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Команда">
+            <Field label={t("common.team")}>
               <select
                 className={selectClass}
                 value={teamId ?? ""}
@@ -198,7 +199,7 @@ export default function EmblemAnalyzer() {
                 ))}
               </select>
             </Field>
-            <Field label="Роль">
+            <Field label={t("common.role")}>
               <select
                 className={selectClass}
                 value={role}
@@ -206,13 +207,13 @@ export default function EmblemAnalyzer() {
               >
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
-                    {ROLE_LABEL[r]}
+                    {roleLabel(r)}
                   </option>
                 ))}
               </select>
             </Field>
             <Button onClick={analyse} disabled={busy || teamId == null}>
-              {busy ? "Считаю…" : "Подобрать эмблемы"}
+              {busy ? t("common.calculating") : t("emblems.run")}
             </Button>
           </div>
         }
@@ -223,14 +224,14 @@ export default function EmblemAnalyzer() {
             checked={restrict}
             onChange={(e) => setRestrict(e.target.checked)}
           />
-          Искать только среди того, что выпало из роллов
+          {t("emblems.restrict")}
         </label>
 
         {restrict && (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
               <div className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
-                Доступные качества
+                {t("emblems.qualities")}
               </div>
               <div className="flex flex-wrap gap-1">
                 {QUALITIES.map((q) => (
@@ -250,20 +251,21 @@ export default function EmblemAnalyzer() {
             </div>
             <div>
               <div className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
-                Доступные трейты
+                {t("emblems.traits")}
               </div>
               <div className="flex flex-wrap gap-1">
-                {TRAITS.map((t) => (
+                {TRAITS.map((trait) => (
                   <button
-                    key={t}
-                    onClick={() => toggle(traits, t, setTraits)}
+                    key={trait}
+                    onClick={() => toggle(traits, trait, setTraits)}
+                    title={tryT(`trait.${trait}.description`, trait)}
                     className={`rounded border px-2 py-1 text-[11px] ${
-                      traits.includes(t)
+                      traits.includes(trait)
                         ? "border-[#c8a24a] text-[#c8a24a]"
                         : "border-[#2C3138] text-neutral-500"
                     }`}
                   >
-                    {t}
+                    {trait}
                   </button>
                 ))}
               </div>
@@ -278,7 +280,7 @@ export default function EmblemAnalyzer() {
         )}
         {!best && !error && !busy && (
           <div className="mt-3">
-            <Notice>Выберите команду и роль, затем нажмите «Подобрать эмблемы».</Notice>
+            <Notice>{t("emblems.empty")}</Notice>
           </div>
         )}
       </Panel>
@@ -286,8 +288,8 @@ export default function EmblemAnalyzer() {
       {best && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           <Panel
-            title="Лучший War Banner"
-            subtitle={`${ROLE_LABEL[best.role]} · ${best.player_names.join(" & ")}`}
+            title={t("emblems.best")}
+            subtitle={`${roleLabel(best.role)} · ${best.player_names.join(" & ")}`}
           >
             <div className="mb-3 flex items-center gap-3">
               {teamCrest(teamName) && (
@@ -307,33 +309,22 @@ export default function EmblemAnalyzer() {
             </div>
 
             <div className="mt-3 grid grid-cols-3 gap-2">
+              <Stat label={t("common.perMap")} value={n(best.expected_card_points)} />
               <Stat
-                label="За карту"
-                value={Math.round(best.expected_card_points).toLocaleString("ru")}
+                label={t("common.perPeriod")}
+                value={best.period_mean ? n(best.period_mean) : "—"}
+                hint={t("common.topTwoMaps")}
               />
               <Stat
-                label="За период"
-                value={
-                  best.period_mean
-                    ? Math.round(best.period_mean).toLocaleString("ru")
-                    : "—"
-                }
-                hint="топ-2 карты лучшей серии"
-              />
-              <Stat
-                label="Потолок"
-                value={
-                  best.period_ceiling
-                    ? Math.round(best.period_ceiling).toLocaleString("ru")
-                    : "—"
-                }
+                label={t("common.ceiling")}
+                value={best.period_ceiling ? n(best.period_ceiling) : "—"}
               />
             </div>
 
             {advices.length > 1 && (
               <div className="mt-4">
                 <div className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
-                  Альтернативы
+                  {t("emblems.alternatives")}
                 </div>
                 {advices.slice(1).map((a, i) => (
                   <div
@@ -344,7 +335,7 @@ export default function EmblemAnalyzer() {
                       {a.slots.map((s) => s.label).join(" · ")}
                     </span>
                     <span className="tabular text-neutral-300">
-                      {Math.round(a.expected_card_points).toLocaleString("ru")}
+                      {n(a.expected_card_points)}
                     </span>
                   </div>
                 ))}
@@ -354,8 +345,8 @@ export default function EmblemAnalyzer() {
 
           <div className="space-y-4">
             <Panel
-              title="Что стоит каждый стат"
-              subtitle="Не цена из глоссария, а цена, умноженная на объём: сколько очков стат приносит именно этим игрокам. Нажмите на столбец — покажу, кто в этом лучший на TI."
+              title={t("emblems.statsTitle")}
+              subtitle={t("emblems.statsSubtitle")}
             >
               <ResponsiveContainer width="100%" height={Math.max(240, chartData.length * 30)}>
                 <BarChart data={chartData} layout="vertical" margin={{ left: 30 }}>
@@ -370,7 +361,7 @@ export default function EmblemAnalyzer() {
                   <Tooltip
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
                     {...chartTooltip}
-                    formatter={(value) => Math.round(Number(value)).toLocaleString("ru")}
+                    formatter={(value) => n(Number(value))}
                   />
                   <Bar
                     dataKey="base_points"
@@ -388,19 +379,16 @@ export default function EmblemAnalyzer() {
               <table className="mt-2 w-full text-xs">
                 <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                   <tr>
-                    <th className="py-1 text-left">Стат</th>
-                    <th className="py-1 text-right">За карту</th>
-                    <th className="py-1 text-right" title="Доля карт, где стат вообще был">
-                      Карт со статом
+                    <th className="py-1 text-left">{t("common.stat")}</th>
+                    <th className="py-1 text-right">{t("common.perMap")}</th>
+                    <th className="py-1 text-right" title={t("common.mapsWithStatHint")}>
+                      {t("common.mapsWithStat")}
                     </th>
-                    <th className="py-1 text-right">Медиана</th>
-                    <th className="py-1 text-right">Очков</th>
-                    <th className="py-1 text-right">Потолок</th>
-                    <th
-                      className="py-1 text-right"
-                      title="Последние 30 дней к предыдущим 60"
-                    >
-                      Форма
+                    <th className="py-1 text-right">{t("common.median")}</th>
+                    <th className="py-1 text-right">{t("common.points")}</th>
+                    <th className="py-1 text-right">{t("common.ceiling")}</th>
+                    <th className="py-1 text-right" title={t("common.formHint")}>
+                      {t("common.form")}
                     </th>
                   </tr>
                 </thead>
@@ -415,27 +403,26 @@ export default function EmblemAnalyzer() {
                         {s.label}
                       </td>
                       <td className="tabular py-1 text-right text-neutral-400">
-                        {s.units_per_game.toLocaleString("ru", {
-                          maximumFractionDigits: 2,
-                        })}
+                        {n(s.units_per_game, 2)}
                       </td>
                       <td className="tabular py-1 text-right text-neutral-500">
                         {s.hit_rate != null ? `${Math.round(s.hit_rate * 100)}%` : "—"}
                       </td>
                       <td className="tabular py-1 text-right text-neutral-400">
-                        {s.median_points != null
-                          ? Math.round(s.median_points).toLocaleString("ru")
-                          : "—"}
+                        {s.median_points != null ? n(s.median_points) : "—"}
                       </td>
                       <td className="tabular py-1 text-right text-neutral-200">
-                        {Math.round(s.base_points).toLocaleString("ru")}
+                        {n(s.base_points)}
                       </td>
                       <td className="tabular py-1 text-right text-neutral-500">
-                        {Math.round(s.p95_points).toLocaleString("ru")}
+                        {n(s.p95_points)}
                       </td>
                       <td className="tabular py-1 text-right">
                         {s.trend == null ? (
-                          <span className="text-neutral-600" title="карт для сравнения мало">
+                          <span
+                            className="text-neutral-600"
+                            title={t("common.formNoSample")}
+                          >
                             —
                           </span>
                         ) : (
@@ -461,8 +448,10 @@ export default function EmblemAnalyzer() {
 
             {formData.length > 3 && (
               <Panel
-                title="Форма по картам"
-                subtitle={`Очки за каждую карту с нейтральным баннером (${timeline?.banner.map((e) => e.stat).join(", ")}). Линия — среднее по пяти последним. В зачёт идут две лучшие карты серии, поэтому важен не только уровень, но и разброс.`}
+                title={t("emblems.formTitle")}
+                subtitle={t("emblems.formSubtitle", {
+                  banner: (timeline?.banner ?? []).map((e) => e.stat).join(", "),
+                })}
               >
                 <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={formData} margin={{ left: 10, right: 10 }}>
@@ -472,8 +461,8 @@ export default function EmblemAnalyzer() {
                     <Tooltip
                       {...chartTooltip}
                       formatter={(value, name) => [
-                        Math.round(Number(value)).toLocaleString("ru"),
-                        name === "p" ? "карта" : "среднее по 5",
+                        n(Number(value)),
+                        name === "p" ? t("emblems.formMap") : t("emblems.formAvg"),
                       ]}
                     />
                     <ReferenceLine
@@ -481,7 +470,7 @@ export default function EmblemAnalyzer() {
                       stroke="#c8a24a"
                       strokeDasharray="4 4"
                       label={{
-                        value: "среднее",
+                        value: t("common.average"),
                         fill: "#c8a24a",
                         fontSize: 10,
                         position: "insideTopRight",
@@ -508,18 +497,18 @@ export default function EmblemAnalyzer() {
 
             {playerRows.length > 0 && players.length > 1 && (
               <Panel
-                title="Кто в паре что делает"
-                subtitle="В зачёт идёт среднее по игрокам роли, поэтому пара, где всё делает один, стоит столько же, сколько пара, где оба, — но проваливается заметнее, если этот один сыграет плохо."
+                title={t("emblems.pairTitle")}
+                subtitle={t("emblems.pairSubtitle")}
               >
                 <table className="w-full text-xs">
                   <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                     <tr>
-                      <th className="py-1 text-left">Стат</th>
+                      <th className="py-1 text-left">{t("common.stat")}</th>
                       {players.map((p) => (
                         <th key={p.account_id} className="py-1 text-right">
                           {p.name ?? p.account_id}
                           <div className="text-[10px] normal-case text-neutral-600">
-                            {p.games} карт
+                            {tp("plural.maps", p.games)}
                           </div>
                         </th>
                       ))}
@@ -544,11 +533,7 @@ export default function EmblemAnalyzer() {
                                   : "text-neutral-500"
                               }`}
                             >
-                              {cell
-                                ? cell.units_per_game.toLocaleString("ru", {
-                                    maximumFractionDigits: 2,
-                                  })
-                                : "—"}
+                              {cell ? n(cell.units_per_game, 2) : "—"}
                             </td>
                           ))}
                         </tr>
@@ -560,7 +545,7 @@ export default function EmblemAnalyzer() {
                 {bannerShare.length > 1 && (
                   <div className="mt-3 space-y-1">
                     <div className="text-[11px] tracking-wide text-neutral-500 uppercase">
-                      Вклад в очки этого баннера
+                      {t("emblems.bannerShare")}
                     </div>
                     {bannerShare.map((entry) => (
                       <div key={entry.name} className="flex items-center gap-2 text-xs">
@@ -583,16 +568,16 @@ export default function EmblemAnalyzer() {
 
             {rankedStat && ranking.length > 0 && (
               <Panel
-                title={`Кто лучший: ${ranking[0].stat}`}
-                subtitle="Среди всех команд TI15 в этой роли — по базовым очкам за карту."
+                title={t("emblems.rankingTitle", { stat: ranking[0].stat })}
+                subtitle={t("emblems.rankingSubtitle")}
               >
                 <table className="w-full text-xs">
                   <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                     <tr>
-                      <th className="py-1 text-left">Команда</th>
-                      <th className="py-1 text-left">Игроки</th>
-                      <th className="py-1 text-right">За карту</th>
-                      <th className="py-1 text-right">Очков</th>
+                      <th className="py-1 text-left">{t("common.team")}</th>
+                      <th className="py-1 text-left">{t("common.players")}</th>
+                      <th className="py-1 text-right">{t("common.perMap")}</th>
+                      <th className="py-1 text-right">{t("common.points")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -617,13 +602,9 @@ export default function EmblemAnalyzer() {
                           {r.player_names.join(", ")}
                         </td>
                         <td className="tabular py-1 text-right">
-                          {r.units_per_game.toLocaleString("ru", {
-                            maximumFractionDigits: 2,
-                          })}
+                          {n(r.units_per_game, 2)}
                         </td>
-                        <td className="tabular py-1 text-right">
-                          {Math.round(r.base_points).toLocaleString("ru")}
-                        </td>
+                        <td className="tabular py-1 text-right">{n(r.base_points)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -633,8 +614,8 @@ export default function EmblemAnalyzer() {
 
             {heroes.length > 0 && (
               <Panel
-                title="Кого берёт эта роль"
-                subtitle="Пул героев за период. От него зависят префиксы титулов: каждый даёт процент за героя из своего списка."
+                title={t("emblems.heroesTitle")}
+                subtitle={t("emblems.heroesSubtitle")}
               >
                 <HeroPool heroes={heroes} names={rosterNames} limit={10} />
               </Panel>
@@ -643,7 +624,7 @@ export default function EmblemAnalyzer() {
             {titles.length > 0 && (
               <Panel
                 title="Coaching Titles"
-                subtitle="Титулы меняются бесплатно, поэтому их стоит подбирать под конкретную роль."
+                subtitle={t("emblems.titlesSubtitle")}
               >
                 <TitleTable titles={titles} limit={10} />
               </Panel>

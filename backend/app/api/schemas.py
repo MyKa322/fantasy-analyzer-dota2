@@ -323,6 +323,10 @@ class TitleAdviceOut(BaseModel):
     expected_bonus: float | None
     estimator: str
     note: str
+    # Пояснение ключом словаря интерфейса и числа к нему: страница переведена на
+    # четыре языка, и собрать фразу из готовой русской строки нельзя.
+    note_key: str = ""
+    note_params: dict[str, float | int | str] = {}
 
 
 # --- профили команд и игроков -------------------------------------------------

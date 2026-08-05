@@ -1,24 +1,29 @@
 import { useState } from "react";
 import { api } from "../api";
+import { useT } from "../i18n";
 import { Button, Field, Notice, Panel, selectClass } from "./ui";
 
 export default function DataPanel() {
+  const { t, locale } = useT();
   const [daysBack, setDaysBack] = useState(30);
   const [teamId, setTeamId] = useState("");
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   const append = (line: string) =>
-    setLog((current) => [`${new Date().toLocaleTimeString("ru")} — ${line}`, ...current]);
+    setLog((current) => [
+      `${new Date().toLocaleTimeString(locale)} — ${line}`,
+      ...current,
+    ]);
 
   const run = async (label: string, action: () => Promise<unknown>) => {
     setBusy(true);
-    append(`${label}: старт`);
+    append(t("data.started", { label }));
     try {
       const result = await action();
       append(`${label}: ${JSON.stringify(result)}`);
     } catch (e) {
-      append(`${label}: ошибка — ${(e as Error).message}`);
+      append(t("data.failed", { label, message: (e as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -26,12 +31,9 @@ export default function DataPanel() {
 
   return (
     <div className="space-y-4">
-      <Panel
-        title="Загрузка данных"
-        subtitle="OpenDota без ключа: 60 запросов в минуту, 2000 в сутки. Тела матчей кэшируются на диск, повторный запуск лимит не тратит."
-      >
+      <Panel title={t("data.title")} subtitle={t("data.subtitle")}>
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Глубина, дней">
+          <Field label={t("data.days")}>
             <select
               className={selectClass}
               value={daysBack}
@@ -44,54 +46,55 @@ export default function DataPanel() {
             </select>
           </Field>
           <Button
-            onClick={() => run("Лента про-матчей", () => api.ingestProFeed(daysBack, 10))}
+            onClick={() =>
+              run(t("data.proFeedLabel"), () => api.ingestProFeed(daysBack, 10))
+            }
             disabled={busy}
           >
-            Загрузить про-матчи
+            {t("data.proFeed")}
           </Button>
           <Button
             variant="ghost"
-            onClick={() => run("Сопоставление команд TI15", () => api.resolveTeams())}
+            onClick={() => run(t("data.resolveLabel"), () => api.resolveTeams())}
             disabled={busy}
           >
-            Сопоставить участников TI15
+            {t("data.resolve")}
           </Button>
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-3">
-          <Field label="ID команды" hint="OpenDota team_id — берётся из сопоставления выше">
+          <Field label={t("data.teamId")} hint={t("data.teamIdHint")}>
             <input
               className={selectClass}
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
-              placeholder="например 2163"
+              placeholder={t("data.teamIdPlaceholder")}
             />
           </Field>
           <Button
             variant="ghost"
             onClick={() =>
-              run(`История команды ${teamId}`, () =>
+              run(t("data.teamHistoryLabel", { id: teamId }), () =>
                 api.ingestTeam(Number(teamId), Math.max(daysBack, 120)),
               )
             }
             disabled={busy || !teamId}
           >
-            Загрузить историю команды
+            {t("data.loadTeam")}
           </Button>
         </div>
 
         <div className="mt-4">
           <Notice kind="warn">
-            Для проекций Fantasy годятся только матчи с разобранным реплеем — в
-            остальных нет вардов, станов и участия в файтах. В ответе это поле
+            {t("data.parsedWarning")}
             <code className="mx-1 text-neutral-300">unparsed</code>.
           </Notice>
         </div>
       </Panel>
 
-      <Panel title="Журнал">
+      <Panel title={t("data.log")}>
         {log.length === 0 ? (
-          <p className="text-sm text-neutral-500">Пока пусто</p>
+          <p className="text-sm text-neutral-500">{t("data.logEmpty")}</p>
         ) : (
           <pre className="max-h-80 overflow-y-auto text-xs whitespace-pre-wrap text-neutral-300">
             {log.join("\n")}

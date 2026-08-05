@@ -184,6 +184,8 @@ def _titles(advice) -> list[dict]:
             else None,
             "estimator": t.estimator,
             "note": t.note,
+            "note_key": t.note_key,
+            "note_params": dict(t.note_params),
         }
         for t in advice
     ]

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type PlayerListItem, type TeamListItem } from "../api";
-import { ROLE_LABEL, teamCrest } from "../assets";
+import { teamCrest } from "../assets";
+import { useT } from "../i18n";
 import PlayerPortrait from "./PlayerPortrait";
 import PlayerPage from "./PlayerPage";
 import TeamPage from "./TeamPage";
-import { games } from "../profiles";
 import { Field, Notice, Panel, selectClass } from "./ui";
 
 type View =
@@ -13,6 +13,7 @@ type View =
   | { kind: "player"; id: number };
 
 export default function ProfilesPanel() {
+  const { t, tp, role: roleLabel } = useT();
   const [view, setView] = useState<View>({ kind: "list" });
   const [teams, setTeams] = useState<TeamListItem[]>([]);
   const [players, setPlayers] = useState<PlayerListItem[]>([]);
@@ -80,44 +81,45 @@ export default function ProfilesPanel() {
   return (
     <div className="space-y-4">
       <Panel
-        title="Команды и игроки"
-        subtitle="Страница любой команды и любого игрока из базы: матчи, средние, герои, рейтинг — и наш анализ по ним. Данные — разобранные матчи OpenDota за последние полгода."
+        title={t("profiles.title")}
+        subtitle={t("profiles.subtitle")}
         actions={
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Поиск">
+            <Field label={t("profiles.search")}>
               <input
                 className={selectClass}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="ник или команда"
+                placeholder={t("profiles.searchPlaceholder")}
               />
             </Field>
-            <Field label="Кого показывать">
+            <Field label={t("profiles.scope")}>
               <select
                 className={selectClass}
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
               >
-                <option value="ti">Только TI15</option>
-                <option value="all">Всех из базы</option>
+                <option value="ti">{t("profiles.scopeTi")}</option>
+                <option value="all">{t("profiles.scopeAll")}</option>
               </select>
             </Field>
           </div>
         }
       >
         {error && <Notice kind="error">{error}</Notice>}
-        {loading && !error && <Notice>Загружаю профили…</Notice>}
+        {loading && !error && <Notice>{t("profiles.loading")}</Notice>}
         {!loading && !error && (
           <p className="text-xs text-neutral-500">
-            Команд: {shownTeams.length}, игроков: {shownPlayers.length}. Соперники по
-            квалификациям попадают в базу вместе с матчами участников, поэтому список шире
-            шестнадцати команд.
+            {t("profiles.counts", {
+              teams: shownTeams.length,
+              players: shownPlayers.length,
+            })}
           </p>
         )}
       </Panel>
 
       {shownTeams.length > 0 && (
-        <Panel title="Команды">
+        <Panel title={t("common.teams")}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {shownTeams.map((team) => {
               const crest = teamCrest(team.name);
@@ -137,7 +139,7 @@ export default function ProfilesPanel() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm text-neutral-100">{team.name}</div>
                     <div className="text-[11px] text-neutral-500">
-                      {games(team.games)}
+                      {tp("plural.maps", team.games)}
                       {team.is_ti && <span className="ml-1 text-[#c8a24a]">· TI15</span>}
                     </div>
                   </div>
@@ -152,7 +154,7 @@ export default function ProfilesPanel() {
       )}
 
       {shownPlayers.length > 0 && (
-        <Panel title="Игроки">
+        <Panel title={t("common.players")}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {shownPlayers.slice(0, 150).map((player) => (
               <button
@@ -170,8 +172,8 @@ export default function ProfilesPanel() {
                     {player.name ?? player.account_id}
                   </div>
                   <div className="truncate text-[11px] text-neutral-500">
-                    {player.team_name ?? "без команды"}
-                    {player.role && ` · ${ROLE_LABEL[player.role] ?? player.role}`}
+                    {player.team_name ?? t("profiles.noTeam")}
+                    {player.role && ` · ${roleLabel(player.role)}`}
                   </div>
                 </div>
                 <div className="tabular text-right text-xs text-neutral-500">
@@ -182,7 +184,7 @@ export default function ProfilesPanel() {
           </div>
           {shownPlayers.length > 150 && (
             <p className="mt-2 text-[11px] text-neutral-500">
-              Показаны первые 150 — уточните поиск.
+              {t("profiles.truncated")}
             </p>
           )}
         </Panel>

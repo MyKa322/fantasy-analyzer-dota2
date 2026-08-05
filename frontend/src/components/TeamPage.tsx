@@ -10,21 +10,16 @@ import {
   YAxis,
 } from "recharts";
 import { api, type ProfilePlayer, type ProfileTeam } from "../api";
-import { ROLE_LABEL, teamCrest } from "../assets";
+import { teamCrest } from "../assets";
 import { optimiseBanner } from "../engine/scoring";
-import { games, winRate } from "../profiles";
+import { useT } from "../i18n";
+import { winRate } from "../profiles";
 import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
 import HeroPool, { HeroIcon } from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
 import TitleTable from "./TitleTable";
-import { AVERAGE_LABEL, MatchTable, StatGrid, UNIT_LABEL, formatNumber } from "./profileBits";
+import { MatchTable, StatGrid } from "./profileBits";
 import { Button, Notice, Panel, Stat, chartTooltip } from "./ui";
-
-const TEAM_AVERAGE_LABEL: Record<string, string> = {
-  ...UNIT_LABEL,
-  ...AVERAGE_LABEL,
-  duration: "Длительность, сек",
-};
 
 export default function TeamPage({
   teamId,
@@ -37,6 +32,7 @@ export default function TeamPage({
   onOpenPlayer: (accountId: number) => void;
   onOpenTeam: (teamId: number) => void;
 }) {
+  const { t, tp, n, nc, role: roleLabel } = useT();
   const [team, setTeam] = useState<ProfileTeam | null>(null);
   const [roster, setRoster] = useState<ProfilePlayer[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -108,18 +104,18 @@ export default function TeamPage({
 
   if (error) {
     return (
-      <Panel title="Команда">
+      <Panel title={t("common.team")}>
         <Notice kind="error">{error}</Notice>
         <div className="mt-3">
           <Button variant="ghost" onClick={onBack}>
-            ← К списку
+            {t("common.back")}
           </Button>
         </div>
       </Panel>
     );
   }
 
-  if (!team) return <Panel title="Команда">Загружаю…</Panel>;
+  if (!team) return <Panel title={t("common.team")}>{t("common.loading")}</Panel>;
 
   const crest = teamCrest(team.name);
   const losses = team.games - team.wins;
@@ -132,7 +128,7 @@ export default function TeamPage({
       <Panel
         actions={
           <Button variant="ghost" onClick={onBack}>
-            ← К списку
+            {t("common.back")}
           </Button>
         }
       >
@@ -144,29 +140,40 @@ export default function TeamPage({
               {team.tag && <span className="ml-2 text-sm text-neutral-500">[{team.tag}]</span>}
             </h2>
             <p className="text-xs text-neutral-500">
-              {team.is_ti ? "Участник TI15" : "Не участвует в TI15"} · матчи с{" "}
-              {team.first_game ?? "—"} по {team.last_game ?? "—"}
+              {team.is_ti ? t("team.isTi") : t("team.notTi")} ·{" "}
+              {t("team.period", {
+                from: team.first_game ?? "—",
+                to: team.last_game ?? "—",
+              })}
             </p>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat
-            label="Рейтинг"
-            value={team.rating ? Math.round(team.rating).toLocaleString("ru") : "—"}
-            hint={team.rd ? `± ${Math.round(team.rd)} неопределённость` : undefined}
+            label={t("common.rating")}
+            value={team.rating ? n(team.rating) : "—"}
+            hint={
+              team.rd ? t("team.rdHint", { rd: Math.round(team.rd) }) : undefined
+            }
           />
-          <Stat label="Карт" value={team.games} hint={`${team.parsed_games} с реплеем`} />
           <Stat
-            label="Победы"
+            label={t("common.mapsShort")}
+            value={team.games}
+            hint={t("team.parsedHint", { n: team.parsed_games })}
+          />
+          <Stat
+            label={t("common.wins")}
             value={`${team.wins}–${losses}`}
             hint={`${Math.round(winRate(team.wins, team.games) * 100)}%`}
           />
           <Stat
-            label="Средняя игра"
+            label={t("team.averageGame")}
             value={
               team.team_averages.duration
-                ? `${Math.round(team.team_averages.duration / 60)} мин`
+                ? t("common.minutes", {
+                    n: Math.round(team.team_averages.duration / 60),
+                  })
                 : "—"
             }
           />
@@ -174,10 +181,7 @@ export default function TeamPage({
       </Panel>
 
       {team.rating_history.length > 2 && (
-        <Panel
-          title="Рейтинг во времени"
-          subtitle="Glicko-2 пересчитывается хронологически, без заглядывания в будущее. Полоса — неопределённость RD: чем реже команда играет, тем она шире."
-        >
+        <Panel title={t("team.ratingTitle")} subtitle={t("team.ratingSubtitle")}>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart
               data={team.rating_history.map((point) => ({
@@ -194,8 +198,14 @@ export default function TeamPage({
                 {...chartTooltip}
                 formatter={(value, name) =>
                   Array.isArray(value)
-                    ? [`${Math.round(value[0])} – ${Math.round(value[1])}`, "разброс"]
-                    : [Math.round(Number(value)), name === "r" ? "рейтинг" : String(name)]
+                    ? [
+                        `${Math.round(value[0])} – ${Math.round(value[1])}`,
+                        t("team.ratingBand"),
+                      ]
+                    : [
+                        Math.round(Number(value)),
+                        name === "r" ? t("team.ratingLine") : String(name),
+                      ]
                 }
               />
               <Area dataKey="band" stroke="none" fill="#3d7fb833" />
@@ -206,17 +216,11 @@ export default function TeamPage({
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel
-          title="Кого берёт команда"
-          subtitle="Пул героев всего состава за период. Полоса — как часто берут относительно самого частого, цвет — доля побед. По этому же пулу считаются префиксы титулов."
-        >
+        <Panel title={t("team.heroesTitle")} subtitle={t("team.heroesSubtitle")}>
           <HeroPool heroes={team.heroes ?? []} names={rosterNames} limit={12} />
         </Panel>
 
-        <Panel
-          title="Состав"
-          subtitle="Порядок — по числу карт за период: стенд-ины видно, но они не вытесняют основу."
-        >
+        <Panel title={t("team.rosterTitle")} subtitle={t("team.rosterSubtitle")}>
           <div className="space-y-1">
             {roster.map((player) => (
               <button
@@ -230,17 +234,18 @@ export default function TeamPage({
                     {player.name ?? player.account_id}
                   </div>
                   <div className="text-[11px] text-neutral-500">
-                    {player.role ? (ROLE_LABEL[player.role] ?? player.role) : "роль не размечена"}
+                    {player.role ? roleLabel(player.role) : t("role.unknown")}
                   </div>
                 </div>
                 <div className="text-right text-xs">
                   <div className="tabular text-neutral-300">
-                    {formatNumber(player.fantasy_units.kills ?? 0)}/
-                    {formatNumber(player.fantasy_units.deaths ?? 0)}/
-                    {formatNumber(player.averages.assists ?? 0)}
+                    {nc(player.fantasy_units.kills ?? 0)}/
+                    {nc(player.fantasy_units.deaths ?? 0)}/
+                    {nc(player.averages.assists ?? 0)}
                   </div>
                   <div className="tabular text-[11px] text-neutral-500">
-                    {games(player.games)} · {Math.round(winRate(player.wins, player.games) * 100)}%
+                    {tp("plural.maps", player.games)} ·{" "}
+                    {Math.round(winRate(player.wins, player.games) * 100)}%
                   </div>
                 </div>
               </button>
@@ -248,42 +253,31 @@ export default function TeamPage({
           </div>
         </Panel>
 
-        <Panel
-          title="Средние за карту"
-          subtitle="Суммарно по пятерым — так читается стиль команды: сколько убивает, как фармит, сколько ставит вардов."
-        >
-          <StatGrid
-            values={team.team_averages}
-            labels={TEAM_AVERAGE_LABEL}
-            hidden={["duration"]}
-          />
+        <Panel title={t("team.averagesTitle")} subtitle={t("team.averagesSubtitle")}>
+          <StatGrid values={team.team_averages} hidden={["duration"]} />
           {team.parsed_games < team.games && (
             <p className="mt-3 text-[11px] text-neutral-500">
-              Средние считаются по {team.parsed_games} картам с разобранным реплеем из{" "}
-              {team.games}: в остальных OpenDota не отдаёт ни вардов, ни станов, и включать
-              их значило бы занизить всё сразу.
+              {t("team.averagesNote", {
+                parsed: team.parsed_games,
+                total: team.games,
+              })}
             </p>
           )}
         </Panel>
       </div>
 
       {analysis.length > 0 && (
-        <Panel
-          title="Наш анализ"
-          subtitle="То же, что на вкладке «Эмблемы», но собранное про эту команду: лучший баннер каждой роли и во что он превращается за период."
-        >
+        <Panel title={t("team.analysisTitle")} subtitle={t("team.analysisSubtitle")}>
           <div className="grid gap-3 md:grid-cols-3">
             {analysis.map((row) => (
               <div key={row.role} className="rounded border border-[#20232c] bg-[#1a1d24] p-3">
                 <div className="text-[11px] tracking-wide text-neutral-500 uppercase">
-                  {ROLE_LABEL[row.role] ?? row.role}
+                  {roleLabel(row.role)}
                 </div>
                 <div className="mt-0.5 text-sm text-neutral-100">{row.players.join(" & ")}</div>
-                <div className="tabular mt-2 text-lg text-[#c8a24a]">
-                  {Math.round(row.period).toLocaleString("ru")}
-                </div>
+                <div className="tabular mt-2 text-lg text-[#c8a24a]">{n(row.period)}</div>
                 <div className="text-[11px] text-neutral-500">
-                  за период · потолок {Math.round(row.ceiling).toLocaleString("ru")}
+                  {t("team.analysisPeriod", { ceiling: n(row.ceiling) })}
                 </div>
                 <div className="mt-2 space-y-0.5 text-[11px] text-neutral-400">
                   {row.emblems.map((slot) => (
@@ -295,12 +289,14 @@ export default function TeamPage({
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 text-[11px] text-neutral-600">{games(row.games)} в выборке</div>
+                <div className="mt-2 text-[11px] text-neutral-600">
+                  {t("team.analysisSample", { games: tp("plural.maps", row.games) })}
+                </div>
 
                 {row.heroes.length > 0 && (
                   <div className="mt-2 border-t border-[#20232c] pt-2">
                     <div className="mb-1 text-[10px] tracking-wide text-neutral-600 uppercase">
-                      Чаще всего берут
+                      {t("team.mostPicked")}
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {row.heroes.slice(0, 6).map((hero) => (
@@ -317,7 +313,7 @@ export default function TeamPage({
             <div className="mt-4">
               <div className="mb-2 flex flex-wrap items-end gap-2">
                 <span className="text-[11px] tracking-wide text-neutral-500 uppercase">
-                  Титулы по роли
+                  {t("team.titlesByRole")}
                 </span>
                 {analysis.map((row) => (
                   <button
@@ -329,7 +325,7 @@ export default function TeamPage({
                         : "border-[#2C3138] text-neutral-500"
                     }`}
                   >
-                    {ROLE_LABEL[row.role] ?? row.role}
+                    {roleLabel(row.role)}
                   </button>
                 ))}
               </div>
@@ -340,7 +336,7 @@ export default function TeamPage({
           {group && (
             <div className="mt-4">
               <div className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
-                Групповой этап: вероятности корзин
+                {t("team.bucketsTitle")}
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
                 {buckets.map((bucket) => (
@@ -353,7 +349,7 @@ export default function TeamPage({
                     }`}
                     title={
                       pick === bucket.key
-                        ? `${bucket.description} — наша ставка на эту команду`
+                        ? t("team.bucketPick", { bucket: bucket.description })
                         : bucket.description
                     }
                   >
@@ -363,21 +359,22 @@ export default function TeamPage({
                     >
                       {Math.round((group.probabilities[bucket.key] ?? 0) * 100)}%
                     </span>
-                    {pick === bucket.key && <span className="ml-1">· ставка</span>}
+                    {pick === bucket.key && (
+                      <span className="ml-1">{t("team.bucketPickTag")}</span>
+                    )}
                   </span>
                 ))}
                 <span className="rounded border border-[#2C3138] px-2 py-1 text-emerald-400">
-                  проходит дальше{" "}
+                  {t("team.advances")}{" "}
                   <span className="tabular">{Math.round(group.advance * 100)}%</span>
                 </span>
               </div>
 
               {pick && (
                 <p className="mt-2 text-[11px] text-neutral-500">
-                  Ставка не обязана совпадать с самым вероятным исходом команды: слотов в
-                  каждой корзине фиксированное число ({buckets.map((b) => b.slots).join("/")}),
-                  и расстановка подбирается целиком, под максимум угаданных, а не по каждой
-                  команде отдельно.
+                  {t("team.pickNote", {
+                    slots: buckets.map((b) => b.slots).join("/"),
+                  })}
                 </p>
               )}
             </div>
@@ -386,11 +383,14 @@ export default function TeamPage({
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <Panel title="Матчи" subtitle="К/С/А — суммарно по команде за карту.">
+        <Panel title={t("common.matches")} subtitle={t("team.matchesSubtitle")}>
           <MatchTable matches={team.matches} onOpenTeam={onOpenTeam} />
         </Panel>
 
-        <Panel title="С кем играли" subtitle="Соперники за период и счёт по картам.">
+        <Panel
+          title={t("team.opponentsTitle")}
+          subtitle={t("team.opponentsSubtitle")}
+        >
           <table className="w-full text-xs">
             <tbody>
               {team.opponents.map((opponent) => (

@@ -10,11 +10,13 @@ import {
   YAxis,
 } from "recharts";
 import { api, type RosterResponse } from "../api";
-import { ROLE_LABEL, teamCrest } from "../assets";
+import { teamCrest } from "../assets";
+import { useT } from "../i18n";
 import PlayerPortrait from "./PlayerPortrait";
 import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
 export default function RosterPanel() {
+  const { t, n, role: roleLabel } = useT();
   const [data, setData] = useState<RosterResponse | null>(null);
   const [series, setSeries] = useState(5);
   const [busy, setBusy] = useState(false);
@@ -36,11 +38,11 @@ export default function RosterPanel() {
   return (
     <div className="space-y-4">
       <Panel
-        title="Подбор состава"
-        subtitle="Кандидаты — игроки 16 команд TI15. Внутри роли все считаются по одному баннеру, иначе сравнение команд превратится в сравнение баннеров. В зачёт идёт лучшая серия периода, поэтому каждая дополнительная серия поднимает ожидание — и тем сильнее, чем нестабильнее игрок."
+        title={t("roster.title")}
+        subtitle={t("roster.subtitle")}
         actions={
           <div className="flex items-end gap-3">
-            <Field label="Серий за период" hint="сколько серий команда успеет сыграть">
+            <Field label={t("roster.series")} hint={t("roster.seriesHint")}>
               <select
                 className={selectClass}
                 value={series}
@@ -54,7 +56,7 @@ export default function RosterPanel() {
               </select>
             </Field>
             <Button onClick={run} disabled={busy}>
-              {busy ? "Считаю…" : "Подобрать"}
+              {busy ? t("common.calculating") : t("roster.run")}
             </Button>
           </div>
         }
@@ -62,7 +64,7 @@ export default function RosterPanel() {
         {error && <Notice kind="error">{error}</Notice>}
         {!data && !error && (
           <Notice>
-            Нужна загруженная история участников TI15:{" "}
+            {t("roster.needData")}{" "}
             <code className="text-neutral-300">python tools/cli.py ingest-ti</code>
           </Notice>
         )}
@@ -101,11 +103,11 @@ export default function RosterPanel() {
                           </span>
                           <span>
                             <span className="block text-[11px] text-neutral-500">
-                              {ROLE_LABEL[pick.role]}
+                              {roleLabel(pick.role)}
                             </span>
                             <span className="text-neutral-100">{pick.team_name}</span>
                             <span className="tabular ml-1 text-xs text-neutral-500">
-                              {Math.round(pick.mean).toLocaleString("ru")}
+                              {n(pick.mean)}
                             </span>
                           </span>
                         </span>
@@ -113,12 +115,9 @@ export default function RosterPanel() {
                     })}
                   </div>
                   <div className="tabular text-right">
-                    <div className="text-[#c8a24a]">
-                      {Math.round(roster.expected_total).toLocaleString("ru")}
-                    </div>
+                    <div className="text-[#c8a24a]">{n(roster.expected_total)}</div>
                     <div className="text-[11px] text-neutral-500">
-                      p5 {Math.round(roster.p5).toLocaleString("ru")} · p95{" "}
-                      {Math.round(roster.p95).toLocaleString("ru")}
+                      p5 {n(roster.p5)} · p95 {n(roster.p95)}
                     </div>
                   </div>
                 </div>
@@ -130,7 +129,7 @@ export default function RosterPanel() {
         {data && data.skipped.length > 0 && (
           <div className="mt-3">
             <Notice kind="warn">
-              Пропущены из-за нехватки разобранных матчей: {data.skipped.join("; ")}
+              {t("roster.skipped", { teams: data.skipped.join("; ") })}
             </Notice>
           </div>
         )}
@@ -140,10 +139,10 @@ export default function RosterPanel() {
         Object.entries(data.candidates).map(([role, candidates]) => (
           <Panel
             key={role}
-            title={ROLE_LABEL[role] ?? role}
-            subtitle={`Баннер сравнения: ${(data.banners[role] ?? [])
-              .map((e) => e.stat)
-              .join(" + ")}. Столбец — ожидание, усы — интервал p5…p95.`}
+            title={roleLabel(role)}
+            subtitle={t("roster.bannerSubtitle", {
+              banner: (data.banners[role] ?? []).map((e) => e.stat).join(" + "),
+            })}
           >
             <ResponsiveContainer width="100%" height={Math.max(220, candidates.length * 34)}>
               <BarChart data={candidates} layout="vertical" margin={{ left: 40 }}>
@@ -156,10 +155,7 @@ export default function RosterPanel() {
                   fontSize={11}
                   width={120}
                 />
-                <Tooltip
-                  {...chartTooltip}
-                  formatter={(value) => Math.round(Number(value)).toLocaleString("ru")}
-                />
+                <Tooltip {...chartTooltip} formatter={(value) => n(Number(value))} />
                 <Bar dataKey="mean" radius={[0, 3, 3, 0]}>
                   {candidates.map((_, index) => (
                     <Cell key={index} fill={index === 0 ? "#c8a24a" : "#4a5266"} />
@@ -171,11 +167,11 @@ export default function RosterPanel() {
             <table className="mt-2 w-full text-xs">
               <thead className="text-[11px] tracking-wide text-neutral-400 uppercase">
                 <tr>
-                  <th className="py-1 text-left">Команда</th>
-                  <th className="py-1 text-left">Игроки</th>
-                  <th className="py-1 text-right">Ожидание</th>
-                  <th className="py-1 text-right">Потолок</th>
-                  <th className="py-1 text-right">Карт</th>
+                  <th className="py-1 text-left">{t("common.team")}</th>
+                  <th className="py-1 text-left">{t("common.players")}</th>
+                  <th className="py-1 text-right">{t("common.expectation")}</th>
+                  <th className="py-1 text-right">{t("common.ceiling")}</th>
+                  <th className="py-1 text-right">{t("common.mapsShort")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,10 +193,10 @@ export default function RosterPanel() {
                       {candidate.player_names.join(", ")}
                     </td>
                     <td className="tabular py-1 text-right text-neutral-200">
-                      {Math.round(candidate.mean).toLocaleString("ru")}
+                      {n(candidate.mean)}
                     </td>
                     <td className="tabular py-1 text-right text-[#c8a24a]">
-                      {Math.round(candidate.ceiling_p95).toLocaleString("ru")}
+                      {n(candidate.ceiling_p95)}
                     </td>
                     <td className="tabular py-1 text-right text-neutral-500">
                       {candidate.games_used}
@@ -213,22 +209,22 @@ export default function RosterPanel() {
         ))}
 
       {data && (
-        <Panel title="Как читать">
+        <Panel title={t("roster.legendTitle")}>
           <div className="grid gap-3 sm:grid-cols-3">
             <Stat
-              label="Ожидание"
-              value="среднее"
-              hint="сколько наберёт роль за период в среднем"
+              label={t("common.expectation")}
+              value={t("common.average")}
+              hint={t("roster.legendMeanHint")}
             />
             <Stat
-              label="Потолок p95"
-              value="удачный период"
-              hint="в Fantasy решает именно он: в зачёт идёт лучшая серия"
+              label={t("roster.legendCeiling")}
+              value={t("roster.legendCeilingValue")}
+              hint={t("roster.legendCeilingHint")}
             />
             <Stat
-              label="Карт"
-              value="объём выборки"
-              hint="меньше 10 — оценка шумная"
+              label={t("common.mapsShort")}
+              value={t("roster.legendGames")}
+              hint={t("roster.legendGamesHint")}
             />
           </div>
         </Panel>

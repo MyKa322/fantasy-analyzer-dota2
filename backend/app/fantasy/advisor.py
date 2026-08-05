@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from itertools import product
 
@@ -211,6 +211,22 @@ class TitleAdvice:
     expected_bonus: float | None
     estimator: str
     note: str = ""
+    # Тот же текст пояснения ключом словаря и числами к нему: интерфейс
+    # переведён на четыре языка, а собрать фразу из готовой русской строки
+    # нельзя. Русский текст остаётся — он нужен CLI и служит запасным
+    # вариантом, если ключа в словаре ещё нет.
+    note_key: str = ""
+    note_params: Mapping[str, float | int | str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class Estimate:
+    """Оценка условия титула по данным: доля карт и пояснение к ней."""
+
+    hit_rate: float | None
+    note: str
+    note_key: str
+    params: Mapping[str, float | int | str] = field(default_factory=dict)
 
 
 class EmblemAdvisor:
@@ -828,16 +844,25 @@ class EmblemAdvisor:
                 key = title["key"]
                 bonus = float(title["bonus"])
                 estimator = title.get("estimator", "unmodelled")
-                hit_rate, note = estimates.get(key, (None, ""))
+                estimate = estimates.get(key)
+                hit_rate = estimate.hit_rate if estimate else None
+                note = estimate.note if estimate else ""
+                note_key = estimate.note_key if estimate else ""
+                params = dict(estimate.params) if estimate else {}
 
                 if estimator == "hero_pool" and hit_rate is None:
                     note = note or "нет справочника героев — выполните `cli.py ingest-heroes`"
+                    note_key = note_key or "title.note.noHeroes"
                 elif estimator == "unmodelled" and not note:
                     # Почему именно не оценивается — сказано в конфиге рядом с
                     # титулом: причина у каждого своя, и она важнее самого факта.
+                    # Ключ перевода собирается по титулу: у каждой причины свой
+                    # текст, общего шаблона тут нет.
                     note = title.get("note") or "условие вне наших данных"
+                    note_key = f"title.note.{key}" if title.get("note") else "title.note.outside"
                 elif hit_rate is None:
                     note = note or "недостаточно данных"
+                    note_key = note_key or "title.note.notEnough"
 
                 advice.append(
                     TitleAdvice(
@@ -849,6 +874,8 @@ class EmblemAdvisor:
                         expected_bonus=bonus * hit_rate if hit_rate is not None else None,
                         estimator=estimator,
                         note=note,
+                        note_key=note_key,
+                        note_params=params,
                     )
                 )
 
@@ -856,43 +883,64 @@ class EmblemAdvisor:
         advice.sort(key=lambda t: (t.expected_bonus is None, -(t.expected_bonus or 0.0)))
         return advice
 
-    def _suffix_estimates(
-        self, games: Sequence[RoleGame]
-    ) -> dict[str, tuple[float | None, str]]:
+    def _suffix_estimates(self, games: Sequence[RoleGame]) -> dict[str, Estimate]:
         """Суффиксы, которые видно в данных матча."""
-        estimates: dict[str, tuple[float | None, str]] = {}
+        estimates: dict[str, Estimate] = {}
 
         durations = [g.duration for g in games if g.duration]
         if durations:
             short = sum(1 for d in durations if d < 25 * 60) / len(durations)
-            estimates["decisive"] = (short, f"{short:.0%} игр короче 25 минут")
+            estimates["decisive"] = Estimate(
+                short,
+                f"{short:.0%} игр короче 25 минут",
+                "title.note.short",
+                {"pct": round(short * 100)},
+            )
             # «the Lucky» — последняя цифра длительности. На табло время идёт как
             # мм:сс, так что речь про последнюю цифру секунд: чистая лотерея
             # около 10%, и это само по себе ответ — титул не подкрутить.
             lucky = sum(1 for d in durations if d % 10 == 8) / len(durations)
-            estimates["lucky"] = (lucky, f"{lucky:.0%} игр закончились на цифру 8")
+            estimates["lucky"] = Estimate(
+                lucky,
+                f"{lucky:.0%} игр закончились на цифру 8",
+                "title.note.lucky",
+                {"pct": round(lucky * 100)},
+            )
 
         losses = [g.won for g in games if g.won is not None]
         if losses:
             lost = sum(1 for won in losses if not won) / len(losses)
-            estimates["underdog"] = (lost, f"{lost:.0%} игр проиграно")
+            estimates["underdog"] = Estimate(
+                lost,
+                f"{lost:.0%} игр проиграно",
+                "title.note.lost",
+                {"pct": round(lost * 100)},
+            )
 
         # Время первой крови: ноль OpenDota ставит и когда события не поймала,
         # поэтому такие карты из выборки выбрасываем, а не считаем «до гонга».
         first_bloods = [g.first_blood_time for g in games if g.first_blood_time]
         if first_bloods:
             patient = sum(1 for t in first_bloods if t >= 600) / len(first_bloods)
-            estimates["patient"] = (
+            estimates["patient"] = Estimate(
                 patient,
                 f"{patient:.0%} игр без первой крови до 10:00 "
                 f"(по {len(first_bloods)} картам из {len(games)})",
+                "title.note.patient",
+                {
+                    "pct": round(patient * 100),
+                    "sample": len(first_bloods),
+                    "total": len(games),
+                },
             )
 
         deciders = self._decider_share(games)
         if deciders is not None:
-            estimates["clutch"] = (
+            estimates["clutch"] = Estimate(
                 deciders,
                 f"{deciders:.0%} карт были последними возможными в серии",
+                "title.note.decider",
+                {"pct": round(deciders * 100)},
             )
 
         return estimates
@@ -923,7 +971,7 @@ class EmblemAdvisor:
         games: Sequence[RoleGame],
         accounts: Sequence[int],
         heroes: Mapping[int, str] | None,
-    ) -> dict[str, tuple[float | None, str]]:
+    ) -> dict[str, Estimate]:
         """Префиксы: доля карт, сыгранных на герое из списка титула.
 
         Считается по выборам конкретных игроков роли, а не по всем десяти в
@@ -942,16 +990,18 @@ class EmblemAdvisor:
         if not picks:
             return {}
 
-        estimates: dict[str, tuple[float | None, str]] = {}
+        estimates: dict[str, Estimate] = {}
         for title in self.rules.titles.get("prefixes", []) or []:
             listed = {str(name) for name in (title.get("heroes") or [])}
             if not listed:
                 continue
             hits = sum(1 for name in picks if name in listed)
             share = hits / len(picks)
-            estimates[title["key"]] = (
+            estimates[title["key"]] = Estimate(
                 share,
                 f"{share:.0%} выборов — герои из списка ({hits} из {len(picks)})",
+                "title.note.heroShare",
+                {"pct": round(share * 100), "hits": hits, "total": len(picks)},
             )
         return estimates
 

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type ProfilePlayer } from "../api";
-import { GROUP_COLOR, ROLE_LABEL, teamCrest } from "../assets";
+import { GROUP_COLOR, teamCrest } from "../assets";
+import { useT } from "../i18n";
 import { winRate } from "../profiles";
 import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
 import HeroPool from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
 import TitleTable from "./TitleTable";
-import { AVERAGE_LABEL, MatchTable, StatGrid, UNIT_LABEL, formatNumber } from "./profileBits";
+import { MatchTable, StatGrid } from "./profileBits";
 import { Button, Notice, Panel, Stat } from "./ui";
 
 export default function PlayerPage({
@@ -18,6 +19,7 @@ export default function PlayerPage({
   onBack: () => void;
   onOpenTeam: (teamId: number) => void;
 }) {
+  const { t, n, nc, stat: statLabel, role: roleLabel } = useT();
   const [player, setPlayer] = useState<ProfilePlayer | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export default function PlayerPage({
     const rows = mine.stats
       .map((value) => ({
         ...value,
-        label: meta.get(value.stat)?.label ?? value.stat,
+        label: statLabel(value.stat),
         color: meta.get(value.stat)?.color ?? "red",
         rolePoints: meta.get(value.stat)?.base_points ?? 0,
       }))
@@ -72,22 +74,22 @@ export default function PlayerPage({
       share: pairTotal ? mineTotal / pairTotal : 1,
       solo: role.player_stats.length < 2,
     };
-  }, [snapshot, player]);
+  }, [snapshot, player, statLabel]);
 
   if (error) {
     return (
-      <Panel title="Игрок">
+      <Panel title={t("common.player")}>
         <Notice kind="error">{error}</Notice>
         <div className="mt-3">
           <Button variant="ghost" onClick={onBack}>
-            ← К списку
+            {t("common.back")}
           </Button>
         </div>
       </Panel>
     );
   }
 
-  if (!player) return <Panel title="Игрок">Загружаю…</Panel>;
+  if (!player) return <Panel title={t("common.player")}>{t("common.loading")}</Panel>;
 
   const losses = player.games - player.wins;
   const crest = teamCrest(player.team_name);
@@ -102,7 +104,7 @@ export default function PlayerPage({
       <Panel
         actions={
           <Button variant="ghost" onClick={onBack}>
-            ← К списку
+            {t("common.back")}
           </Button>
         }
       >
@@ -120,28 +122,36 @@ export default function PlayerPage({
                   {player.team_name ?? player.team_id}
                 </button>
               ) : (
-                "команда не определена"
+                t("player.noTeam")
               )}
-              {player.role && <span>· {ROLE_LABEL[player.role] ?? player.role}</span>}
+              {player.role && <span>· {roleLabel(player.role)}</span>}
               <span>
-                · матчи с {player.first_game ?? "—"} по {player.last_game ?? "—"}
+                ·{" "}
+                {t("team.period", {
+                  from: player.first_game ?? "—",
+                  to: player.last_game ?? "—",
+                })}
               </span>
             </p>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label="Карт" value={player.games} hint={`${player.parsed_games} с реплеем`} />
           <Stat
-            label="Победы"
+            label={t("common.mapsShort")}
+            value={player.games}
+            hint={t("team.parsedHint", { n: player.parsed_games })}
+          />
+          <Stat
+            label={t("common.wins")}
             value={`${player.wins}–${losses}`}
             hint={`${Math.round(winRate(player.wins, player.games) * 100)}%`}
           />
           <Stat
-            label="К/С/А"
-            value={`${formatNumber(player.fantasy_units.kills ?? 0)}/${formatNumber(
+            label={t("common.kda")}
+            value={`${nc(player.fantasy_units.kills ?? 0)}/${nc(
               player.fantasy_units.deaths ?? 0,
-            )}/${formatNumber(player.averages.assists ?? 0)}`}
+            )}/${nc(player.averages.assists ?? 0)}`}
           />
           <Stat
             label="GPM / XPM"
@@ -154,34 +164,31 @@ export default function PlayerPage({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel
-          title="Обычная статистика"
-          subtitle="Средние за карту по разобранным матчам — то, что OpenDota отдаёт напрямую."
+          title={t("player.averagesTitle")}
+          subtitle={t("player.averagesSubtitle")}
         >
-          <StatGrid values={player.averages} labels={AVERAGE_LABEL} />
+          <StatGrid values={player.averages} />
         </Panel>
 
-        <Panel
-          title="Fantasy-статы в единицах"
-          subtitle="Те же величины, что считает компендиум, — но здесь именно единицы: варды, стаки, секунды стана. Во сколько очков они превращаются, зависит от эмблем."
-        >
-          <StatGrid values={player.fantasy_units} labels={UNIT_LABEL} />
+        <Panel title={t("player.unitsTitle")} subtitle={t("player.unitsSubtitle")}>
+          <StatGrid values={player.fantasy_units} />
         </Panel>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {player.heroes.length > 0 && (
           <Panel
-            title="Сигнатурные герои"
-            subtitle="Кого берёт чаще всего за период. Полоса — доля карт от самого частого героя, цвет и число справа — победы на нём."
+            title={t("player.heroesTitle")}
+            subtitle={t("player.heroesSubtitle")}
           >
             <HeroPool heroes={player.heroes} limit={12} />
             {signature.length > 0 && (
               <p className="mt-3 text-[11px] text-neutral-500">
-                Визитная карточка:{" "}
+                {t("player.signature")}{" "}
                 <span className="text-neutral-300">
                   {signature.map((h) => h.name).join(", ")}
                 </span>{" "}
-                — не меньше трёх карт и больше половины побед.
+                {t("player.signatureNote")}
               </p>
             )}
           </Panel>
@@ -189,8 +196,8 @@ export default function PlayerPage({
 
         {(player.titles?.length ?? 0) > 0 && (
           <Panel
-            title="Лучшие титулы"
-            subtitle="Coaching Titles меняются бесплатно, поэтому их стоит подбирать под конкретного игрока: префиксы зависят от того, за кого он играет."
+            title={t("player.titlesTitle")}
+            subtitle={t("player.titlesSubtitle")}
           >
             <TitleTable titles={player.titles ?? []} limit={8} />
           </Panel>
@@ -199,22 +206,26 @@ export default function PlayerPage({
 
       {fantasy && (
         <Panel
-          title="Наш анализ"
+          title={t("team.analysisTitle")}
           subtitle={
             fantasy.solo
-              ? "Очки Fantasy, которые приносит его игра, по каждому стату."
-              : `Очки Fantasy по его собственным картам. В зачёт идёт среднее по роли, поэтому рядом — доля в паре${
-                  fantasy.partners.length ? ` с ${fantasy.partners.join(", ")}` : ""
-                }.`
+              ? t("player.analysisSolo")
+              : t("player.analysisPair", {
+                  partners: fantasy.partners.length
+                    ? t("player.analysisPartners", {
+                        names: fantasy.partners.join(", "),
+                      })
+                    : "",
+                })
           }
         >
           <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
             <span className="text-neutral-400">
-              Роль: {ROLE_LABEL[fantasy.role] ?? fantasy.role}
+              {t("player.roleLine", { role: roleLabel(fantasy.role) })}
             </span>
             {!fantasy.solo && (
               <span className="flex items-center gap-2 text-neutral-400">
-                Вклад в пару
+                {t("player.pairShare")}
                 <span className="h-2 w-32 overflow-hidden rounded bg-[#20232c]">
                   <span
                     className="block h-full rounded bg-[#c8a24a]"
@@ -231,12 +242,12 @@ export default function PlayerPage({
           <table className="w-full text-xs">
             <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
               <tr>
-                <th className="py-1 text-left">Стат</th>
-                <th className="py-1 text-right">За карту</th>
-                <th className="py-1 text-right">Карт со статом</th>
-                <th className="py-1 text-right">Его очки</th>
-                <th className="py-1 text-right">Очки роли</th>
-                <th className="py-1 text-right">Форма</th>
+                <th className="py-1 text-left">{t("common.stat")}</th>
+                <th className="py-1 text-right">{t("common.perMap")}</th>
+                <th className="py-1 text-right">{t("common.mapsWithStat")}</th>
+                <th className="py-1 text-right">{t("player.ownPoints")}</th>
+                <th className="py-1 text-right">{t("player.rolePoints")}</th>
+                <th className="py-1 text-right">{t("common.form")}</th>
               </tr>
             </thead>
             <tbody>
@@ -246,16 +257,16 @@ export default function PlayerPage({
                     {row.label}
                   </td>
                   <td className="tabular py-1 text-right text-neutral-400">
-                    {formatNumber(row.units_per_game)}
+                    {nc(row.units_per_game)}
                   </td>
                   <td className="tabular py-1 text-right text-neutral-500">
                     {Math.round(row.hit_rate * 100)}%
                   </td>
                   <td className="tabular py-1 text-right text-neutral-100">
-                    {Math.round(row.base_points).toLocaleString("ru")}
+                    {n(row.base_points)}
                   </td>
                   <td className="tabular py-1 text-right text-neutral-500">
-                    {Math.round(row.rolePoints).toLocaleString("ru")}
+                    {n(row.rolePoints)}
                   </td>
                   <td className="tabular py-1 text-right">
                     {row.trend == null ? (
@@ -281,7 +292,7 @@ export default function PlayerPage({
         </Panel>
       )}
 
-      <Panel title="Матчи" subtitle="Последние карты за период — с героем и результатом.">
+      <Panel title={t("common.matches")} subtitle={t("player.matchesSubtitle")}>
         <MatchTable matches={player.matches} showHero onOpenTeam={onOpenTeam} />
       </Panel>
     </div>

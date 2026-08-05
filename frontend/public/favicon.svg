@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- War Banner: полотнище с вырезом снизу и три слота эмблем колонкой —
+       ровно то, что считает страница. -->
+  <rect width="32" height="32" rx="6" fill="#14161c" />
+  <path d="M9 6h14v18l-7-4-7 4z" fill="#c8a24a" />
+  <circle cx="16" cy="10" r="1.9" fill="#14161c" />
+  <circle cx="16" cy="15.5" r="1.9" fill="#14161c" />
+  <circle cx="16" cy="21" r="1.9" fill="#14161c" />
+</svg>

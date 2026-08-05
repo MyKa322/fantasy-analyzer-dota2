@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { seoPlugin } from "./scripts/seo";
 
 export default defineConfig({
   // На GitHub Pages сайт живёт в подкаталоге /<repo>/, локально — в корне.
@@ -11,7 +12,7 @@ export default defineConfig({
     // день — и страница молча показывает вчерашние числа.
     __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), seoPlugin()],
   server: {
     port: 5173,
     proxy: {

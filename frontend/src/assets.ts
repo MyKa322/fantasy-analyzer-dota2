@@ -154,6 +154,9 @@ export const QUALITY_LABEL: Record<string, string> = {
   tier_5: "Tier V",
 };
 
+// Названия трейтов и качеств не переводятся: это имена собственные из игры, и в
+// любой локализации клиента они пишутся латиницей. Роли, наоборот, переводятся —
+// их подписи лежат в словаре (`role.core` и остальные).
 export const TRAIT_LABEL: Record<string, string> = {
   fractal: "Fractal",
   benevolent: "Benevolent",
@@ -162,8 +165,5 @@ export const TRAIT_LABEL: Record<string, string> = {
   friendly: "Friendly",
 };
 
-export const ROLE_LABEL: Record<string, string> = {
-  core: "Core Duo",
-  mid: "Mid",
-  support: "Support Duo",
-};
+/** Порядок ролей — как в компендиуме, а не по алфавиту. */
+export const ROLES = ["core", "mid", "support"] as const;

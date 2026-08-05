@@ -8,6 +8,7 @@ import {
   emblemIcon,
 } from "../assets";
 import type { SlotAdvice } from "../api";
+import { useT } from "../i18n";
 
 function sign(value: number): string {
   if (value > 0) return `+${Math.round(value)}%`;
@@ -24,6 +25,7 @@ function sign(value: number): string {
  * канал — название стата всегда написано текстом.
  */
 export default function EmblemCard({ slot }: { slot: SlotAdvice }) {
+  const { t, n } = useT();
   const [iconIndex, setIconIndex] = useState(0);
   const icon = emblemIcon(slot.stat);
   const color = GROUP_COLOR[slot.color];
@@ -78,12 +80,14 @@ export default function EmblemCard({ slot }: { slot: SlotAdvice }) {
             <span className="tabular">{sign(qualityBonus)}</span>
           </span>
           <span aria-hidden>·</span>
-          <span>{slot.trait ? (TRAIT_LABEL[slot.trait] ?? slot.trait) : "без трейта"}</span>
+          <span>
+            {slot.trait ? (TRAIT_LABEL[slot.trait] ?? slot.trait) : t("trait.none")}
+          </span>
           {Math.round(traitBonus) !== 0 && (
             <>
               <span aria-hidden>·</span>
-              <span title="Собственный трейт и трейты соседних эмблем">
-                трейты <span className="tabular">{sign(traitBonus)}</span>
+              <span title={t("emblemCard.traitsHint")}>
+                {t("emblemCard.traits")} <span className="tabular">{sign(traitBonus)}</span>
               </span>
             </>
           )}
@@ -94,9 +98,7 @@ export default function EmblemCard({ slot }: { slot: SlotAdvice }) {
         <div className="tabular text-base font-semibold" style={{ color }}>
           {Math.round(slot.percent)}%
         </div>
-        <div className="tabular text-xs text-neutral-400">
-          {Math.round(slot.points).toLocaleString("ru")}
-        </div>
+        <div className="tabular text-xs text-neutral-400">{n(slot.points)}</div>
       </div>
     </div>
   );

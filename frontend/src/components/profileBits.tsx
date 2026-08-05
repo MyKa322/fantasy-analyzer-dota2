@@ -3,66 +3,24 @@
 // те же величины — просто про разные сущности.
 
 import type { ProfileMatch } from "../api";
-import { formatDuration } from "../profiles";
-
-/** Человеческие названия полей обычной статистики. */
-export const AVERAGE_LABEL: Record<string, string> = {
-  assists: "Ассисты",
-  xpm: "XPM",
-  net_worth: "Нетворс",
-  hero_damage: "Урон по героям",
-  tower_damage: "Урон по строениям",
-  hero_healing: "Лечение",
-  last_hits: "Добивания",
-  denies: "Денаи",
-  obs_placed: "Обзорные варды",
-  sen_placed: "Сентри",
-  level: "Уровень",
-  gold_spent: "Потрачено золота",
-};
-
-/** Fantasy-статы в единицах: те же названия, что в глоссарии компендиума. */
-export const UNIT_LABEL: Record<string, string> = {
-  kills: "Килы",
-  deaths: "Смерти",
-  creep_score: "Крипы (CS)",
-  gpm: "GPM",
-  tower_kills: "Вышки",
-  wards_placed: "Варды",
-  camps_stacked: "Стаки",
-  runes_grabbed: "Руны",
-  smokes_used: "Смоки",
-  lotuses_grabbed: "Лотосы",
-  roshan_kills: "Рошаны",
-  teamfight_participation: "Участие в файтах",
-  stuns: "Станы, сек",
-  tormentor_kills: "Торменторы",
-  first_blood: "Первая кровь",
-  courier_kills: "Курьеры",
-  madstone_collected: "Мадстоуны",
-  watchers_taken: "Наблюдатели",
-};
-
-export function formatNumber(value: number): string {
-  if (Math.abs(value) >= 1000) return Math.round(value).toLocaleString("ru");
-  if (Math.abs(value) >= 10) return value.toFixed(1);
-  return value.toFixed(2);
-}
+import { useT } from "../i18n";
 
 export function StatGrid({
   values,
-  labels,
   hidden = [],
 }: {
   values: Record<string, number>;
-  labels: Record<string, string>;
   hidden?: string[];
 }) {
-  // Порядок — по названию: ключи в данных английские, а читает человек русские
-  // подписи, и без сортировки таблица выглядит перемешанной.
+  const { locale, stat, nc } = useT();
+
+  // Порядок — по переведённой подписи: ключи в данных английские, а читает
+  // человек подпись на своём языке, и без сортировки таблица выглядит
+  // перемешанной. Сравнение тоже по локали — в кириллице и латинице разный
+  // алфавитный порядок.
   const rows = Object.entries(values)
     .filter(([key, value]) => !hidden.includes(key) && value !== 0)
-    .sort(([a], [b]) => (labels[a] ?? a).localeCompare(labels[b] ?? b, "ru"));
+    .sort(([a], [b]) => stat(a).localeCompare(stat(b), locale));
   if (!rows.length) return null;
 
   return (
@@ -72,8 +30,8 @@ export function StatGrid({
           key={key}
           className="flex items-baseline justify-between border-b border-[#20232c] py-1 text-xs"
         >
-          <span className="text-neutral-500">{labels[key] ?? key}</span>
-          <span className="tabular text-neutral-200">{formatNumber(value)}</span>
+          <span className="text-neutral-500">{stat(key)}</span>
+          <span className="tabular text-neutral-200">{nc(value)}</span>
         </div>
       ))}
     </div>
@@ -89,8 +47,10 @@ export function MatchTable({
   showHero?: boolean;
   onOpenTeam?: (teamId: number) => void;
 }) {
+  const { t } = useT();
+
   if (!matches.length) {
-    return <p className="text-xs text-neutral-500">Матчей за период нет.</p>;
+    return <p className="text-xs text-neutral-500">{t("match.empty")}</p>;
   }
 
   return (
@@ -98,13 +58,13 @@ export function MatchTable({
       <table className="w-full min-w-[560px] text-xs">
         <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
           <tr>
-            <th className="py-1 text-left">Дата</th>
-            <th className="py-1 text-left">Соперник</th>
-            {showHero && <th className="py-1 text-left">Герой</th>}
-            <th className="py-1 text-center">Итог</th>
-            <th className="py-1 text-right">К/С/А</th>
+            <th className="py-1 text-left">{t("match.date")}</th>
+            <th className="py-1 text-left">{t("match.opponent")}</th>
+            {showHero && <th className="py-1 text-left">{t("match.hero")}</th>}
+            <th className="py-1 text-center">{t("match.result")}</th>
+            <th className="py-1 text-right">{t("common.kda")}</th>
             <th className="py-1 text-right">GPM</th>
-            <th className="py-1 text-right">Длина</th>
+            <th className="py-1 text-right">{t("match.length")}</th>
           </tr>
         </thead>
         <tbody>
@@ -125,9 +85,9 @@ export function MatchTable({
                 {!match.parsed && (
                   <span
                     className="ml-1 text-[10px] text-neutral-600"
-                    title="Реплей не разобран: вардов, станов и участия в файтах в нём нет"
+                    title={t("match.unparsedHint")}
                   >
-                    без реплея
+                    {t("match.unparsed")}
                   </span>
                 )}
               </td>
@@ -152,7 +112,7 @@ export function MatchTable({
                 {match.gpm != null ? Math.round(match.gpm) : "—"}
               </td>
               <td className="tabular py-1 text-right text-neutral-500">
-                {formatDuration(match.dur)}
+                {t("common.minutes", { n: Math.round(match.dur / 60) })}
               </td>
             </tr>
           ))}

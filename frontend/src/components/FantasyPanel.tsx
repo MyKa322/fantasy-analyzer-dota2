@@ -8,19 +8,16 @@ import {
   type Team,
   type TeamRoles,
 } from "../api";
+import { ROLES } from "../assets";
+import { useT } from "../i18n";
 import { Button, COLOR_CLASS, Field, Notice, Panel, Stat, selectClass } from "./ui";
-
-const ROLES = [
-  { key: "core", label: "Core Duo" },
-  { key: "mid", label: "Mid" },
-  { key: "support", label: "Support Duo" },
-];
 
 function emptyEmblem(stat: string): Emblem {
   return { stat, quality: "tier_3", trait: null };
 }
 
 export default function FantasyPanel() {
+  const { t, n, role: roleLabel } = useT();
   const [rules, setRules] = useState<FantasyRules | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamId, setTeamId] = useState<number | null>(null);
@@ -115,10 +112,10 @@ export default function FantasyPanel() {
     <div className="space-y-4">
       <Panel
         title="War Banner"
-        subtitle="Очки начисляются только за статы, которые стоят на баннере роли. Порядок эмблем важен: Benevolent и Vampiric действуют на соседей."
+        subtitle={t("fantasy.subtitle")}
         actions={
           <div className="flex items-end gap-3">
-            <Field label="Команда">
+            <Field label={t("common.team")}>
               <select
                 className={selectClass}
                 value={teamId ?? ""}
@@ -131,15 +128,15 @@ export default function FantasyPanel() {
                 ))}
               </select>
             </Field>
-            <Field label="Роль">
+            <Field label={t("common.role")}>
               <select
                 className={selectClass}
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
               >
                 {ROLES.map((r) => (
-                  <option key={r.key} value={r.key}>
-                    {r.label}
+                  <option key={r} value={r}>
+                    {roleLabel(r)}
                   </option>
                 ))}
               </select>
@@ -149,10 +146,10 @@ export default function FantasyPanel() {
       >
         {roles && (
           <p className="mb-3 text-xs text-neutral-400">
-            Состав роли:{" "}
+            {t("fantasy.lineup")}{" "}
             {(roles.roles[role] ?? [])
               .map((id) => roles.player_names[String(id)] ?? id)
-              .join(", ") || "не определён"}
+              .join(", ") || t("fantasy.lineupUnknown")}
           </p>
         )}
 
@@ -162,7 +159,7 @@ export default function FantasyPanel() {
               key={index}
               className="grid grid-cols-[1.5fr_1fr_1fr_auto] items-end gap-2 rounded border border-[#2a2e3a] bg-[#1d2029] p-2"
             >
-              <Field label={`Слот ${index + 1}`}>
+              <Field label={t("fantasy.slot", { n: index + 1 })}>
                 <select
                   className={selectClass}
                   value={emblem.stat}
@@ -171,13 +168,13 @@ export default function FantasyPanel() {
                   {rules?.stats.map((stat) => (
                     <option key={stat.key} value={stat.key}>
                       {stat.label}
-                      {unavailable.has(stat.key) ? " (нет данных)" : ""}
-                      {approximate.has(stat.key) ? " (приблизительно)" : ""}
+                      {unavailable.has(stat.key) ? t("fantasy.noData") : ""}
+                      {approximate.has(stat.key) ? t("fantasy.approximate") : ""}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Качество">
+              <Field label={t("common.quality")}>
                 <select
                   className={selectClass}
                   value={emblem.quality}
@@ -190,7 +187,7 @@ export default function FantasyPanel() {
                   ))}
                 </select>
               </Field>
-              <Field label="Трейт">
+              <Field label={t("common.trait")}>
                 <select
                   className={selectClass}
                   value={emblem.trait ?? ""}
@@ -210,7 +207,7 @@ export default function FantasyPanel() {
                 variant="danger"
                 onClick={() => setEmblems(emblems.filter((_, i) => i !== index))}
               >
-                Убрать
+                {t("common.remove")}
               </Button>
             </div>
           ))}
@@ -222,13 +219,13 @@ export default function FantasyPanel() {
             onClick={() => setEmblems([...emblems, emptyEmblem("stuns")])}
             disabled={emblems.length >= (rules?.banner_slots ?? 5)}
           >
-            + эмблема
+            {t("fantasy.addEmblem")}
           </Button>
           <Button onClick={project} disabled={busy || emblems.length === 0}>
-            {busy ? "Считаю…" : "Спрогнозировать очки"}
+            {busy ? t("common.calculating") : t("fantasy.project")}
           </Button>
           <Button variant="ghost" onClick={optimise} disabled={busy || emblems.length < 2}>
-            Подобрать раскладку
+            {t("fantasy.optimise")}
           </Button>
         </div>
 
@@ -241,28 +238,22 @@ export default function FantasyPanel() {
 
       {projection && (
         <Panel
-          title="Проекция очков за период"
-          subtitle="В зачёт идут две лучшие карты лучшей серии, поэтому потолок важнее среднего."
+          title={t("fantasy.projectionTitle")}
+          subtitle={t("fantasy.projectionSubtitle")}
         >
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            <Stat label="Ожидание" value={Math.round(projection.mean).toLocaleString("ru")} />
-            <Stat label="Медиана" value={Math.round(projection.median).toLocaleString("ru")} />
-            <Stat
-              label="Пол (p5)"
-              value={Math.round(projection.floor_p5).toLocaleString("ru")}
-            />
-            <Stat
-              label="Потолок (p95)"
-              value={Math.round(projection.ceiling_p95).toLocaleString("ru")}
-            />
-            <Stat label="Карт в выборке" value={projection.games_used} />
+            <Stat label={t("common.expectation")} value={n(projection.mean)} />
+            <Stat label={t("common.median")} value={n(projection.median)} />
+            <Stat label={t("fantasy.floor")} value={n(projection.floor_p5)} />
+            <Stat label={t("fantasy.ceiling")} value={n(projection.ceiling_p95)} />
+            <Stat label={t("fantasy.sample")} value={projection.games_used} />
           </div>
           {projection.unavailable_stats.length > 0 && (
             <div className="mt-3">
               <Notice kind="warn">
-                OpenDota не отдаёт данные по статам:{" "}
-                {projection.unavailable_stats.join(", ")}. Их вклад в проекции равен
-                нулю, реальные очки будут выше.
+                {t("fantasy.unavailable", {
+                  stats: projection.unavailable_stats.join(", "),
+                })}
               </Notice>
             </div>
           )}
@@ -270,7 +261,10 @@ export default function FantasyPanel() {
       )}
 
       {options.length > 0 && (
-        <Panel title="Лучшие раскладки" subtitle="Порядок слева направо — порядок эмблем на баннере.">
+        <Panel
+          title={t("fantasy.optionsTitle")}
+          subtitle={t("fantasy.optionsSubtitle")}
+        >
           <div className="space-y-2">
             {options.map((option, index) => (
               <div
@@ -295,9 +289,9 @@ export default function FantasyPanel() {
                   })}
                 </div>
                 <div className="tabular text-sm text-[#c8a24a]">
-                  {Math.round(option.mean).toLocaleString("ru")}
+                  {n(option.mean)}
                   <span className="ml-2 text-xs text-neutral-500">
-                    p95 {Math.round(option.ceiling_p95).toLocaleString("ru")}
+                    p95 {n(option.ceiling_p95)}
                   </span>
                 </div>
               </div>
@@ -308,8 +302,11 @@ export default function FantasyPanel() {
 
       {rules && (
         <Panel
-          title="Таблица очков"
-          subtitle={`Версия ${rules.version} — ${rules.source}`}
+          title={t("fantasy.tableTitle")}
+          subtitle={t("fantasy.tableSubtitle", {
+            version: rules.version,
+            source: rules.source,
+          })}
         >
           <div className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
             {rules.stats.map((stat) => {
@@ -323,12 +320,12 @@ export default function FantasyPanel() {
                     {stat.label}
                     {source?.availability === "unavailable" && (
                       <span className="ml-1 text-neutral-600" title={source.note}>
-                        (нет данных)
+                        {t("fantasy.noDataShort")}
                       </span>
                     )}
                     {source?.availability === "approximate" && (
                       <span className="ml-1 text-neutral-600" title={source.note}>
-                        (прибл.)
+                        {t("fantasy.approximateShort")}
                       </span>
                     )}
                   </span>
@@ -338,7 +335,7 @@ export default function FantasyPanel() {
                       : stat.kind === "flat"
                         ? stat.value_if_true
                         : stat.kind === "capped"
-                          ? `до ${stat.max_points}`
+                          ? t("fantasy.upTo", { n: stat.max_points ?? 0 })
                           : stat.per_unit}
                   </span>
                 </div>

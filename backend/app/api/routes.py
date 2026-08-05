@@ -953,6 +953,8 @@ def title_advice(
             ),
             estimator=t.estimator,
             note=t.note,
+            note_key=t.note_key,
+            note_params=dict(t.note_params),
         )
         for t in EmblemAdvisor().title_advice(history, heroes=load_heroes())
     ]

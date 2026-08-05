@@ -4,6 +4,8 @@
 // вкладку «Профили»: это полтора мегабайта матчей и героев, которые вкладке с
 // эмблемами не нужны совсем.
 
+import { tr } from "./i18n";
+
 export interface ProfileMatch {
   id: number;
   /** Дата, YYYY-MM-DD. */
@@ -42,6 +44,8 @@ export interface ProfileTitle {
   expected_bonus: number | null;
   estimator: string;
   note: string;
+  note_key?: string | null;
+  note_params?: Record<string, string | number>;
 }
 
 export interface ProfilePlayer {
@@ -110,7 +114,7 @@ export async function loadProfiles(): Promise<Profiles> {
   pending ??= fetch(`${import.meta.env.BASE_URL}data/profiles.json?v=${__BUILD_ID__}`).then(
     async (response) => {
       if (!response.ok) {
-        throw new Error(`не удалось загрузить профили: ${response.status}`);
+        throw new Error(tr().t("error.profiles", { status: response.status }));
       }
       cached = (await response.json()) as Profiles;
       return cached;
@@ -126,23 +130,4 @@ export async function loadProfiles(): Promise<Profiles> {
 /** Победы в процентах — единообразно для команд и игроков. */
 export function winRate(wins: number, games: number): number {
   return games ? wins / games : 0;
-}
-
-export function formatDuration(seconds: number): string {
-  const minutes = Math.round(seconds / 60);
-  return `${minutes} мин`;
-}
-
-/** «1 карта», «104 карты», «5 карт» — иначе числа читаются как машинный вывод. */
-export function plural(count: number, one: string, few: string, many: string): string {
-  const mod100 = Math.abs(count) % 100;
-  const mod10 = mod100 % 10;
-  if (mod100 >= 11 && mod100 <= 14) return many;
-  if (mod10 === 1) return one;
-  if (mod10 >= 2 && mod10 <= 4) return few;
-  return many;
-}
-
-export function games(count: number): string {
-  return `${count} ${plural(count, "карта", "карты", "карт")}`;
 }

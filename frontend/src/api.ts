@@ -14,6 +14,7 @@ import {
   type RulesSnapshot,
   type StatValue,
 } from "./engine/scoring";
+import { tr } from "./i18n";
 import { STATIC_MODE, findRole, loadSnapshot, type HeroPick } from "./snapshot";
 
 export type { HeroPick };
@@ -283,7 +284,12 @@ export interface TitleAdvice {
   hit_rate: number | null;
   expected_bonus: number | null;
   estimator: string;
+  /** Пояснение по-русски: запасной вариант, если ключа нет в словаре. */
   note: string;
+  /** Ключ того же пояснения в словаре интерфейса. */
+  note_key?: string | null;
+  /** Числа для подстановки в пояснение: доля карт, размер выборки. */
+  note_params?: Record<string, string | number>;
 }
 
 export interface TeamListItem {
@@ -431,12 +437,8 @@ export class ApiError extends Error {
   }
 }
 
-const OFFLINE_MESSAGE =
-  "Эта операция требует локального бэкенда — на опубликованной странице данные " +
-  "берутся из снапшота, который обновляется по расписанию.";
-
 function offline(): never {
-  throw new ApiError(OFFLINE_MESSAGE, 501);
+  throw new ApiError(tr().t("error.offline"), 501);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -884,7 +886,9 @@ const staticApi: typeof live = {
       if (payload.role && role !== payload.role) continue;
       const missing = inventoryGaps(payload.inventory, role, snapshot.rules);
       if (missing.length) {
-        gaps[role] = missing.map((m) => `${m.color}: нужно ${m.need}, есть ${m.have}`);
+        gaps[role] = missing.map((m) =>
+          tr().t("error.gap", { color: m.color, need: m.need, have: m.have }),
+        );
       }
     }
 

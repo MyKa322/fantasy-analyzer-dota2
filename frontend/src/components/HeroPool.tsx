@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { heroIcon } from "../assets";
-import { games } from "../profiles";
+import { useT } from "../i18n";
 
 export interface HeroPoolEntry {
   id: number;
@@ -49,7 +49,7 @@ export default function HeroPool({
   heroes,
   names,
   limit = 12,
-  emptyText = "Разобранных матчей за период нет.",
+  emptyText,
 }: {
   heroes: HeroPoolEntry[];
   /** account_id -> ник: у пары и команды видно, чей это герой. */
@@ -57,7 +57,13 @@ export default function HeroPool({
   limit?: number;
   emptyText?: string;
 }) {
-  if (!heroes.length) return <p className="text-xs text-neutral-500">{emptyText}</p>;
+  const { t, tp } = useT();
+
+  if (!heroes.length) {
+    return (
+      <p className="text-xs text-neutral-500">{emptyText ?? t("heroPool.empty")}</p>
+    );
+  }
 
   const top = heroes.slice(0, limit);
   const most = Math.max(...top.map((h) => h.games));
@@ -77,7 +83,7 @@ export default function HeroPool({
               <div className="flex items-baseline justify-between gap-2 text-xs">
                 <span className="truncate text-neutral-100">{hero.name}</span>
                 <span className="tabular shrink-0 text-neutral-500">
-                  {games(hero.games)}
+                  {tp("plural.maps", hero.games)}
                 </span>
               </div>
               <div className="mt-0.5 flex items-center gap-2">

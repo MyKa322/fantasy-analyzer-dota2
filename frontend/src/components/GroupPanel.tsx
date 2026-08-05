@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type GroupPrediction, type PredictionsConfig } from "../api";
+import { useT } from "../i18n";
 import { STATIC_MODE } from "../snapshot";
 import { Button, Field, Notice, Panel, Stat, selectClass } from "./ui";
 
@@ -12,6 +13,7 @@ function heat(probability: number): string {
 }
 
 export default function GroupPanel() {
+  const { t, tx, tp, n } = useT();
   const [config, setConfig] = useState<PredictionsConfig | null>(null);
   const [prediction, setPrediction] = useState<GroupPrediction | null>(null);
   const [simulations, setSimulations] = useState(20000);
@@ -55,16 +57,12 @@ export default function GroupPanel() {
   return (
     <div className="space-y-4">
       <Panel
-        title="Групповой этап"
-        subtitle={
-          STATIC_MODE
-            ? "Swiss 16 команд: до 4 побед или 4 поражений, затем Elimination Round. Прогноз посчитан заранее вместе с данными — браузер турнир не разыгрывает."
-            : "Swiss 16 команд: до 4 побед или 4 поражений, затем Elimination Round. Каждый прогон разыгрывает турнир целиком."
-        }
+        title={t("group.title")}
+        subtitle={STATIC_MODE ? t("group.subtitleStatic") : t("group.subtitleLive")}
         actions={
           STATIC_MODE ? undefined : (
             <div className="flex items-end gap-3">
-              <Field label="Симуляций">
+              <Field label={t("group.simulations")}>
                 <select
                   className={selectClass}
                   value={simulations}
@@ -76,7 +74,7 @@ export default function GroupPanel() {
                 </select>
               </Field>
               <Button onClick={run} disabled={busy}>
-                {busy ? "Симулирую…" : "Рассчитать"}
+                {busy ? t("group.simulating") : t("group.run")}
               </Button>
             </div>
           )
@@ -84,34 +82,30 @@ export default function GroupPanel() {
       >
         {error && <Notice kind="error">{error}</Notice>}
         {!prediction && !error && (
-          <Notice>
-            {busy
-              ? "Загружаю прогноз…"
-              : "Нужны рейтинги 16 участников. Загрузите матчи, пересчитайте рейтинги и запустите расчёт."}
-          </Notice>
+          <Notice>{busy ? t("group.loading") : t("group.needRatings")}</Notice>
         )}
 
         {prediction && (
           <>
             <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat
-                label="Ожидаемые очки"
-                value={Math.round(prediction.expected_points).toLocaleString("ru")}
-                hint="при оптимальной расстановке"
+                label={t("group.expectedPoints")}
+                value={n(prediction.expected_points)}
+                hint={t("group.expectedPointsHint")}
               />
               <Stat
-                label="Угадано в среднем"
+                label={t("group.expectedCorrect")}
                 value={prediction.expected_correct.toFixed(2)}
-                hint="из 16 слотов"
+                hint={t("group.expectedCorrectHint")}
               />
               <Stat
-                label="Медиана очков"
-                value={Math.round(prediction.points_percentiles["50"] ?? 0).toLocaleString("ru")}
+                label={t("group.medianPoints")}
+                value={n(prediction.points_percentiles["50"] ?? 0)}
               />
               <Stat
-                label="95-й перцентиль"
-                value={Math.round(prediction.points_percentiles["95"] ?? 0).toLocaleString("ru")}
-                hint="удачный сценарий"
+                label={t("group.p95")}
+                value={n(prediction.points_percentiles["95"] ?? 0)}
+                hint={t("group.p95Hint")}
               />
             </div>
 
@@ -119,14 +113,14 @@ export default function GroupPanel() {
               <table className="w-full text-sm">
                 <thead className="text-[11px] tracking-wide text-neutral-400 uppercase">
                   <tr>
-                    <th className="py-2 text-left">Команда</th>
+                    <th className="py-2 text-left">{t("common.team")}</th>
                     {buckets.map((b) => (
                       <th key={b.key} className="px-1 py-2 text-center" title={b.description}>
                         {b.label}
                       </th>
                     ))}
-                    <th className="py-2 text-center">Проход</th>
-                    <th className="py-2 text-center">Серий</th>
+                    <th className="py-2 text-center">{t("group.advance")}</th>
+                    <th className="py-2 text-center">{t("group.seriesColumn")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -141,7 +135,7 @@ export default function GroupPanel() {
                             <span
                               title={
                                 picked
-                                  ? "Наша ставка на эту команду"
+                                  ? t("group.ourPick")
                                   : `${b.label}: ${(value * 100).toFixed(1)}%`
                               }
                               className={`tabular inline-block w-14 rounded px-1 py-0.5 text-xs ${heat(value)} ${
@@ -166,29 +160,26 @@ export default function GroupPanel() {
             </div>
 
             <p className="mt-2 text-[11px] text-neutral-500">
-              {prediction.simulations.toLocaleString("ru")} разыгранных турниров. Вероятности
-              суммируются в 100% по каждой команде: корзины — это взаимоисключающие исходы,
-              а не отдельные ставки.
+              {t("group.simulationsNote", {
+                count: tp("plural.tournaments", prediction.simulations),
+              })}
             </p>
             <p className="mt-1 text-[11px] text-neutral-500">
               <span className="mr-1 inline-block rounded px-1 ring-2 ring-[#c8a24a]">
-                обведена
+                {t("group.circled")}
               </span>
-              корзина, на которую мы ставим. Это не всегда самый вероятный исход команды:
-              слотов фиксированное число ({buckets.map((b) => b.slots).join("/")}), и каждый
-              нужно кем-то занять. Единственный слот 4-0 достаётся тому, у кого шанс на него
-              выше всех из шестнадцати, даже если ей самой вероятнее закончить 4-1 — иначе
-              этот слот уйдёт команде с меньшим шансом, и суммарно угаданных станет меньше.
+              {tx("group.pickNote", {
+                slots: (
+                  <span className="tabular">{buckets.map((b) => b.slots).join("/")}</span>
+                ),
+              })}
             </p>
           </>
         )}
       </Panel>
 
       {prediction && (
-        <Panel
-          title="Рекомендованные предсказания"
-          subtitle="Расстановка подобрана под максимум ожидаемых очков, а не под самые вероятные исходы по отдельности — шкала начисления нелинейная."
-        >
+        <Panel title={t("group.planTitle")} subtitle={t("group.planSubtitle")}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {prediction.plan.map((pick) => (
               <div

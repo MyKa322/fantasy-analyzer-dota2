@@ -9,9 +9,11 @@ import {
   YAxis,
 } from "recharts";
 import { api, type RatingHistory, type Team } from "../api";
+import { useT } from "../i18n";
 import { Button, Notice, Panel, chartTooltip } from "./ui";
 
 export default function TeamsPanel() {
+  const { t } = useT();
   const [teams, setTeams] = useState<Team[]>([]);
   const [history, setHistory] = useState<RatingHistory | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,30 +64,25 @@ export default function TeamsPanel() {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <Panel
-        title="Рейтинг команд"
-        subtitle="Glicko-2: рейтинг ± RD. Чем выше RD, тем меньше данных и тем осторожнее прогноз."
+        title={t("teams.title")}
+        subtitle={t("teams.subtitle")}
         actions={
           <Button onClick={recompute} disabled={busy}>
-            {busy ? "Считаю…" : "Пересчитать"}
+            {busy ? t("common.calculating") : t("teams.recompute")}
           </Button>
         }
       >
         {error && <Notice kind="error">{error}</Notice>}
-        {teams.length === 0 && !error && (
-          <Notice>
-            Данных пока нет. Загрузите матчи во вкладке «Данные», затем нажмите
-            «Пересчитать».
-          </Notice>
-        )}
+        {teams.length === 0 && !error && <Notice>{t("teams.empty")}</Notice>}
         {teams.length > 0 && (
           <div className="max-h-[28rem] overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-[#16181e] text-[11px] tracking-wide text-neutral-400 uppercase">
                 <tr>
-                  <th className="py-2 text-left">Команда</th>
-                  <th className="py-2 text-right">Рейтинг</th>
+                  <th className="py-2 text-left">{t("common.team")}</th>
+                  <th className="py-2 text-right">{t("common.rating")}</th>
                   <th className="py-2 text-right">RD</th>
-                  <th className="py-2 text-center">Надёжен</th>
+                  <th className="py-2 text-center">{t("teams.reliable")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -125,11 +122,11 @@ export default function TeamsPanel() {
       </Panel>
 
       <Panel
-        title="Тренд рейтинга"
+        title={t("teams.trendTitle")}
         subtitle={
           history
-            ? `${history.name ?? history.team_id}: полоса — интервал ±RD`
-            : "Выберите команду в таблице слева"
+            ? t("teams.trendSubtitle", { team: history.name ?? history.team_id })
+            : t("teams.trendEmpty")
         }
       >
         {chartData.length > 0 ? (
@@ -148,7 +145,7 @@ export default function TeamsPanel() {
           </ResponsiveContainer>
         ) : (
           <div className="flex h-[320px] items-center justify-center text-sm text-neutral-500">
-            Нет данных для графика
+            {t("teams.chartEmpty")}
           </div>
         )}
       </Panel>

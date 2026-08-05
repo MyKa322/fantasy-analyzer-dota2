@@ -15,7 +15,8 @@ import {
   type InventoryFit,
   type InventoryResponse,
 } from "../api";
-import { GROUP_COLOR, QUALITY_LABEL, ROLE_LABEL, TRAIT_LABEL, teamCrest } from "../assets";
+import { GROUP_COLOR, QUALITY_LABEL, ROLES, TRAIT_LABEL, teamCrest } from "../assets";
+import { useT } from "../i18n";
 import EmblemCard from "./EmblemCard";
 import PlayerPortrait from "./PlayerPortrait";
 import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
@@ -23,14 +24,6 @@ import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from ".
 const QUALITIES = ["tier_1", "tier_2", "tier_3", "tier_4", "tier_5"];
 const TRAITS = ["fractal", "benevolent", "vampiric", "unique", "friendly"];
 const STORAGE_KEY = "compendium.inventory.v1";
-
-// Цвет эмблемы = цвет слота, куда её вообще можно поставить. В списке статы
-// сгруппированы по нему: иначе непонятно, почему GPM не подходит саппорту.
-const COLOR_GROUP: Record<string, string> = {
-  red: "Красные — Core и Mid",
-  blue: "Синие — Mid и Support",
-  green: "Зелёные — любая роль",
-};
 
 // Стартовый набор — пример, а не рекомендация: сразу видно, как это работает,
 // и что красные эмблемы саппорту не подойдут ни при каких раскладах.
@@ -52,6 +45,7 @@ function loadInventory(): Emblem[] {
 }
 
 export default function InventoryAnalyzer() {
+  const { t, tryT, tp, n, role: roleLabel } = useT();
   const [rules, setRules] = useState<FantasyRules | null>(null);
   const [inventory, setInventory] = useState<Emblem[]>(loadInventory);
   const [role, setRole] = useState("");
@@ -131,7 +125,7 @@ export default function InventoryAnalyzer() {
   }, [result]);
 
   const chartData = (result?.fits ?? []).slice(0, 12).map((fit) => ({
-    name: `${fit.team_name ?? fit.team_id} · ${ROLE_LABEL[fit.role] ?? fit.role}`,
+    name: `${fit.team_name ?? fit.team_id} · ${roleLabel(fit.role)}`,
     points: Math.round(fit.period_mean ?? fit.expected_card_points),
     role: fit.role,
   }));
@@ -145,25 +139,25 @@ export default function InventoryAnalyzer() {
   return (
     <div className="space-y-4">
       <Panel
-        title="Мои эмблемы"
-        subtitle="Впишите то, что уже выпало из роллов, — и увидите, кому из шестнадцати команд эти эмблемы принесут больше всего очков. Порядок внутри баннера подбирается сам: Benevolent выгоднее в середине, Vampiric — с краю."
+        title={t("inventory.title")}
+        subtitle={t("inventory.subtitle")}
         actions={
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Роль">
+            <Field label={t("common.role")}>
               <select
                 className={selectClass}
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
               >
-                <option value="">Все роли</option>
-                {Object.keys(ROLE_LABEL).map((r) => (
+                <option value="">{t("role.all")}</option>
+                {ROLES.map((r) => (
                   <option key={r} value={r}>
-                    {ROLE_LABEL[r]}
+                    {roleLabel(r)}
                   </option>
                 ))}
               </select>
             </Field>
-            <Button onClick={add}>Добавить эмблему</Button>
+            <Button onClick={add}>{t("inventory.add")}</Button>
           </div>
         }
       >
@@ -187,14 +181,16 @@ export default function InventoryAnalyzer() {
                 className={selectClass}
                 value={emblem.stat}
                 onChange={(e) => update(index, { stat: e.target.value })}
-                aria-label="Стат"
+                aria-label={t("common.stat")}
               >
+                {/* Цвет эмблемы = цвет слота, куда её вообще можно поставить.
+                    Без группировки непонятно, почему GPM не подходит саппорту. */}
                 {(["red", "blue", "green"] as const).map((color) => (
-                  <optgroup key={color} label={COLOR_GROUP[color]}>
+                  <optgroup key={color} label={t(`color.${color}`)}>
                     {statsByColor[color]?.map((stat) => (
                       <option key={stat.key} value={stat.key}>
                         {stat.label}
-                        {unavailable.has(stat.key) ? " (нет в данных)" : ""}
+                        {unavailable.has(stat.key) ? t("inventory.noStat") : ""}
                       </option>
                     ))}
                   </optgroup>
@@ -204,7 +200,7 @@ export default function InventoryAnalyzer() {
                 className={selectClass}
                 value={emblem.quality}
                 onChange={(e) => update(index, { quality: e.target.value })}
-                aria-label="Качество"
+                aria-label={t("common.quality")}
               >
                 {QUALITIES.map((q) => (
                   <option key={q} value={q}>
@@ -216,25 +212,29 @@ export default function InventoryAnalyzer() {
                 className={selectClass}
                 value={emblem.trait ?? ""}
                 onChange={(e) => update(index, { trait: e.target.value || null })}
-                aria-label="Трейт"
+                aria-label={t("common.trait")}
               >
-                <option value="">Без трейта</option>
-                {TRAITS.map((t) => (
-                  <option key={t} value={t}>
-                    {TRAIT_LABEL[t]}
+                <option value="">{t("trait.noneOption")}</option>
+                {TRAITS.map((trait) => (
+                  <option
+                    key={trait}
+                    value={trait}
+                    title={tryT(`trait.${trait}.description`, trait)}
+                  >
+                    {TRAIT_LABEL[trait]}
                   </option>
                 ))}
               </select>
               {unavailable.has(emblem.stat) && (
                 <span className="text-[11px] text-amber-300">
-                  в матчах не считается — оценим в ноль
+                  {t("inventory.zeroStat")}
                 </span>
               )}
               <button
                 onClick={() => remove(index)}
                 className="ml-auto rounded border border-[#2C3138] px-2 py-1 text-[11px] text-neutral-500 hover:border-red-900 hover:text-red-300"
               >
-                Убрать
+                {t("common.remove")}
               </button>
             </div>
           ))}
@@ -242,7 +242,7 @@ export default function InventoryAnalyzer() {
 
         {!inventory.length && (
           <div className="mt-3">
-            <Notice>Добавьте хотя бы три эмблемы — по одной на каждый слот баннера.</Notice>
+            <Notice>{t("inventory.empty")}</Notice>
           </div>
         )}
 
@@ -257,8 +257,10 @@ export default function InventoryAnalyzer() {
             <Notice kind="warn">
               {Object.entries(result.gaps).map(([roleKey, gaps]) => (
                 <div key={roleKey}>
-                  {ROLE_LABEL[roleKey] ?? roleKey}: этот набор не собрать — {gaps.join(", ")}.
-                  Цвета слотов заданы ролью и не рероллятся.
+                  {t("inventory.gap", {
+                    role: roleLabel(roleKey),
+                    gaps: gaps.join(", "),
+                  })}
                 </div>
               ))}
             </Notice>
@@ -269,8 +271,8 @@ export default function InventoryAnalyzer() {
       {best && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           <Panel
-            title="Лучшая пара под эти эмблемы"
-            subtitle={`${ROLE_LABEL[best.role] ?? best.role} · ${best.team_name ?? ""}`}
+            title={t("inventory.bestTitle")}
+            subtitle={`${roleLabel(best.role)} · ${best.team_name ?? ""}`}
           >
             <div className="mb-3 flex items-center gap-3">
               {teamCrest(best.team_name) && (
@@ -295,39 +297,31 @@ export default function InventoryAnalyzer() {
             </div>
 
             <div className="mt-3 grid grid-cols-3 gap-2">
+              <Stat label={t("common.perMap")} value={n(best.expected_card_points)} />
               <Stat
-                label="За карту"
-                value={Math.round(best.expected_card_points).toLocaleString("ru")}
+                label={t("common.perPeriod")}
+                value={best.period_mean ? n(best.period_mean) : "—"}
+                hint={t("common.topTwoMaps")}
               />
               <Stat
-                label="За период"
-                value={
-                  best.period_mean ? Math.round(best.period_mean).toLocaleString("ru") : "—"
-                }
-                hint="топ-2 карты лучшей серии"
-              />
-              <Stat
-                label="Потолок"
-                value={
-                  best.period_ceiling
-                    ? Math.round(best.period_ceiling).toLocaleString("ru")
-                    : "—"
-                }
+                label={t("common.ceiling")}
+                value={best.period_ceiling ? n(best.period_ceiling) : "—"}
               />
             </div>
 
             {best.unused.length > 0 && (
               <p className="mt-3 text-[11px] text-neutral-500">
-                Не поместились: {best.unused.map((e) => e.stat).join(", ")} — на баннере
-                три слота, и цвет каждого фиксирован.
+                {t("inventory.unused", {
+                  stats: best.unused.map((e) => e.stat).join(", "),
+                })}
               </p>
             )}
           </Panel>
 
           <div className="space-y-4">
             <Panel
-              title="Лучшие под этот набор"
-              subtitle="Одни и те же эмблемы стоят по-разному у разных игроков: ценность эмблемы — это цена стата, умноженная на то, сколько игрок его делает."
+              title={t("inventory.chartTitle")}
+              subtitle={t("inventory.chartSubtitle")}
             >
               <ResponsiveContainer width="100%" height={Math.max(220, chartData.length * 26)}>
                 <BarChart data={chartData} layout="vertical" margin={{ left: 30 }}>
@@ -342,7 +336,7 @@ export default function InventoryAnalyzer() {
                   <Tooltip
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
                     {...chartTooltip}
-                    formatter={(value) => Math.round(Number(value)).toLocaleString("ru")}
+                    formatter={(value) => n(Number(value))}
                   />
                   <Bar dataKey="points" radius={[0, 3, 3, 0]}>
                     {chartData.map((row, i) => (
@@ -355,24 +349,22 @@ export default function InventoryAnalyzer() {
 
             {bestByRole.length > 1 && (
               <Panel
-                title="Лучший вариант по каждой роли"
-                subtitle="Если эмблем хватает на несколько ролей, выбор между ними — это выбор, кого вписывать в состав."
+                title={t("inventory.byRoleTitle")}
+                subtitle={t("inventory.byRoleSubtitle")}
               >
                 <table className="w-full text-xs">
                   <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                     <tr>
-                      <th className="py-1 text-left">Роль</th>
-                      <th className="py-1 text-left">Пара</th>
-                      <th className="py-1 text-left">Раскладка</th>
-                      <th className="py-1 text-right">За период</th>
+                      <th className="py-1 text-left">{t("common.role")}</th>
+                      <th className="py-1 text-left">{t("inventory.pair")}</th>
+                      <th className="py-1 text-left">{t("inventory.layout")}</th>
+                      <th className="py-1 text-right">{t("common.perPeriod")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {bestByRole.map((fit) => (
                       <tr key={fit.role} className="border-t border-[#20232c]">
-                        <td className="py-1 text-neutral-300">
-                          {ROLE_LABEL[fit.role] ?? fit.role}
-                        </td>
+                        <td className="py-1 text-neutral-300">{roleLabel(fit.role)}</td>
                         <td className="py-1 text-neutral-200">
                           {fit.team_name} · {fit.player_names.join(", ")}
                         </td>
@@ -380,9 +372,7 @@ export default function InventoryAnalyzer() {
                           {fit.slots.map((s) => s.label).join(" → ")}
                         </td>
                         <td className="tabular py-1 text-right text-[#c8a24a]">
-                          {Math.round(
-                            fit.period_mean ?? fit.expected_card_points,
-                          ).toLocaleString("ru")}
+                          {n(fit.period_mean ?? fit.expected_card_points)}
                         </td>
                       </tr>
                     ))}
@@ -392,17 +382,21 @@ export default function InventoryAnalyzer() {
             )}
 
             <Panel
-              title="Полный рейтинг"
-              subtitle={busy ? "Пересчитываю…" : `${result?.fits.length ?? 0} вариантов`}
+              title={t("inventory.fullTitle")}
+              subtitle={
+                busy
+                  ? t("inventory.recalculating")
+                  : tp("plural.options", result?.fits.length ?? 0)
+              }
             >
               <table className="w-full text-xs">
                 <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                   <tr>
-                    <th className="py-1 text-left">Команда</th>
-                    <th className="py-1 text-left">Роль</th>
-                    <th className="py-1 text-left">Игроки</th>
-                    <th className="py-1 text-right">За карту</th>
-                    <th className="py-1 text-right">Карт</th>
+                    <th className="py-1 text-left">{t("common.team")}</th>
+                    <th className="py-1 text-left">{t("common.role")}</th>
+                    <th className="py-1 text-left">{t("common.players")}</th>
+                    <th className="py-1 text-right">{t("common.perMap")}</th>
+                    <th className="py-1 text-right">{t("common.mapsShort")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -425,12 +419,10 @@ export default function InventoryAnalyzer() {
                           {fit.team_name}
                         </span>
                       </td>
-                      <td className="py-1 text-neutral-500">
-                        {ROLE_LABEL[fit.role] ?? fit.role}
-                      </td>
+                      <td className="py-1 text-neutral-500">{roleLabel(fit.role)}</td>
                       <td className="py-1 text-neutral-500">{fit.player_names.join(", ")}</td>
                       <td className="tabular py-1 text-right">
-                        {Math.round(fit.expected_card_points).toLocaleString("ru")}
+                        {n(fit.expected_card_points)}
                       </td>
                       <td className="tabular py-1 text-right text-neutral-500">{fit.games}</td>
                     </tr>

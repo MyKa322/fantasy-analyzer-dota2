@@ -793,6 +793,29 @@ def test_unmodelled_titles_explain_themselves(advisor):
     assert titles["tormented"].note
 
 
+def test_notes_carry_translation_key_and_numbers(advisor):
+    """Пояснение уходит на фронт и текстом, и ключом с числами.
+
+    Интерфейс переведён на четыре языка, и собрать «34% выборов — герои из
+    списка» из готовой русской строки нельзя: числа приходится отдавать
+    отдельно от шаблона.
+    """
+    titles = {
+        t.key: t
+        for t in advisor.title_advice(hero_history([(AXE, True)]), heroes=HERO_NAMES)
+    }
+
+    crimson = titles["crimson"]
+    assert crimson.note_key == "title.note.heroShare"
+    assert crimson.note_params["total"] == 1
+    # Проценты уходят целыми: подставлять «0.34» в «{pct}%» бессмысленно.
+    assert crimson.note_params["pct"] == round((crimson.hit_rate or 0) * 100)
+
+    # У неоцениваемых ключ собирается из титула: у каждого своя причина.
+    assert titles["flayed"].note_key == "title.note.flayed"
+    assert all(t.note_key for t in titles.values() if t.note)
+
+
 def test_every_prefix_lists_known_heroes():
     """Опечатка в списке героев молча выкинула бы его из оценки титула."""
     from app.fantasy.rules import load_rules

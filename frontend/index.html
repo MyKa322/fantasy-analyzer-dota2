@@ -3,10 +3,94 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Compendium Analyzer — TI15</title>
+    <title>Compendium Analyzer — Fantasy и Predictions для The International 2026</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Мета-теги языковой версии подставляет сборка (frontend/scripts/seo.ts):
+         описание, canonical, hreflang и карточки для соцсетей у каждого языка
+         свои, и держать их в четырёх местах руками — верный способ получить
+         английское описание на китайской странице. -->
+    <!--seo-head-->
+    <!--/seo-head-->
+    <style>
+      /* Оформление вводного блока — прямо здесь, а не в Tailwind: этот текст
+         вставляется в HTML на этапе сборки, классов из него сборщик стилей не
+         видит, а показать блок нужно до того, как загрузится бандл. */
+      body {
+        margin: 0;
+        background: #14161c;
+        color: #e5e5e5;
+        font-family:
+          ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      .intro {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 64px 24px;
+      }
+      .intro .brand {
+        margin: 0 0 12px;
+        color: #c8a24a;
+        font-size: 13px;
+        letter-spacing: 0.18em;
+      }
+      .intro h1 {
+        margin: 0 0 16px;
+        font-size: 30px;
+        line-height: 1.25;
+        font-weight: 600;
+      }
+      .intro h2 {
+        margin: 28px 0 8px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #c8a24a;
+      }
+      .intro .lead {
+        margin: 0 0 20px;
+        font-size: 16px;
+        line-height: 1.6;
+        color: #b8bec8;
+      }
+      .intro ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #b8bec8;
+        font-size: 14px;
+        line-height: 1.7;
+      }
+      .intro .teams {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #b8bec8;
+      }
+      .intro .note,
+      .intro .languages {
+        margin: 12px 0 0;
+        font-size: 13px;
+        color: #8b93a0;
+      }
+      .intro a {
+        color: #c8a24a;
+        text-decoration: none;
+      }
+      .intro a[aria-current] {
+        color: #e5e5e5;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Здесь же экран загрузки: манифесты портретов и иконок читаются до
+           первого рендера, и без этого блока страница до него пустая. -->
+      <!--seo-intro-->
+      <div class="intro">
+        <p class="brand">COMPENDIUM ANALYZER</p>
+        <h1>Аналитика компендиума The International 2026</h1>
+        <p class="lead">Загружаю данные…</p>
+      </div>
+      <!--/seo-intro-->
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

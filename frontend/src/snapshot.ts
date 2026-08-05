@@ -7,6 +7,7 @@
 // Режим включается переменной сборки VITE_STATIC_DATA=1.
 
 import type { RulesSnapshot, StatValue } from "./engine/scoring";
+import { tr } from "./i18n";
 
 export const STATIC_MODE = import.meta.env.VITE_STATIC_DATA === "1";
 
@@ -67,6 +68,8 @@ export interface RoleSnapshot {
     expected_bonus: number | null;
     estimator: string;
     note: string;
+    note_key?: string | null;
+    note_params?: Record<string, string | number>;
   }[];
 }
 
@@ -112,7 +115,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
     `${import.meta.env.BASE_URL}data/snapshot.json?v=${__BUILD_ID__}`,
   );
   if (!response.ok) {
-    throw new Error(`не удалось загрузить снапшот: ${response.status}`);
+    throw new Error(tr().t("error.snapshot", { status: response.status }));
   }
   cached = (await response.json()) as Snapshot;
   return cached;
@@ -124,10 +127,4 @@ export function findRole(
   role: string,
 ): RoleSnapshot | undefined {
   return snapshot.roles.find((r) => r.team_id === teamId && r.role === role);
-}
-
-/** Дата снапшота человеку — чтобы было видно, насколько данные свежие. */
-export function formatGeneratedAt(value: string): string {
-  const date = new Date(value);
-  return date.toLocaleString("ru", { dateStyle: "medium", timeStyle: "short" });
 }
