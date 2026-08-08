@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,6 +15,10 @@ from app.db.models import Base, Player, TeamRating, TeamRosterSlot
 from app.ingest.pipeline import upsert_match
 from app.ingest.stat_mapping import STATS_VERSION, extract_profile_stats
 from app.services.profiles import (
+    GameRow,
+    _fantasy_form,
+    _hero_pool,
+    _trends,
     load_heroes,
     player_directory,
     player_profile,
@@ -249,6 +254,117 @@ def test_averages_skip_matches_without_profile_stats(session):
     assert profile.averages["assists"] == pytest.approx(assists)
     # Fantasy-статы есть у всех карт, их выборка не сужается.
     assert profile.fantasy_units["kills"] > 0
+
+
+# --- разрезы выборки ----------------------------------------------------------
+
+
+def game(days_ago: float, won: bool | None, *, minutes: int = 35, radiant: bool = True) -> GameRow:
+    return GameRow(
+        played_at=NOW - timedelta(days=days_ago),
+        won=won,
+        duration=minutes * 60,
+        is_radiant=radiant,
+    )
+
+
+def test_streak_counts_only_the_latest_run():
+    """Серия — это последние подряд идущие карты, а не лучший отрезок периода."""
+    rows = [game(1, True), game(2, True), game(3, False), game(4, True), game(5, True)]
+    assert _trends(rows, now=NOW).streak == 2
+
+    losses = [game(1, False), game(2, False), game(3, False), game(4, True)]
+    assert _trends(losses, now=NOW).streak == -3
+
+
+def test_streak_stops_at_a_game_without_result():
+    assert _trends([game(1, True), game(2, None), game(3, True)], now=NOW).streak == 1
+
+
+def test_form_window_does_not_overlap_the_baseline():
+    rows = [game(5, True), game(20, False), game(45, True), game(60, True), game(200, True)]
+    trends = _trends(rows, now=NOW)
+
+    assert (trends.form.games, trends.form.wins) == (2, 1)
+    # Карта 200-дневной давности не попадает ни в одно окно: базой сравнения
+    # служат три месяца, иначе форму сравниваешь с прошлым составом.
+    assert (trends.baseline.games, trends.baseline.wins) == (2, 2)
+
+
+def test_sides_and_durations_cover_every_map():
+    rows = [
+        game(1, True, minutes=22, radiant=True),
+        game(2, False, minutes=35, radiant=False),
+        game(3, True, minutes=51, radiant=False),
+    ]
+    trends = _trends(rows, now=NOW)
+
+    assert [s.games for s in trends.sides] == [1, 2]
+    assert [d.key for d in trends.durations] == ["short", "mid", "long"]
+    assert [d.games for d in trends.durations] == [1, 1, 1]
+    assert sum(d.games for d in trends.durations) == len(rows)
+
+
+def test_hero_pool_shows_concentration():
+    pool = _hero_pool(Counter({1: 10, 2: 5, 3: 3, 4: 2}))
+    assert pool.distinct == 4
+    assert pool.top3_share == pytest.approx(18 / 20)
+
+
+def test_fantasy_form_needs_a_sample():
+    """По двум картам разброс не считается — лучше не показывать ничего."""
+    assert _fantasy_form("core", [{"kills": 10.0}, {"kills": 8.0}]) is None
+
+
+def test_fantasy_form_counts_only_stats_of_the_role():
+    maps = [{"kills": 10.0, "wards_placed": 30.0} for _ in range(5)]
+    form = _fantasy_form("core", maps)
+
+    assert form is not None and form.maps == 5
+    # Ставить варды кор может, но синего слота у его баннера нет — за них
+    # красно-зелёная тройка очков не получит.
+    kills_only = _fantasy_form("core", [{"kills": 10.0} for _ in range(5)])
+    assert form.mean == pytest.approx(kills_only.mean)
+    # Одинаковые карты — нулевой разброс.
+    assert form.spread == pytest.approx(0.0)
+
+
+def test_player_profile_carries_trends(session):
+    payload = seed(session)
+    account_id = next(p["account_id"] for p in payload["players"] if p["isRadiant"])
+    profile = player_profile(session, account_id, days=None)
+
+    assert profile.trends is not None
+    # Все шесть карт — копии одной: одна сторона, одна длительность, один исход.
+    assert abs(profile.trends.streak) == 6
+    assert sum(s.games for s in profile.trends.sides) == 6
+    assert sum(d.games for d in profile.trends.durations) == 6
+    assert profile.hero_pool.distinct == 1
+    assert profile.hero_pool.top3_share == pytest.approx(1.0)
+
+
+def test_team_profile_measures_opponent_strength(session):
+    seed(session)
+    for team_id, rating in ((10207962, 1500.0), (10207961, 1700.0)):
+        session.add(
+            TeamRating(
+                team_id=team_id,
+                as_of=NOW,
+                rating=rating,
+                rd=60.0,
+                volatility=0.06,
+                matches_played=6,
+                run_id="run",
+            )
+        )
+    session.commit()
+
+    profile = team_profile(session, 10207962, days=None)
+    assert profile.opponent_rating == pytest.approx(1700.0)
+    # Соперник сильнее — все шесть карт идут в этот разрез.
+    assert profile.vs_stronger.games == 6
+    assert profile.first_blood_rate is not None
+    assert 0.0 <= profile.first_blood_rate <= 1.0
 
 
 def test_team_averages_skip_matches_without_profile_stats(session):

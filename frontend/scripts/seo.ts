@@ -25,10 +25,18 @@ import {
 
 /** Картинка превью на каждый язык: собирается backend/tools/build_og_image.py. */
 const OG_IMAGE: Record<Locale, string> = {
-  ru: "og.png",
   en: "og-en.png",
+  ru: "og.png",
   uk: "og-uk.png",
   zh: "og-zh.png",
+  es: "og-es.png",
+  pt: "og-pt.png",
+  de: "og-de.png",
+  fr: "og-fr.png",
+  pl: "og-pl.png",
+  tr: "og-tr.png",
+  id: "og-id.png",
+  vi: "og-vi.png",
 };
 
 const HEAD_MARK = ["<!--seo-head-->", "<!--/seo-head-->"] as const;

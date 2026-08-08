@@ -16,7 +16,16 @@
     {
       "name": "frontend-built",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "preview", "--prefix", "frontend", "--", "--port", "4173"],
+      "runtimeArgs": [
+        "run",
+        "preview",
+        "--prefix",
+        "frontend",
+        "--",
+        "--port",
+        "4173",
+        "--base=/fantasy-analyzer-dota2/"
+      ],
       "port": 4173
     }
   ]

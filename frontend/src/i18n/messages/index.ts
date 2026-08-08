@@ -1,18 +1,44 @@
-import { common, type Message } from "./common";
-import { panels } from "./panels";
-import { profiles } from "./profiles";
+// Загрузка словаря нужного языка.
+//
+// Английский лежит в главном чанке: на нём написан оригинал, он же язык корня
+// сайта и запасной вариант, если словарь языка не догрузился. Остальные языки
+// Vite режет на отдельные чанки — дюжина словарей весит под треть мегабайта, и
+// тащить их все ради одного читателя незачем.
 
-export type { Message };
+import type { Locale } from "../site";
+import { en, type Dictionary, type MessageKey } from "./en";
+
+export { en };
+export type { Dictionary, MessageKey };
+
+type Loader = () => Promise<{ default: Dictionary }>;
 
 /**
- * Все подписи интерфейса.
- *
- * Языки лежат рядом в одном объекте, а не по файлу на язык: так пропущенный
- * перевод виден при чтении словаря, а не только при сборке, и правка оригинала
- * не расходится с переводами по разным файлам. Все языки попадают в бандл —
- * это пара десятков килобайт, дешевле, чем догрузка словаря по сети на каждую
- * смену языка.
+ * Импорты записаны литералами, а не собираются из строки: Vite ищет чанки
+ * статическим анализом, и `import(`./${locale}`)` он либо не найдёт, либо
+ * втянет все словари разом.
  */
-export const messages = { ...common, ...panels, ...profiles };
+const loaders: Record<Exclude<Locale, "en">, Loader> = {
+  ru: () => import("./ru"),
+  uk: () => import("./uk"),
+  zh: () => import("./zh"),
+  es: () => import("./es"),
+  pt: () => import("./pt"),
+  de: () => import("./de"),
+  fr: () => import("./fr"),
+  pl: () => import("./pl"),
+  tr: () => import("./tr"),
+  id: () => import("./id"),
+  vi: () => import("./vi"),
+};
 
-export type MessageKey = keyof typeof messages;
+export async function loadMessages(locale: Locale): Promise<Dictionary> {
+  if (locale === "en") return en;
+  try {
+    return (await loaders[locale]()).default;
+  } catch {
+    // Чанк мог не догрузиться — на английском интерфейс останется рабочим, а
+    // без словаря на странице были бы голые ключи.
+    return en;
+  }
+}

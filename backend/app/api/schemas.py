@@ -370,6 +370,38 @@ class HeroPickOut(BaseModel):
     players: list[dict[str, int]] = []
 
 
+class SplitOut(BaseModel):
+    """Часть выборки: сторона карты, корзина по длительности, класс соперника."""
+
+    key: str
+    games: int
+    wins: int
+
+
+class TrendsOut(BaseModel):
+    form: SplitOut
+    baseline: SplitOut
+    streak: int
+    sides: list[SplitOut] = []
+    durations: list[SplitOut] = []
+
+
+class HeroPoolOut(BaseModel):
+    distinct: int
+    top3_share: float
+
+
+class FantasyFormOut(BaseModel):
+    """Очки за карту по всему пулу статов роли — сравнимо внутри роли."""
+
+    maps: int
+    mean: float
+    median: float
+    best: float
+    p90: float
+    spread: float
+
+
 class PlayerPageOut(BaseModel):
     """Страница игрока: обычная статистика отдельно, Fantasy-единицы отдельно."""
 
@@ -389,6 +421,10 @@ class PlayerPageOut(BaseModel):
     fantasy_units: dict[str, float] = {}
     heroes: list[HeroRowOut] = []
     matches: list[MatchRowOut] = []
+    trends: TrendsOut | None = None
+    lanes: dict[str, int] = {}
+    hero_pool: HeroPoolOut | None = None
+    fantasy_form: FantasyFormOut | None = None
 
 
 class TeamPageOut(BaseModel):
@@ -410,6 +446,10 @@ class TeamPageOut(BaseModel):
     matches: list[MatchRowOut] = []
     team_averages: dict[str, float] = {}
     opponents: list[dict[str, str | int]] = []
+    trends: TrendsOut | None = None
+    opponent_rating: float | None = None
+    vs_stronger: SplitOut | None = None
+    first_blood_rate: float | None = None
 
 
 class TeamListItemOut(BaseModel):

@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import json
 import logging
+import statistics
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -31,6 +33,8 @@ from sqlalchemy.orm import Session
 
 from ..db.models import Match, Player, PlayerMatchStat, Team, TeamRating, TeamRosterSlot
 from ..fantasy.projection import RoleGame, RoleHistory
+from ..fantasy.rules import load_rules
+from ..fantasy.scoring import FantasyScorer
 from ..ingest.stat_mapping import PROFILE_FIELDS
 
 log = logging.getLogger(__name__)
@@ -39,6 +43,25 @@ HEROES_PATH = Path(__file__).resolve().parents[2] / "config" / "heroes.json"
 
 # Средние считаются по разобранным матчам: в остальных половины полей нет.
 DEFAULT_DAYS = 180
+
+# Окно текущей формы и окно, с которым она сравнивается. Месяц — это примерно
+# один турнир: меньше берёшь — сравниваешь шум, больше — размазываешь замену
+# игрока и смену патча по всей выборке.
+FORM_DAYS = 30
+BASELINE_DAYS = 90
+
+# Корзины по длительности карты. Границы не круглые ради красоты: до тридцатой
+# минуты игру решает ранний темп, после сороковой — байбэки и шестислотовые
+# кор-герои, и команда, сильная в одном, часто беспомощна в другом.
+DURATION_BUCKETS: tuple[tuple[str, int, int], ...] = (
+    ("short", 0, 30 * 60),
+    ("mid", 30 * 60, 40 * 60),
+    ("long", 40 * 60, 10**9),
+)
+
+# Позиция по разметке лейна у OpenDota: 1 — лёгкая, 2 — центр, 3 — тяжёлая,
+# 4 — лес. Пятой роли в разметке нет, саппорты делят лейн с кором.
+LANE_KEYS = {1: "safe", 2: "mid", 3: "off", 4: "jungle"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +98,155 @@ class HeroRow:
         return self.wins / self.games if self.games else 0.0
 
 
+@dataclass(frozen=True, slots=True)
+class Split:
+    """Часть выборки: сколько карт сыграно и сколько выиграно.
+
+    Одна форма на все разрезы — по сторонам, по длительности, по силе
+    соперника. Так их можно рисовать одним компонентом и складывать в один
+    список, не заводя пять почти одинаковых структур.
+    """
+
+    key: str
+    games: int
+    wins: int
+
+    @property
+    def win_rate(self) -> float:
+        return self.wins / self.games if self.games else 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class GameRow:
+    """Карта в том виде, в каком её видят разрезы. Порядок — от свежих к старым."""
+
+    played_at: datetime | None
+    won: bool | None
+    duration: int
+    is_radiant: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class Trends:
+    """Разрезы выборки, которые одинаково читаются у игрока и у команды."""
+
+    # Последние FORM_DAYS дней и предыдущие — до BASELINE_DAYS.
+    form: Split
+    baseline: Split
+    # Серия: +3 — три победы подряд, −2 — два поражения. Считается по последним
+    # картам, поэтому переносится на следующий матч.
+    streak: int
+    sides: list[Split]
+    durations: list[Split]
+
+
+@dataclass(frozen=True, slots=True)
+class HeroPool:
+    """Насколько узок пул: сколько разных героев и какая доля у трёх любимых."""
+
+    distinct: int
+    top3_share: float
+
+
+@dataclass(frozen=True, slots=True)
+class FantasyForm:
+    """Очки за карту по всему пулу статов роли — не по конкретному баннеру.
+
+    Баннер берёт пять статов из пула, и какие именно — зависит от выпавших
+    эмблем. Сумма по всему пулу больше любого реального баннера, зато сравнима
+    между игроками одной роли и отвечает на вопрос, ради которого страницу
+    открывают: кто вообще набивает то, за что в компендиуме платят.
+
+    `spread` — коэффициент вариации: у игрока с тем же средним, но вдвое
+    меньшим разбросом, ожидание за период надёжнее.
+    """
+
+    maps: int
+    mean: float
+    median: float
+    best: float
+    p90: float
+    spread: float
+
+
+@lru_cache(maxsize=1)
+def _scorer() -> FantasyScorer:
+    """Один счётчик на процесс: правила читаются из YAML, а профилей сотни."""
+    return FantasyScorer(load_rules())
+
+
+def _split(key: str, rows: Iterable[GameRow]) -> Split:
+    rows = list(rows)
+    return Split(key=key, games=len(rows), wins=sum(1 for row in rows if row.won))
+
+
+def _trends(rows: Sequence[GameRow], *, now: datetime | None = None) -> Trends:
+    """Разрезы по списку карт, отсортированному от свежих к старым."""
+    now = now or datetime.now(timezone.utc)
+    form_edge = now - timedelta(days=FORM_DAYS)
+    baseline_edge = now - timedelta(days=BASELINE_DAYS)
+
+    streak = 0
+    for row in rows:
+        if row.won is None or (streak and row.won != (streak > 0)):
+            break
+        streak += 1 if row.won else -1
+
+    dated = [row for row in rows if row.played_at is not None]
+    return Trends(
+        form=_split("form", (row for row in dated if row.played_at >= form_edge)),
+        baseline=_split(
+            "baseline",
+            (row for row in dated if baseline_edge <= row.played_at < form_edge),
+        ),
+        streak=streak,
+        sides=[
+            _split("radiant", (row for row in rows if row.is_radiant is True)),
+            _split("dire", (row for row in rows if row.is_radiant is False)),
+        ],
+        durations=[
+            _split(key, (row for row in rows if low <= row.duration < high))
+            for key, low, high in DURATION_BUCKETS
+        ],
+    )
+
+
+def _hero_pool(games: Counter[int]) -> HeroPool:
+    total = sum(games.values())
+    top3 = sum(count for _, count in games.most_common(3))
+    return HeroPool(distinct=len(games), top3_share=top3 / total if total else 0.0)
+
+
+def _fantasy_form(role: str | None, stats: Sequence[dict]) -> FantasyForm | None:
+    """Очки за карту по всем статам, доступным роли на баннере."""
+    scorer = _scorer()
+    rules = scorer.rules
+    key = role if role in rules.role_slots else "core"
+    pool = rules.available_stats(key)
+
+    points = [
+        sum(scorer.stat_points(stat, float(value)) for stat, value in row.items() if stat in pool)
+        for row in stats
+        if row
+    ]
+    if len(points) < 3:
+        # По двум картам разброс не считается, а среднее врёт: показывать нечего.
+        return None
+
+    mean = statistics.fmean(points)
+    ordered = sorted(points)
+    return FantasyForm(
+        maps=len(points),
+        mean=mean,
+        median=statistics.median(points),
+        best=ordered[-1],
+        # Девятый дециль вместо максимума: одна карта на 3000 очков бывает у
+        # каждого, а потолок формы — это то, что повторяется.
+        p90=ordered[min(len(ordered) - 1, int(round(0.9 * (len(ordered) - 1))))],
+        spread=statistics.pstdev(points) / mean if mean else 0.0,
+    )
+
+
 @dataclass(slots=True)
 class PlayerProfile:
     account_id: int
@@ -97,6 +269,12 @@ class PlayerProfile:
     # Те же карты в форме, понятной анализатору: по ним считаются титулы. Данные
     # уже прочитаны, второй раз в базу за ними ходить незачем.
     history: RoleHistory | None = None
+    # Разрезы выборки: форма, серия, стороны, длительность карт.
+    trends: Trends | None = None
+    # Сколько карт сыграно с какого лейна — по разметке OpenDota.
+    lanes: dict[str, int] = field(default_factory=dict)
+    hero_pool: HeroPool | None = None
+    fantasy_form: FantasyForm | None = None
 
     @property
     def win_rate(self) -> float:
@@ -124,6 +302,14 @@ class TeamProfile:
     # читать командные числа (килы команды, а не килы среднего игрока).
     team_averages: dict[str, float] = field(default_factory=dict)
     opponents: list[tuple[str, int, int]] = field(default_factory=list)
+    trends: Trends | None = None
+    # Средний рейтинг соперника за период и отдельно — счёт против тех, кто
+    # выше самой команды. Двадцать побед над квалификационным составом и пять
+    # над топ-8 — это разные двадцать пять карт.
+    opponent_rating: float | None = None
+    vs_stronger: Split | None = None
+    # Доля разобранных карт, где первую кровь взял кто-то из команды.
+    first_blood_rate: float | None = None
 
     @property
     def win_rate(self) -> float:
@@ -329,6 +515,25 @@ def player_profile(
         hero_games[stat.hero_id] += 1
         hero_wins[stat.hero_id] += int(bool(stat.won))
 
+    lanes: Counter[str] = Counter()
+    for stat, _ in rows:
+        lane = LANE_KEYS.get(stat.lane_role or 0)
+        if lane:
+            lanes[lane] += 1
+
+    role = slot.role if slot else (player.fantasy_role if player else None)
+    trends = _trends(
+        [
+            GameRow(
+                played_at=_utc(stat.start_time),
+                won=stat.won,
+                duration=match.duration,
+                is_radiant=stat.is_radiant,
+            )
+            for stat, match in rows
+        ]
+    )
+
     # Команда игрока: та, за которую он играл в последних матчах, а не поле в
     # профиле — оно устаревает при переходах.
     recent_team = next((stat.team_id for stat, _ in rows if stat.team_id), None)
@@ -371,7 +576,7 @@ def player_profile(
         name=player.name if player else None,
         team_id=team_id,
         team_name=team_names.get(team_id) if team_id else None,
-        role=slot.role if slot else (player.fantasy_role if player else None),
+        role=role,
         position=player.position if player else None,
         games=len(rows),
         parsed_games=len(parsed),
@@ -391,6 +596,10 @@ def player_profile(
         ],
         matches=matches,
         history=history,
+        trends=trends,
+        lanes=dict(lanes.most_common()),
+        hero_pool=_hero_pool(hero_games),
+        fantasy_form=_fantasy_form(role, [dict(stat.stats or {}) for stat, _ in parsed]),
     )
 
 
@@ -467,21 +676,59 @@ def team_profile(
     for stat in stats:
         by_match[stat.match_id].append(stat)
 
+    ratings = _latest_ratings(session)
+    own_rating = ratings[team_id][0] if team_id in ratings else None
+
     wins = 0
     opponents: Counter[str] = Counter()
     opponent_wins: Counter[str] = Counter()
+    game_rows: list[GameRow] = []
+    opponent_ratings: list[float] = []
+    stronger = [0, 0]  # карты и победы против соперника с рейтингом выше своего
     for match in matches:
         is_radiant = match.radiant_team_id == team_id
-        if match.radiant_win is not None:
-            won = bool(match.radiant_win) == is_radiant
+        won = None if match.radiant_win is None else bool(match.radiant_win) == is_radiant
+        game_rows.append(
+            GameRow(
+                played_at=_utc(match.start_time),
+                won=won,
+                duration=match.duration,
+                is_radiant=is_radiant,
+            )
+        )
+        opponent_id = match.dire_team_id if is_radiant else match.radiant_team_id
+        opponent = ratings.get(opponent_id) if opponent_id else None
+        if opponent:
+            opponent_ratings.append(opponent[0])
+            if own_rating is not None and opponent[0] > own_rating:
+                stronger[0] += 1
+                stronger[1] += int(bool(won))
+        if won is not None:
             wins += int(won)
-            opponent_id = match.dire_team_id if is_radiant else match.radiant_team_id
             if opponent_id:
                 name = team_names.get(opponent_id, str(opponent_id))
                 opponents[name] += 1
                 opponent_wins[name] += int(won)
 
     parsed = [m for m in matches if m.is_parsed]
+
+    # Первую кровь берём по разобранным картам, где вообще есть наши игроки:
+    # без реплея флага `first_blood` в статах нет, и карта ушла бы в знаменатель
+    # как «первую кровь не взяли».
+    with_roster = [m for m in parsed if by_match.get(m.match_id)]
+    first_blood_rate = (
+        sum(
+            1
+            for m in with_roster
+            if any(
+                float((row.stats or {}).get("first_blood", 0.0))
+                for row in by_match[m.match_id]
+            )
+        )
+        / len(with_roster)
+        if with_roster
+        else None
+    )
 
     # Командные средние — сумма пятерых за карту. По ним читается стиль: сколько
     # команда убивает, как быстро фармит, сколько ставит вардов.
@@ -536,7 +783,7 @@ def team_profile(
             .order_by(TeamRating.as_of)
         )
     ]
-    latest = _latest_ratings(session).get(team_id)
+    latest = ratings.get(team_id)
 
     match_rows = []
     for match in matches[:match_limit]:
@@ -593,4 +840,8 @@ def team_profile(
         opponents=[
             (name, games, opponent_wins[name]) for name, games in opponents.most_common(10)
         ],
+        trends=_trends(game_rows),
+        opponent_rating=_mean(opponent_ratings) if opponent_ratings else None,
+        vs_stronger=Split(key="stronger", games=stronger[0], wins=stronger[1]),
+        first_blood_rate=first_blood_rate,
     )

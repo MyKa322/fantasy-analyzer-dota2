@@ -1010,6 +1010,24 @@ def _match_row_out(row) -> schemas.MatchRowOut:
     )
 
 
+def _split_out(split) -> schemas.SplitOut | None:
+    if split is None:
+        return None
+    return schemas.SplitOut(key=split.key, games=split.games, wins=split.wins)
+
+
+def _trends_out(trends) -> schemas.TrendsOut | None:
+    if trends is None:
+        return None
+    return schemas.TrendsOut(
+        form=_split_out(trends.form),
+        baseline=_split_out(trends.baseline),
+        streak=trends.streak,
+        sides=[_split_out(s) for s in trends.sides],
+        durations=[_split_out(s) for s in trends.durations],
+    )
+
+
 def _player_page_out(profile) -> schemas.PlayerPageOut:
     return schemas.PlayerPageOut(
         account_id=profile.account_id,
@@ -1031,6 +1049,28 @@ def _player_page_out(profile) -> schemas.PlayerPageOut:
             for h in profile.heroes
         ],
         matches=[_match_row_out(m) for m in profile.matches],
+        trends=_trends_out(profile.trends),
+        lanes=profile.lanes,
+        hero_pool=(
+            schemas.HeroPoolOut(
+                distinct=profile.hero_pool.distinct,
+                top3_share=round(profile.hero_pool.top3_share, 3),
+            )
+            if profile.hero_pool
+            else None
+        ),
+        fantasy_form=(
+            schemas.FantasyFormOut(
+                maps=profile.fantasy_form.maps,
+                mean=round(profile.fantasy_form.mean),
+                median=round(profile.fantasy_form.median),
+                best=round(profile.fantasy_form.best),
+                p90=round(profile.fantasy_form.p90),
+                spread=round(profile.fantasy_form.spread, 3),
+            )
+            if profile.fantasy_form
+            else None
+        ),
     )
 
 
@@ -1088,6 +1128,16 @@ def profile_team(
             {"name": name, "games": games, "wins": wins}
             for name, games, wins in profile.opponents
         ],
+        trends=_trends_out(profile.trends),
+        opponent_rating=(
+            round(profile.opponent_rating, 1) if profile.opponent_rating else None
+        ),
+        vs_stronger=_split_out(profile.vs_stronger),
+        first_blood_rate=(
+            round(profile.first_blood_rate, 3)
+            if profile.first_blood_rate is not None
+            else None
+        ),
     )
 
 

@@ -7,6 +7,7 @@ import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
 import HeroPool from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
 import TitleTable from "./TitleTable";
+import TrendPanel, { TrendValue } from "./TrendPanel";
 import { MatchTable, StatGrid } from "./profileBits";
 import { Button, Notice, Panel, Stat } from "./ui";
 
@@ -19,7 +20,7 @@ export default function PlayerPage({
   onBack: () => void;
   onOpenTeam: (teamId: number) => void;
 }) {
-  const { t, n, nc, stat: statLabel, role: roleLabel } = useT();
+  const { t, tp, tryT, n, nc, stat: statLabel, role: roleLabel } = useT();
   const [player, setPlayer] = useState<ProfilePlayer | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export default function PlayerPage({
   const signature = player.heroes
     .filter((hero) => hero.games >= 3 && hero.wins / hero.games > 0.5)
     .slice(0, 4);
+  const lanes = Object.entries(player.lanes ?? {}).sort(([, a], [, b]) => b - a);
 
   return (
     <div className="space-y-4">
@@ -161,6 +163,71 @@ export default function PlayerPage({
           />
         </div>
       </Panel>
+
+      {player.trends && (
+        <Panel title={t("trends.title")} subtitle={t("trends.playerSubtitle")}>
+          <TrendPanel
+            trends={player.trends}
+            extra={
+              <div className="grid gap-x-6 sm:grid-cols-2">
+                {player.fantasy_form && (
+                  <div>
+                    <p className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
+                      {t("trends.fantasy")}
+                    </p>
+                    <TrendValue
+                      label={t("common.median")}
+                      value={n(player.fantasy_form.median)}
+                    />
+                    <TrendValue
+                      label={t("trends.ceiling")}
+                      value={n(player.fantasy_form.p90)}
+                    />
+                    <TrendValue
+                      label={t("trends.spread")}
+                      value={`${Math.round(player.fantasy_form.spread * 100)}%`}
+                    />
+                    <p className="mt-1 text-[11px] text-neutral-600">
+                      {t("trends.fantasyHint", { n: player.fantasy_form.maps })}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  {player.hero_pool && (
+                    <>
+                      <p className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
+                        {t("trends.pool")}
+                      </p>
+                      <TrendValue
+                        label={t("trends.poolDistinct")}
+                        value={player.hero_pool.distinct}
+                      />
+                      <TrendValue
+                        label={t("trends.poolTop3")}
+                        value={`${Math.round(player.hero_pool.top3_share * 100)}%`}
+                      />
+                    </>
+                  )}
+                  {lanes.length > 0 && (
+                    <>
+                      <p className="mt-2 mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
+                        {t("trends.lanes")}
+                      </p>
+                      {lanes.map(([lane, games]) => (
+                        <TrendValue
+                          key={lane}
+                          label={tryT(`lane.${lane}`, lane)}
+                          value={tp("plural.maps", games)}
+                        />
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            }
+          />
+        </Panel>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel

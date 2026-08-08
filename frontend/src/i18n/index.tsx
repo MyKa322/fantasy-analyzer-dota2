@@ -12,7 +12,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import { messages, type MessageKey } from "./messages";
+import { en, loadMessages, type Dictionary, type MessageKey } from "./messages";
 import {
   DEFAULT_LOCALE,
   INTL_LOCALE,
@@ -22,9 +22,24 @@ import {
 } from "./site";
 
 export { LOCALES, LOCALE_NAME, DEFAULT_LOCALE, type Locale } from "./site";
-export type { MessageKey } from "./messages";
+export { loadMessages } from "./messages";
+export type { Dictionary, MessageKey } from "./messages";
 
 type Params = Record<string, string | number>;
+
+/**
+ * Наборы форм множественного числа.
+ *
+ * Перечислены явно, а не выведены из словаря: у каждого набора обязаны быть все
+ * четыре формы (one/few/many/other), и опечатка в базе ключа иначе молча
+ * превратилась бы в «{n}» на странице.
+ */
+export type PluralKey =
+  | "plural.maps"
+  | "plural.options"
+  | "plural.tournaments"
+  | "plural.winStreak"
+  | "plural.lossStreak";
 
 /** Подстановка `{name}` — единственный формат, который нужен подписям. */
 function fill(template: string, params?: Params): string {
@@ -62,7 +77,7 @@ export interface Translator {
    */
   tryT: (key: string, fallback: string, params?: Params) => string;
   /** Форма множественного числа по правилам языка. */
-  tp: (base: "plural.maps" | "plural.options" | "plural.tournaments", count: number) => string;
+  tp: (base: PluralKey, count: number) => string;
   /** Название роли по её ключу в данных: `core` -> «Core Duo». */
   role: (role: string) => string;
   /** Название стата по ключу из базы: `camps_stacked` -> «Стаки». */
@@ -82,16 +97,17 @@ export interface Translator {
 
 const I18nContext = createContext<Translator | null>(null);
 
-export function createTranslator(locale: Locale): Translator {
+export function createTranslator(locale: Locale, dictionary: Dictionary = en): Translator {
   const intl = INTL_LOCALE[locale];
   const plurals = new Intl.PluralRules(intl);
+  const words = dictionary as Record<string, string | undefined>;
+  const fallback = en as Record<string, string | undefined>;
 
   const lookup = (key: string): string | null => {
-    const entry = (messages as Record<string, Record<Locale, string>>)[key];
-    if (!entry) return null;
     // Пустая строка в переводе — это не «нет перевода», а сознательный пропуск,
-    // поэтому проверяется именно отсутствие ключа.
-    return entry[locale] ?? entry[DEFAULT_LOCALE];
+    // поэтому проверяется именно отсутствие ключа. Ключи, собранные из данных
+    // (`title.crimson.condition`), в словаре могут и не значиться.
+    return words[key] ?? fallback[key] ?? null;
   };
 
   const t = (key: MessageKey, params?: Params) =>
@@ -101,7 +117,7 @@ export function createTranslator(locale: Locale): Translator {
     locale,
     t,
     tryT: (key, fallback, params) => fill(lookup(key) ?? fallback, params),
-    tp: (base, count) => {
+    tp: (base: PluralKey, count: number) => {
       const form = lookup(`${base}.${plurals.select(count)}`) ?? lookup(`${base}.other`);
       return fill(form ?? "{n}", { n: count.toLocaleString(intl) });
     },
@@ -137,12 +153,18 @@ export function createTranslator(locale: Locale): Translator {
 
 export function I18nProvider({
   locale,
+  messages,
   children,
 }: {
   locale: Locale;
+  /** Словарь уже загружен: до первого рендера, вместе с манифестами картинок. */
+  messages: Dictionary;
   children: ReactNode;
 }) {
-  const translator = useMemo(() => createTranslator(locale), [locale]);
+  const translator = useMemo(
+    () => createTranslator(locale, messages),
+    [locale, messages],
+  );
 
   useEffect(() => {
     // Заголовок и lang уже стоят в HTML языковой версии, но в разработке
@@ -165,10 +187,17 @@ export function useT(): Translator {
  * Переводчик вне React — для модулей загрузки данных, которые формируют
  * сообщения об ошибках до того, как что-то отрисовано.
  */
-let ambient: Translator = createTranslator(DEFAULT_LOCALE);
+let ambient: Translator = createTranslator(DEFAULT_LOCALE, en);
 
-export function setAmbientLocale(locale: Locale): void {
-  ambient = createTranslator(locale);
+export function setAmbient(locale: Locale, messages: Dictionary): void {
+  ambient = createTranslator(locale, messages);
+}
+
+/** Словарь языка страницы — грузится один раз до первого рендера. */
+export async function initLocale(locale: Locale): Promise<Dictionary> {
+  const messages = await loadMessages(locale);
+  setAmbient(locale, messages);
+  return messages;
 }
 
 export function tr(): Translator {

@@ -70,7 +70,17 @@ export function MatchTable({
         <tbody>
           {matches.map((match) => (
             <tr key={match.id} className="border-t border-[#20232c]">
-              <td className="py-1 whitespace-nowrap text-neutral-400">{match.d}</td>
+              <td className="py-1 whitespace-nowrap">
+                {/* Ссылка, а не кнопка: разбором карты делятся, и адрес должен
+                    открываться у соседа тем же матчем. */}
+                <a
+                  href={`#/match/${match.id}`}
+                  className="text-neutral-400 hover:text-[#c8a24a]"
+                  title={t("match.openAnalysis")}
+                >
+                  {match.d}
+                </a>
+              </td>
               <td className="py-1 text-neutral-300">
                 {match.opp_id && onOpenTeam ? (
                   <button

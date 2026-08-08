@@ -13,7 +13,9 @@ export default function LanguageSwitch() {
   const { locale, t } = useT();
 
   return (
-    <nav aria-label={t("app.language")} className="flex gap-1">
+    // Дюжина ссылок в шапке переносится на вторую строку на узком экране —
+    // выпадающий список был бы компактнее, но краулер по нему не пойдёт.
+    <nav aria-label={t("app.language")} className="flex flex-wrap gap-1">
       {LOCALES.map((code) => (
         <a
           key={code}

@@ -1,256 +1,285 @@
 # Dota 2 Compendium Analyzer — TI15
 
-**Страница: https://myka322.github.io/fantasy-analyzer-dota2/**
+**Live page: https://myka322.github.io/fantasy-analyzer-dota2/**
 
+_Русская версия README: [README.ru.md](README.ru.md)._
 
-Аналитика двух блоков компендиума The International 2026: **Predictions** (командный уровень —
-корзины Swiss и сетка плей-офф) и **Fantasy Draft** (игроковый уровень — сколько очков наберёт
-роль за период).
+Analytics for the two compendium blocks of The International 2026: **Predictions** (team level —
+Swiss buckets and the playoff bracket) and **Fantasy Draft** (player level — how many points a role
+will score over a period).
 
-Реализовано по [плану разработки](dota2-compendium-analyzer-plan.md), но числа и механика взяты
-из внутриигрового глоссария TI15, а не из плана — см. следующий раздел.
+Built to the [development plan](dota2-compendium-analyzer-plan.md), but the numbers and the
+mechanics come from the in-game TI15 glossary, not from the plan — see the next section.
 
 ---
 
-## Чем реальность отличается от плана
+## How reality differs from the plan
 
-План писался по данным TI2025. Глоссарий TI15 отличается и по цифрам, и по механике:
+The plan was written against TI2025 data. The TI15 glossary differs both in numbers and in
+mechanics:
 
-| | план (§4.2) | компендиум TI15 |
+| | plan (§4.2) | TI15 compendium |
 |---|---|---|
 | Kills | +121 | **+107** |
 | Deaths | 1800 / −180 | **1950 / −195** |
 | Roshan | +850 | **+1172** |
 | Tormentor / Courier | +850 / +850 | **+879 / +703** |
-| Stuns | +128/сек | **+10/сек** |
+| Stuns | +128/sec | **+10/sec** |
 | Camps stacked | +170 | **+234** |
 | Runes | +121 | **+141** |
 | Tower kill | +340 | **+352** |
 | Wards | +113 | **+117** |
 | First blood | +1700 | **+1934** |
 | Smoke | +283 | **+293** |
-| Teamfight | до 1895 | **до 2124** |
-| — | — | **Madstone +13, Lotuses +176, Watchers +147** — новые статы |
+| Teamfight | up to 1895 | **up to 2124** |
+| — | — | **Madstone +13, Lotuses +176, Watchers +147** — new stats |
 
-Механика тоже другая:
+The mechanics changed too:
 
-- **Ростер — 5 игроков, а не 3**: core duo, mid, support duo. Роль считается как **среднее** по
-  своим игрокам за игру.
-- **У эмблем появились трейты** (Fractal, Benevolent, Vampiric, Unique, Friendly) — часть из них
-  действует на соседние эмблемы, поэтому **порядок эмблем на баннере влияет на очки**.
-- Цвета переопределены: красный — Kills/Deaths/CS/GPM/Madstone/Tower, синий — Wards/Camps/Runes/
-  Watchers/Smokes/Lotuses, зелёный — Roshan/Teamfight/Stuns/Tormentor/First Blood/Courier.
-- Зачёт периода: **топ-2 карты лучшей серии** (план описывал это верно).
+- **The roster is 5 players, not 3**: core duo, mid, support duo. A role scores the **average** of
+  its own players per game.
+- **Emblems now have traits** (Fractal, Benevolent, Vampiric, Unique, Friendly), some of which act
+  on adjacent emblems — so **the order of emblems on the banner changes the score**.
+- Colours were redefined: red — Kills/Deaths/CS/GPM/Madstone/Tower, blue — Wards/Camps/Runes/
+  Watchers/Smokes/Lotuses, green — Roshan/Teamfight/Stuns/Tormentor/First Blood/Courier.
+- Period scoring: **the best two maps of the best series** (the plan had this right).
 
-### Формула эмблемы
+### The emblem formula
 
-Экран War Banner показывает итоговый процент на каждой карточке, и по нему формула
-восстанавливается однозначно — **все бонусы складываются**:
+The War Banner screen shows the final percentage on every card, and that pins the formula down
+exactly — **all bonuses add up**:
 
 ```
-процент = 100% + бонус качества + собственный трейт (если условие выполнено) + эффекты соседей
+percent = 100% + quality bonus + own trait (if its condition holds) + neighbour effects
 ```
 
-| карточка из игры | разбор | итог |
+| card from the game | breakdown | result |
 |---|---|---|
-| Creep Score, Tier II, Friendly | 100 + 30 + 0 (Friendly не сработал) | 130% |
-| Stuns, Tier I, Fractal | 100 + 10 + 0 (качества не все разные) − 10 (сосед Vampiric) | 100% |
+| Creep Score, Tier II, Friendly | 100 + 30 + 0 (Friendly did not fire) | 130% |
+| Stuns, Tier I, Fractal | 100 + 10 + 0 (qualities not all distinct) − 10 (Vampiric neighbour) | 100% |
 | GPM, Tier II, Vampiric | 100 + 30 + 50 | 180% |
-| GPM (mid), Tier II, Unique | 100 + 30 + 30 − 10 (сосед Vampiric) | 150% |
+| GPM (mid), Tier II, Unique | 100 + 30 + 30 − 10 (Vampiric neighbour) | 150% |
 
-Из тех же карточек следует ещё два факта: **слотов ровно три**, и **эмблемы стоят колонкой** —
-на core-баннере Vampiric снизу снял 10% только со среднего слота, а верхний остался при своих
-130%. При кольцевой раскладке пострадали бы оба.
+The same cards imply two more facts: there are **exactly three slots**, and **emblems sit in a
+column** — on the core banner a Vampiric at the bottom took 10% off the middle slot only, while the
+top one kept its 130%. In a ring layout both would have suffered.
 
-### Цвета слотов фиксированы ролью
+### Slot colours are fixed by the role
 
-| роль | слоты | что это значит |
+| role | slots | what it means |
 |---|---|---|
-| Core | 🔴 🔴 🟢 | GPM и Creep Score доступны, вардов и смоков не будет никогда |
-| Mid | 🔴 🔵 🟢 | единственная роль со всеми тремя цветами |
-| Support | 🔵 🔵 🟢 | GPM недоступен в принципе |
+| Core | 🔴 🔴 🟢 | GPM and Creep Score are available, wards and smokes never will be |
+| Mid | 🔴 🔵 🟢 | the only role with all three colours |
+| Support | 🔵 🔵 🟢 | GPM is out of reach entirely |
 
-Цвет не рероллится — меняются только стат внутри цвета, качество и трейт. Поэтому и подбор
-эмблем, и рейтинг игроков по стату считаются строго внутри доступных роли цветов.
+The colour never rerolls — only the stat inside the colour, the quality and the trait do. That is
+why both the emblem search and the per-stat player ranking stay strictly inside the colours the
+role can actually get.
 
-Все числа лежат в [`backend/config/ti15_fantasy.yaml`](backend/config/ti15_fantasy.yaml) —
-правятся без единой строчки кода.
+Every number lives in [`backend/config/ti15_fantasy.yaml`](backend/config/ti15_fantasy.yaml) — it
+can be edited without touching a line of code.
 
 ---
 
-## Быстрый старт
+## Quick start
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -r backend/requirements.txt
 ```
 
-Бэкенд:
+Backend:
 
 ```bash
 .venv/Scripts/python -m uvicorn app.main:app --reload --app-dir backend
 ```
 
-Фронтенд:
+Frontend:
 
 ```bash
 npm install --prefix frontend && npm run dev --prefix frontend
 ```
 
-Дашборд — http://localhost:5173, документация API — http://localhost:8000/docs.
+The dashboard is at http://localhost:5173, the API docs at http://localhost:8000/docs.
 
-Вкладки дашборда: **Эмблемы** — подбор лучшего War Banner, ценность каждого стата, форма по
-картам и разбивка пары по игрокам; **Мои эмблемы** — обратная задача: вписываете то, что уже
-выпало из роллов, и получаете рейтинг пар TI15 под этот набор; **Профили** — страница любой
-команды и любого игрока из базы: матчи, средние, герои, рейтинг и наш анализ по ним;
-**Ростер** — кандидаты по ролям среди 16 участников и лучшие сочетания;
-**Predictions** — вероятности корзин Swiss и готовая расстановка предсказаний; **Рейтинги** —
-таблица Glicko-2 и тренд с полосой неопределённости; **Свой баннер** — ручной конструктор с
-проекцией очков; **Данные** — загрузка матчей.
+Dashboard tabs: **Emblems** — the best War Banner, what each stat is worth, form map by map and the
+split of a duo by player; **My emblems** — the inverse problem: enter what your rolls already
+produced and get the TI15 duos ranked for that exact set; **Profiles** — a page for any team and
+any player in the database: matches, averages, heroes, rating and our analysis on top; **Match** —
+any game by its id, pulled live from OpenDota and scored by compendium rules; **Roster** —
+candidates per role across the 16 participants and the best combinations; **Predictions** — Swiss
+bucket probabilities and a ready prediction layout; **Ratings** — the Glicko-2 table and the trend
+with its uncertainty band; **Custom banner** — a manual builder with a point projection; **Data** —
+match ingestion.
 
-Интерфейс на четырёх языках: русский, английский, украинский и китайский. Переключатель — в
-шапке справа, у каждого языка свой адрес (`/`, `/en/`, `/uk/`, `/zh/`).
+The interface speaks twelve languages: English, Russian, Ukrainian, Chinese, Spanish, Portuguese,
+German, French, Polish, Turkish, Indonesian and Vietnamese. The switcher sits in the top right, and
+every language has its own address (`/` for English, `/ru/`, `/uk/`, `/zh/`, `/es/`, `/pt/`, `/de/`,
+`/fr/`, `/pl/`, `/tr/`, `/id/`, `/vi/`).
 
 ---
 
-## Откуда берутся данные
+## Where the data comes from
 
-Ни одна цифра на странице не введена руками — кроме тех, что руками введены и не могли быть
-получены иначе. Разделение проходит здесь:
+Not a single number on the page was typed in by hand — except the ones that were, because there was
+no other way to get them. The line runs here:
 
-| что | источник | как обновляется |
+| what | source | how it is refreshed |
 |---|---|---|
-| Матчи, статистика игроков, составы | [OpenDota API](https://docs.opendota.com): `/teams/{id}/matches`, `/matches/{id}`, `/proMatches` | `cli.py ingest-ti` — ежедневно в CI |
-| Рейтинг и форма команд | считается нами из тех же матчей (Glicko-2 по исходам карт) | `cli.py ratings`, пересчёт с нуля |
-| Роли внутри команды (кто мид, кто саппорт) | выводятся из матчей: доля игр на центральной линии и фарм-приоритет | вместе с загрузкой |
-| Справочник героев | [dotaconstants](https://github.com/odota/dotaconstants) → [`heroes.json`](backend/config/heroes.json) | `cli.py ingest-heroes` |
-| Кто участвует в TI15 и под каким названием | [`ti15_predictions.yaml`](backend/config/ti15_predictions.yaml), там же `aliases` для команд под изменённым брендом | вручную |
-| Цены статов, бонусы качеств и трейтов, титулы | внутриигровой глоссарий компендиума → [`ti15_fantasy.yaml`](backend/config/ti15_fantasy.yaml) | вручную |
-| Составы, если замена ещё не сыграла | [`ti15_rosters.yaml`](backend/config/ti15_rosters.yaml) — важнее автоматики | вручную |
-| Портреты игроков, логотипы, иконки героев и эмблем | архив дизайна компендиума, ужимается в WebP | `tools/optimise_assets.py` |
+| Matches, player statistics, rosters | [OpenDota API](https://docs.opendota.com): `/teams/{id}/matches`, `/matches/{id}`, `/proMatches` | `cli.py ingest-ti` — daily in CI |
+| Team rating and form | computed by us from those same matches (Glicko-2 over map outcomes) | `cli.py ratings`, recomputed from scratch |
+| Roles inside a team (who is mid, who supports) | derived from matches: share of games in the middle lane and farm priority | together with ingestion |
+| Hero reference | [dotaconstants](https://github.com/odota/dotaconstants) → [`heroes.json`](backend/config/heroes.json) | `cli.py ingest-heroes` |
+| Who plays TI15 and under what name | [`ti15_predictions.yaml`](backend/config/ti15_predictions.yaml), including `aliases` for teams under a changed brand | by hand |
+| Stat prices, quality and trait bonuses, titles | the in-game compendium glossary → [`ti15_fantasy.yaml`](backend/config/ti15_fantasy.yaml) | by hand |
+| Rosters when a substitute has not played yet | [`ti15_rosters.yaml`](backend/config/ti15_rosters.yaml) — takes precedence over the automation | by hand |
+| Player portraits, logos, hero and emblem icons | the compendium design archive, squeezed into WebP | `tools/optimise_assets.py` |
+| A single match on the **Match** tab | [OpenDota API](https://docs.opendota.com) `/matches/{id}`, requested by the browser itself | on every request, not cached in the repository |
 
-**Про игроков.** Отдельного запроса «дай статистику игрока» нет: всё, что показано на его
-странице, посчитано из карт его команды. Поэтому у игрока видны только матчи за период и только
-за те команды, чью историю мы грузили. Ник, `account_id` и герой приходят в теле матча.
+**About players.** There is no "give me this player's statistics" request: everything on a player
+page is computed from their team's maps. So a player only shows matches inside the period, and only
+for teams whose history we loaded. The nickname, `account_id` and hero all arrive inside the match
+body.
 
-**Про команды.** Грузится история шестнадцати участников — а вместе с ней приезжают их соперники
-по квалификациям, поэтому в базе под сотню команд и несколько сотен игроков. Соперникам матчи
-достаются «попутно»: своей полной истории у них нет, и рейтинг у таких команд честно идёт с
-большим RD.
+**About teams.** We load the history of the sixteen participants — and their qualifier opponents
+come along with it, which is why the database holds close to a hundred teams and several hundred
+players. Those opponents get their matches incidentally: they have no full history of their own,
+and such teams honestly carry a large RD.
 
-**Чего в данных нет.** Мадстоуны и наблюдатели OpenDota не трекает, лотосы считаются
-приблизительно; смерть от Торментора и убийство в фонтане не помечены. Всё это названо прямо —
-и в ответе API (`unavailable_stats`), и в интерфейсе, а не заполнено нулями молча. Ключ
-`ANALYZER_STRATZ_API_TOKEN` в конфиге зарезервирован под STRATZ, маппинг к нему пока не написан.
+**What the data does not have.** OpenDota tracks neither madstones nor watchers, and lotuses are
+approximate; death to the Tormentor and a fountain kill are not flagged. All of this is stated
+outright — in the API response (`unavailable_stats`) and in the interface — rather than silently
+filled with zeros. The `ANALYZER_STRATZ_API_TOKEN` config key is reserved for STRATZ; the mapping
+for it has not been written yet.
 
-**Окно выборки.** Fantasy-аналитика смотрит на 180 дней, страницы профилей — на 180 дней,
-рейтинги пересчитываются по 200 дням. В зачёт Fantasy идут только матчи с разобранным реплеем, и
-доля таких матчей показана рядом с числами.
+**The sampling window.** Fantasy analytics looks at 180 days, profile pages at 180 days, ratings
+are recomputed over 200 days. Only matches with a parsed replay count towards Fantasy, and the
+share of such matches is shown next to the numbers.
 
 ---
 
-## Как часто обновляются данные
+## How often the data is refreshed
 
-| когда | что происходит |
+| when | what happens |
 |---|---|
-| Каждый день в 04:20 UTC | workflow `refresh-data`: свежие матчи за 150 дней, пересчёт рейтингов, справочник героев, экспорт снапшота и профилей, коммит |
-| Сразу после коммита данных | workflow `deploy`: пересборка страницы и публикация на Pages |
-| При каждом пуше в `frontend/**` | то же самое — страница пересобирается |
-| Вручную | `workflow_dispatch` у `refresh-data` (с выбором глубины) или `cli.py ingest-ti` локально |
+| Every day at 04:20 UTC | workflow `refresh-data`: fresh matches for 150 days, rating recomputation, hero reference, snapshot and profile export, commit |
+| Right after the data commit | workflow `deploy`: the page is rebuilt and published to Pages |
+| On every push touching `frontend/**` | the same — the page is rebuilt |
+| Manually | `workflow_dispatch` on `refresh-data` (with a depth option) or `cli.py ingest-ti` locally |
 
-Время 04:20 UTC выбрано не случайно: к этому моменту реплеи вчерашних матчей уже разобраны, а
-без разобранного реплея карта для Fantasy бесполезна.
+04:20 UTC is not an arbitrary hour: by then yesterday's replays are parsed, and without a parsed
+replay a map is useless for Fantasy.
 
-Насколько данные свежие, видно на самой странице: в шапке стоит «данные от <дата>» — это
-`generated_at` снапшота, то есть момент экспорта, а не момент захода на страницу.
+How fresh the data is can be read off the page itself: the header carries "data as of <date>" —
+that is the snapshot's `generated_at`, i.e. the moment of export, not the moment you opened the
+page.
 
-Между запусками база живёт в кэше Actions: без неё каждый прогон заново тянул бы семь сотен
-матчей и упирался в суточный лимит OpenDota (2000 запросов без ключа). Тела матчей кэшируются и
-локально, в `backend/data/`, поэтому повторный разбор ничего не стоит. Если в разборе матчей
-меняется формат — растёт `STATS_VERSION`, и ближайший прогон перечитывает старые матчи из кэша;
-такой запуск длиннее обычного, но лимит не тратит.
+Between runs the database lives in the Actions cache: without it every run would pull seven hundred
+matches again and hit OpenDota's daily limit (2000 requests without a key). Match bodies are cached
+locally too, in `backend/data/`, so re-parsing costs nothing. When the match parsing format changes,
+`STATS_VERSION` goes up and the next run re-reads the old matches from cache; such a run takes
+longer but spends no quota.
 
 ---
 
-## Как набрать больше очков: что считает анализатор
+## How to score more points: what the analyzer computes
 
-**Ценность стата — это цена × объём, а не цена из глоссария.** Roshan Kills стоит 1172 очка за
-штуку против 117 за варду, но саппорт, который ставит 10 вард за карту и добивает Рошана раз в
-десять игр, получит с вард в разы больше. Анализатор считает это по реальным матчам роли:
+**A stat's value is price × volume, not the price from the glossary.** Roshan Kills is worth 1172
+points apiece against 117 for a ward, but a support who plants 10 wards a map and finishes Roshan
+once in ten games will get far more out of wards. The analyzer computes this from the role's real
+matches:
 
 ```bash
 .venv/Scripts/python backend/tools/cli.py roster
 ```
 
-Отдельно стоит обратить внимание на **Deaths**: стат стартует с 1950 очков и вычитает 195 за
-смерть, поэтому у аккуратного игрока он обгоняет даже GPM — а выглядит как «штрафной» и его легко
-пропустить.
+**Deaths** deserve a separate look: the stat starts at 1950 points and subtracts 195 per death, so
+for a careful player it outscores even GPM — while looking like a penalty box that is easy to skip.
 
-**Комбинация трейтов решает не меньше статов.** Fractal даёт +60%, но только если все три
-качества разные; Friendly — +50%, но только если Friendly-эмблем три. Поэтому три Tier V + три
-Friendly (300% на каждой) обычно сильнее, чем Tier V + Fractal с разными качествами. Перебор идёт
-по всем комбинациям сразу, а не жадно по слотам — жадный выбор здесь систематически ошибается.
+**The trait combination decides as much as the stats do.** Fractal gives +60%, but only if all three
+qualities differ; Friendly gives +50%, but only with three Friendly emblems. So three Tier V plus
+three Friendly (300% each) usually beats Tier V plus Fractal with distinct qualities. The search
+goes over every combination at once rather than greedily slot by slot — a greedy choice is
+systematically wrong here.
 
-**Vampiric нужно ставить осознанно.** +50% себе и −10% каждому соседу: на дорогой эмблеме он
-окупается, на дешёвой — отнимает у соседей больше, чем приносит.
+**Vampiric has to be placed deliberately.** +50% to itself and −10% to each neighbour: on an
+expensive emblem it pays for itself, on a cheap one it takes more from the neighbours than it
+brings.
 
-**Оценка ролла.** Эндпоинт `/api/fantasy/evaluate-swap` показывает, что даст замена конкретной
-эмблемы, — с учётом того, что трейт меняет и соседей.
+**Evaluating a roll.** The `/api/fantasy/evaluate-swap` endpoint shows what swapping a particular
+emblem would do — taking into account that a trait changes the neighbours as well.
 
-**Свой набор эмблем — обратная задача.** Роллы конечны, и вопрос обычно стоит не «какой баннер
-лучший вообще», а «под кого поставить то, что уже есть». `/api/fantasy/inventory` (вкладка
-**Мои эмблемы**) раскладывает инвентарь по цветам слотов каждой роли и ранжирует все пары TI15
-по очкам именно с этими эмблемами. Порядок подбирается перебором: Benevolent выгоднее в середине
-(соседей двое), Vampiric — с краю. Роли, которые из набора не собрать, называются прямо: «Support
-Duo: нужно 2 синих, есть 0» — цвет слота не рероллится.
+**Your own emblem set is the inverse problem.** Rolls are finite, and the question is usually not
+"what is the best banner in general" but "who should I put what I already have on".
+`/api/fantasy/inventory` (the **My emblems** tab) lays the inventory out over each role's slot
+colours and ranks every TI15 duo by the points these exact emblems produce. The order is solved by
+enumeration: Benevolent pays more in the middle (two neighbours), Vampiric on the edge. Roles that
+cannot be assembled from the set are named outright: "Support Duo: 2 blue needed, 0 available" — a
+slot colour never rerolls.
 
-**Страницы команд и игроков.** `/api/profiles/teams/{id}` и `/api/profiles/players/{id}` (вкладка
-**Профили**) собирают всё, что есть в базе про конкретную команду или игрока: рейтинг Glicko-2 с
-историей и полосой неопределённости, счёт по картам, соперники, состав с ролями, средние за карту,
-пул героев с долей побед и список матчей. Рядом — наш анализ: лучший баннер каждой роли, вероятности
-корзин Swiss, вклад игрока в пару.
+**Team and player pages.** `/api/profiles/teams/{id}` and `/api/profiles/players/{id}` (the
+**Profiles** tab) collect everything the database knows about a given team or player: the Glicko-2
+rating with its history and uncertainty band, the map record, opponents, the roster with roles,
+per-map averages, the hero pool with win rates and the match list. Alongside sits our analysis: the
+best banner per role, Swiss bucket probabilities, a player's share of their duo.
 
-Обычная статистика и Fantasy-числа намеренно разведены по разным таблицам. Килы в профиле — это
-килы, а в анализе — 107 очков за штуку; смешав их, получаешь страницу, по которой нельзя ни
-оценить игрока, ни собрать состав. Средние считаются только по матчам с разобранным реплеем, и
-доля таких матчей показана явно: в остальных OpenDota не отдаёт ни вардов, ни станов, и включать
-их значило бы занизить всё сразу.
+Regular statistics and Fantasy numbers are deliberately kept in separate tables. A kill in a profile
+is a kill; in the analysis it is 107 points. Mixing them gives you a page from which you can neither
+judge a player nor build a roster. Averages are computed only over matches with a parsed replay, and
+the share of those is shown explicitly: in the rest OpenDota reports neither wards nor stuns, and
+including them would drag everything down at once.
 
-В базу попадают не только шестнадцать участников: вместе с их матчами приезжают соперники по
-квалификациям, поэтому в списке под сотню команд и несколько сотен игроков. Справочник героев
-лежит в [`backend/config/heroes.json`](backend/config/heroes.json) — в матче есть только `hero_id`.
+**Form and style: the cuts that a single average hides.** Every team and player page carries the
+same block — the record over the last 30 days against the previous two months (in percentage
+points, not "twice as good"), the current win or loss streak, the split by side (Radiant / Dire) and
+by map length (under 30 minutes, 30–40, over 40). A team that wins 76% of its mid-length maps and
+59% of the long ones is telling you something the total win rate does not.
 
-```bash
-.venv/Scripts/python backend/tools/cli.py profile team 7119388
-.venv/Scripts/python backend/tools/cli.py profile player 321580662
-```
+A team page adds the price of its wins: the average rating of the opponents faced, the record
+against teams rated above itself, and how often the team takes first blood. A player page adds the
+Fantasy points per map (median, p90 ceiling and spread over the role's full stat pool — comparable
+inside a role), how wide the hero pool is (distinct heroes and the share of the top three), and the
+lane split from the OpenDota markup.
 
-**Точечные данные вместо одного среднего.** По каждому стату видно не только средние очки, но и
-медиану с квартилем (одна разгромная карта не должна решать), долю карт, где стат вообще случился
-(0,3 Рошана за карту — это каждая третья игра, а не понемногу каждую), и форму за последние 30
-дней против предыдущих 60. Отдельно — разбивка роли по игрокам (`/api/fantasy/players`): в зачёт
-идёт среднее по паре, поэтому пара, где всё делает один, стоит столько же, сколько пара, где оба,
-но проваливается заметнее. И кривая очков по картам (`/api/fantasy/timeline`) — в зачёт идут две
-лучшие карты серии, поэтому разброс важен не меньше уровня.
+**Match breakdown.** The **Match** tab takes any match id and pulls the game straight from the
+public OpenDota API in the browser — it is the one place where the page talks to someone else's
+data live, because the snapshot only knows the matches of the sixteen participants. On top of the
+usual scoreboard (heroes, KDA, last hits, GPM/XPM, net worth, damage, wards) it adds what a
+statistics site has no reason to compute: the compendium points this map is worth for each player
+on the best neutral banner of their role, and which Coaching Titles would have fired on this map and
+on whom. Roles are inferred from the match — mid by lane, the Support Duo as the two lowest net
+worths — and the page says so. Any match page is a link: `#/match/8922016200`, and the date in a
+profile's match table is that link.
 
-**Герои: кого берёт команда и что это меняет.** Пул героев считается и по команде, и по роли, и
-по игроку — с долей побед и разбивкой, чей это герой внутри пары. Он же нужен для титулов:
-префиксы («Crimson», «Cerulean» и остальные шесть) дают процент за героя из своего списка, и
-списки лежат в [`ti15_fantasy.yaml`](backend/config/ti15_fantasy.yaml) рядом с титулами. Тест
-сверяет каждое название со справочником героев — опечатка молча выкинула бы героя из оценки.
+Point-by-point data instead of a single average. For every stat you see not just the average points
+but the median with a quartile (one blowout map should not decide anything), the share of maps where
+the stat happened at all (0.3 Roshans a map means every third game, not a little bit every game),
+and the form over the last 30 days against the previous 60. Separately there is the role split by
+player (`/api/fantasy/players`): the score is the average of the duo, so a duo where one player does
+everything is worth as much as a duo where both do — and collapses harder. And the point curve map
+by map (`/api/fantasy/timeline`) — the two best maps of a series are what counts, so the spread
+matters as much as the level.
 
-**Coaching Titles** оцениваются как процент × доля карт, где условие выполнялось. Так сравнение
-честное: «the Lucky» с его +21% выглядит лучшим из всех, но срабатывает примерно на каждой
-десятой карте (длительность должна закончиться цифрой 8), а «the Underdog» с +6% — в половине.
-Из восьми суффиксов по данным считаются шесть: длительность, поражение, последняя цифра времени,
-решающая карта серии (третья в Bo3, пятая в Bo5) и время первой крови. «the Patient» (+23%, если
-первой крови не было до 10:00) в про-матчах почти не выпадает — в нашей выборке это 0,2% карт, и
-это тоже ответ.
+**Heroes: what a team picks and what it changes.** The hero pool is computed per team, per role and
+per player — with win rates and a breakdown of whose hero it is inside a duo. It also drives the
+titles: the prefixes ("Crimson", "Cerulean" and the other six) pay a percentage for a hero from
+their own list, and the lists sit in [`ti15_fantasy.yaml`](backend/config/ti15_fantasy.yaml) next to
+the titles. A test checks every name against the hero reference — a typo would silently drop a hero
+out of the estimate.
 
-Два условия не проверяются: смерть от Торментора и убийство у фонтана OpenDota не помечает. Ещё
-одно — «the Flayed Twins Acolyte» — не отличить от пропуска: время первой крови приходит нулём и
-когда события не поймали. Все три помечены «не оценить» с причиной, а не выдуманы.
+**Coaching Titles** are scored as percentage × share of maps where the condition held. That makes
+the comparison fair: "the Lucky" with its +21% looks like the best of the lot but fires on roughly
+one map in ten (the duration has to end in an 8), while "the Underdog" with +6% fires on half of
+them. Six of the eight suffixes are computed from data: duration, defeat, the last digit of the
+clock, the decider of a series (the third map in a Bo3, the fifth in a Bo5) and the time of first
+blood. "the Patient" (+23% if there was no first blood before 10:00) barely ever happens in pro
+matches — 0.2% of maps in our sample, and that is an answer too.
 
-Первый прогон данных (без ключей, публичный OpenDota):
+Two conditions are not checked: OpenDota flags neither a death to the Tormentor nor a kill at the
+fountain. One more — "the Flayed Twins Acolyte" — cannot be told apart from a gap: the first blood
+time comes back as zero both before the horn and when the event was missed. All three are marked
+"not measurable" with the reason instead of being invented.
+
+The first data run (no keys, public OpenDota):
 
 ```bash
 .venv/Scripts/python backend/tools/cli.py ingest-ti --days 150
@@ -268,230 +297,257 @@ Duo: нужно 2 синих, есть 0» — цвет слота не реро
 .venv/Scripts/python backend/tools/cli.py roster
 ```
 
-`ingest-ti` грузит историю всех 16 участников и размечает их игроков по ролям;
-`roster` подбирает состав (core duo / mid / support duo из трёх разных команд).
-Для более широкой картины по сцене есть `ingest-feed --days 30` — общая лента про-матчей.
+`ingest-ti` loads the history of all 16 participants and assigns their players to roles; `roster`
+builds a lineup (core duo / mid / support duo from three different teams). For a wider view of the
+scene there is `ingest-feed --days 30` — the general pro match feed.
 
 ---
 
-## Участники TI15 и их профили в OpenDota
+## TI15 participants and their OpenDota profiles
 
-Компендиум показывает часть команд под изменёнными названиями — у организаций со
-спонсорами-букмекерами. В конфиге для них прописаны `aliases`, поиск идёт по всем вариантам:
+The compendium shows some teams under changed names — the organisations with betting sponsors. The
+config carries `aliases` for them, and the lookup covers every variant:
 
-| в компендиуме | организация | team_id |
+| in the compendium | organisation | team_id |
 |---|---|---|
 | BoomBoys | BetBoom | 8255888 |
 | Huligani | L1ga Team | 10149530 |
 | Team Vision | PARIVISION | 9572001 |
 | Iron Wing | 1win Team | 10150413 |
 
-Остальные двенадцать — Team Liquid, Xtreme Gaming, Team Falcons, Aurora Gaming, Team Yandex,
-Vici Gaming, Team Resilience, LGD Gaming, OG, GamerLegion, Nigma Galaxy, Team Spirit —
-идут под своими названиями.
+The other twelve — Team Liquid, Xtreme Gaming, Team Falcons, Aurora Gaming, Team Yandex, Vici
+Gaming, Team Resilience, LGD Gaming, OG, GamerLegion, Nigma Galaxy, Team Spirit — run under their
+own names.
 
-**Про старые профили.** У Huligani, LGD, Nigma и Team Vision в OpenDota есть более старые
-профили с длинной историей (L1GA TEAM 9303383, LGD Gaming 15, Nigma Galaxy 7554697). Их история
-намеренно **не подмешивается**: составы там другие (у LGD старый профиль — китайский состав
-2024 года, у Nigma — Miracle и rmN вместо GH и SumaiL). Приписать новой команде рейтинг, который
-заработали другие игроки, — прямой путь к ложно уверенному прогнозу. Малая выборка честнее
-отражается высоким RD, и модель сама скажет, что данных мало.
+**About the old profiles.** Huligani, LGD, Nigma and Team Vision each have an older OpenDota profile
+with a long history (L1GA TEAM 9303383, LGD Gaming 15, Nigma Galaxy 7554697). That history is
+deliberately **not** mixed in: the rosters there are different (LGD's old profile is the Chinese
+2024 lineup, Nigma's has Miracle and rmN instead of GH and SumaiL). Handing a new team a rating that
+other players earned is the shortest path to a confidently wrong forecast. A small sample is
+represented more honestly by a high RD, and the model will say for itself that the data is thin.
 
 ---
 
-## Структура
+## Layout
 
 ```
 backend/
-  config/ti15_fantasy.yaml        числа компендиума: статы, качества, трейты
-  config/ti15_predictions.yaml    формат Swiss, сетка, шкалы очков, участники
-  config/ti15_rosters.yaml        ручная фиксация составов (важнее автоматики)
+  config/ti15_fantasy.yaml        compendium numbers: stats, qualities, traits, titles
+  config/ti15_predictions.yaml    Swiss format, bracket, point scales, participants
+  config/ti15_rosters.yaml        manual roster overrides (they beat the automation)
   app/
-    fantasy/rules.py              загрузка и типизация правил
-    fantasy/scoring.py            движок очков: эмблемы -> игрок -> роль -> серия -> период
-    fantasy/projection.py         bootstrap-проекция очков роли за период
-    fantasy/advisor.py            анализатор: ценность статов, подбор баннера, рейтинг под стат
-    analytics/glicko2.py          рейтинг с неопределённостью
-    analytics/rating.py           хронологический пересчёт (анти-лик)
-    analytics/simulate.py         Monte-Carlo Swiss + сетка + выбор предсказаний
-    ingest/opendota.py            клиент с rate limit и файловым кэшем
-    ingest/stat_mapping.py        разбор матча в статы компендиума
-    ingest/pipeline.py            запись в базу
-    services/analysis.py          связка базы с аналитикой, определение ролей
-    api/routes.py                 HTTP API
-  tools/cli.py                    то же без сервера
-  tools/build_og_image.py         картинки превью для соцсетей, по одной на язык
+    fantasy/rules.py              loading and typing of the rules
+    fantasy/scoring.py            the point engine: emblems -> player -> role -> series -> period
+    fantasy/projection.py         bootstrap projection of a role's points over a period
+    fantasy/advisor.py            the analyzer: stat value, banner search, per-stat ranking
+    analytics/glicko2.py          rating with uncertainty
+    analytics/rating.py           chronological recomputation (anti-leak)
+    analytics/simulate.py         Monte-Carlo Swiss + bracket + prediction layout
+    ingest/opendota.py            client with rate limiting and a file cache
+    ingest/stat_mapping.py        turning a match into compendium stats
+    ingest/pipeline.py            writing to the database
+    services/analysis.py          wiring the database to the analytics, role detection
+    services/profiles.py          team and player pages, form and style cuts
+    api/routes.py                 the HTTP API
+  tools/cli.py                    the same without a server
+  tools/export_snapshot.py        the static snapshot for GitHub Pages
+  tools/build_og_image.py         social preview images, one per language
 frontend/                         React + TS + Tailwind + Recharts
-  src/i18n/site.ts                языки, адреса версий, описания для поисковика
-  src/i18n/messages/              словарь интерфейса: ключ — четыре языка рядом
-  scripts/seo.ts                  языковые версии HTML, sitemap и robots при сборке
+  src/engine/scoring.ts           the emblem maths in the browser, ported from the backend
+  src/opendota.ts                 the OpenDota client for the match page
+  src/components/MatchPanel.tsx   match breakdown: scoreboard, compendium points, titles
+  src/components/TrendPanel.tsx   form and style cuts, shared by both profile pages
+  src/i18n/site.ts                languages, version addresses, descriptions for search engines
+  src/i18n/messages/en.ts         the reference dictionary — it defines the key set
+  src/i18n/messages/<locale>.ts   one file per language, loaded as its own chunk
+  scripts/seo.ts                  localized HTML, sitemap and robots at build time
 ```
 
 ---
 
-## Что важно знать при работе с результатами
+## What matters when working with the results
 
-**Доступность статов.** OpenDota покрывает 15 статов из 18 точно. Остальные:
+**Stat availability.** OpenDota covers 15 of the 18 stats exactly. The rest:
 
-| стат | статус | почему |
+| stat | status | why |
 |---|---|---|
-| `lotuses_grabbed` | приблизительно | считается по использованным лотосам (`item_uses.famango`), а подобранный и отданный союзнику лотос не виден |
-| `madstone_collected` | нет данных | OpenDota не трекает |
-| `watchers_taken` | нет данных | OpenDota не трекает |
+| `lotuses_grabbed` | approximate | counted from lotuses used (`item_uses.famango`); one picked up and handed to an ally is invisible |
+| `madstone_collected` | no data | OpenDota does not track it |
+| `watchers_taken` | no data | OpenDota does not track it |
 
-Проекция не скрывает этого: в ответе `unavailable_stats`, в интерфейсе — предупреждение. Закрыть
-пробел можно STRATZ-ом (токен в `ANALYZER_STRATZ_API_TOKEN`) — маппинг для него ещё не написан.
+The projection does not hide this: `unavailable_stats` in the response, a warning in the interface.
+The gap can be closed with STRATZ (token in `ANALYZER_STRATZ_API_TOKEN`) — the mapping for it is not
+written yet.
 
-**Нераспарсенные матчи.** У матчей без разобранного реплея (`version: null`) нет вардов, станов,
-стаков и участия в файтах. Такие матчи идут в рейтинг команд (исход-то известен), но исключаются
-из выборки для Fantasy — иначе проекция систематически занижается.
+**Unparsed matches.** Matches without a parsed replay (`version: null`) have no wards, stuns, stacks
+or teamfight participation. They still count towards team ratings (the outcome is known) but are
+excluded from the Fantasy sample — otherwise the projection is systematically too low.
 
-**Анти-лик.** Рейтинги всегда пересчитываются с нуля хронологически. Рейтинг команды на момент
-матча знает только о матчах до него — иначе модель «предсказывала» бы прошлое.
+**Anti-leak.** Ratings are always recomputed from scratch, chronologically. A team's rating at the
+moment of a match knows only about matches before it — otherwise the model would be "predicting" the
+past.
 
-**Из каких матчей строится выборка.** Карта засчитывается роли, только если в ней играло
-минимум трое из текущей пятёрки команды. Отбор просто по account_id смешивал бы два разных
-случая: коллектив, переехавший под новый бренд (Iron Wing раньше играл как Tundra и 1w, LGD как
-HEROIC, Huligani как L1GA — эти матчи выборке нужны, иначе под новым тегом остаётся два десятка
-карт), и игрока, перешедшего из другой команды (Noticed отыграл 26 карт за Team Yandex — там были
-другие напарники, и «среднее по игрокам роли» считалось бы по одному человеку вместо двух).
-Пересечение состава различает их без ручных списков переименований.
+**Which matches make up the sample.** A map counts towards a role only if at least three of the
+team's current five played in it. Selecting purely by `account_id` would blur two different cases:
+a squad that moved to a new brand (Iron Wing used to play as Tundra and 1w, LGD as HEROIC, Huligani
+as L1GA — those matches belong in the sample, or the new tag is left with two dozen maps) and a
+player who moved from another team (Noticed played 26 maps for Team Yandex — with different partners
+there, and "the average across the role's players" would be computed from one person instead of
+two). Roster overlap tells them apart without hand-written rename lists.
 
-**Как определяются роли.** Прямого поля роли в данных нет. Сначала отбирается пятёрка по числу
-сыгранных за команду карт (это отсекает стендинов и игроков, заехавших на пару матчей), и только
-потом внутри неё раздаются роли: мид — по доле игр на центральной линии, кор-дуо — двое с
-наибольшим фарм-приоритетом, остальные двое — саппорты. Порядок важен: если раздавать роли до
-отбора состава, заезжий кор с высоким GPM вытесняет из ростера настоящего саппорта.
+**How roles are determined.** There is no role field in the data. First the five with the most maps
+for the team are selected (this cuts out stand-ins and players who dropped by for a couple of
+matches), and only then are roles handed out inside that five: mid by the share of games in the
+middle lane, the core duo as the two with the highest farm priority, the remaining two as supports.
+The order matters: hand out roles before selecting the five and a visiting core with a high GPM
+pushes a real support out of the roster.
 
-Составы хранятся в отдельной таблице `team_roster_slots`, а не полем у игрока: составы
-пересекаются (игрок успевает сыграть за две команды периода), и одна строка на игрока затирала бы
-разметку той команды, которую обработали раньше.
+Rosters are stored in a separate `team_roster_slots` table rather than as a field on the player:
+rosters overlap (a player can play for two teams inside the period), and one row per player would
+overwrite the markup of whichever team was processed first.
 
-**Калибровка важнее точности.** Реалистичная точность предматчевого прогноза в Dota — далеко не
-90%. Значение имеет то, что при заявленных 70% команда действительно побеждает примерно в 70%
-случаев, а не голая доля угаданных.
-
----
-
-## Открытые вопросы
-
-Закрыты по экрану War Banner: число слотов (3), раскладка (колонка), формула (аддитивная),
-цвета слотов по ролям, список Coaching Titles с процентами. Осталось:
-
-1. **Формат серий в Swiss.** Принято: решающие матчи Bo3, остальные Bo1
-   (`regular_best_of` / `decisive_best_of` в `ti15_predictions.yaml`).
-2. **Условия титулов-префиксов.** Они зависят от цвета и типа героя, а данных о том, какие герои
-   к какому цвету относятся, у нас нет. Такие титулы показываются, но в проекцию не входят.
-3. **Замены перед турниром.** Составы определяются по последним матчам команды, но если замена
-   ещё не сыграла ни одной игры, её видно только глазами. На этот случай есть
-   `config/ti15_rosters.yaml` — что указано там, важнее автоматики.
+**Calibration matters more than accuracy.** A realistic pre-match forecast in Dota is nowhere near
+90% accurate. What matters is that at a stated 70% the team really does win about 70% of the time,
+not the bare share of correct guesses.
 
 ---
 
-## Публикация и автоматика
+## Open questions
 
-Страница на GitHub Pages работает **без бэкенда**: всё, что требует базы и симуляций, считается
-заранее и лежит в `frontend/public/data/snapshot.json` (~700 КБ), а математика эмблем повторена
-на TypeScript в `frontend/src/engine/scoring.ts` — поэтому подбор баннера, ограничение по роллам
-и рейтинги по статам работают прямо в браузере. Страницы команд и игроков читают отдельный
-`profiles.json` (~1,8 МБ) — он грузится только при заходе на вкладку «Профили». Вкладки,
-которым нужен живой сервер («Данные», «Рейтинги», ручной конструктор), в этом режиме скрыты.
+The War Banner screen settled these: the number of slots (3), the layout (a column), the formula
+(additive), the slot colours per role, the list of Coaching Titles with their percentages. What is
+left:
 
-Обновить снапшот вручную:
+1. **Series format in Swiss.** Decided: decisive matches are Bo3, the rest Bo1
+   (`regular_best_of` / `decisive_best_of` in `ti15_predictions.yaml`).
+2. **Prefix title conditions.** They depend on a hero's colour and type. The lists are filled in by
+   hand from the glossary, and a hero that is not on any list simply does not trigger a prefix.
+3. **Substitutions before the tournament.** Rosters are derived from a team's recent matches, but if
+   a substitute has not played a single game yet, only a human can see it. `config/ti15_rosters.yaml`
+   exists for that case — whatever is written there beats the automation.
+
+---
+
+## Publishing and automation
+
+The GitHub Pages page works **without a backend**: everything that needs a database or simulations
+is computed ahead of time into `frontend/public/data/snapshot.json` (~760 KB), and the emblem maths
+is mirrored in TypeScript in `frontend/src/engine/scoring.ts` — which is why the banner search, the
+roll restriction and the per-stat rankings all run right in the browser. Team and player pages read
+a separate `profiles.json` (~2 MB) that is only fetched when you open the **Profiles** tab. The
+**Match** tab needs neither: it asks OpenDota directly. Tabs that require a live server ("Data",
+"Ratings", the manual builder) are hidden in this mode.
+
+Refresh the snapshot by hand:
 
 ```bash
 .venv/Scripts/python backend/tools/export_snapshot.py --simulations 20000
 ```
 
-Три workflow:
+Three workflows:
 
-| файл | когда | что делает |
+| file | when | what it does |
 |---|---|---|
-| `.github/workflows/deploy.yml` | push в `main`, затрагивающий `frontend/**` | собирает статику и публикует на Pages |
-| `.github/workflows/refresh-data.yml` | ежедневно в 04:20 UTC | тянет свежие матчи, пересчитывает рейтинги и аналитику, коммитит снапшот и запускает деплой |
-| `.github/workflows/tests.yml` | push и pull request | pytest на бэкенде, сборка с проверкой типов на фронтенде |
+| `.github/workflows/deploy.yml` | push to `main` touching `frontend/**` | builds the static site and publishes it to Pages |
+| `.github/workflows/refresh-data.yml` | daily at 04:20 UTC | pulls fresh matches, recomputes ratings and analytics, commits the snapshot and triggers the deploy |
+| `.github/workflows/tests.yml` | push and pull request | pytest on the backend, a type-checked build on the frontend |
 
-База матчей между запусками живёт в кэше Actions — иначе каждый прогон заново тянул бы семь сотен
-матчей и упирался в суточный лимит OpenDota. Если положить в секреты репозитория
-`OPENDOTA_API_KEY`, лимит станет выше, но и без ключа всё работает.
+The match database lives in the Actions cache between runs — otherwise every run would pull seven
+hundred matches again and hit OpenDota's daily limit. Putting `OPENDOTA_API_KEY` into the repository
+secrets raises the limit, but everything works without a key.
 
-Ежедневное обновление коммитит только снапшот. Оно намеренно **не** трогает код: правки в код
-приходят от человека.
+The daily refresh commits the snapshot only. It deliberately does **not** touch code: code changes
+come from a human.
 
-### Языковые версии и поиск
+### Language versions and search
 
-Приложение рисуется в браузере, а поисковику нужен готовый HTML. Поэтому сборка
-([`frontend/scripts/seo.ts`](frontend/scripts/seo.ts)) кладёт рядом с бандлом четыре страницы —
-`/`, `/en/`, `/uk/`, `/zh/`, — и в каждой уже стоят свой `<title>`, описание, `canonical`,
-`hreflang` на соседние версии, карточки Open Graph и Twitter, разметка JSON-LD и вводный текст
-о том, что за инструмент. Тот же текст видит человек с медленной сетью: до первого рендера
-приложение ждёт манифесты портретов и иконок, и раньше на их месте была пустая страница.
+The app renders in the browser, but a crawler needs ready HTML. So the build
+([`frontend/scripts/seo.ts`](frontend/scripts/seo.ts)) writes twelve pages next to the bundle — `/`,
+`/ru/`, `/uk/`, `/zh/`, `/es/`, `/pt/`, `/de/`, `/fr/`, `/pl/`, `/tr/`, `/id/`, `/vi/` — and each
+already carries its own `<title>`, description, `canonical`, `hreflang` links to its siblings, Open
+Graph and Twitter cards, JSON-LD markup and an intro text explaining what the tool is. A human on a
+slow connection sees the same text: before the first render the app waits for the portrait and icon
+manifests, and that space used to be an empty page.
 
-Тексты для поисковика лежат там же, где список языков ([`src/i18n/site.ts`](frontend/src/i18n/site.ts)),
-и берутся из одного места и сборкой, и приложением: иначе заголовок вкладки и описание в выдаче
-однажды разъедутся. Список шестнадцати участников во вводный блок подставляется из снапшота — по
-запросу вида «Team Falcons TI15 fantasy» страница должна находиться, а не пустовать.
+The dictionary is one file per language ([`src/i18n/messages/`](frontend/src/i18n/messages)), with
+English as the reference: `MessageKey` is derived from it, so a missing or extra key in any other
+language is a build error rather than an English string in the middle of a Vietnamese page. Only the
+language you asked for is fetched — each dictionary is its own chunk of about 25 KB. A test on the
+Python side checks the same parity, because new titles and stats are born in the YAML config, and
+you want to hear about a missing translation in the same test run.
 
-`sitemap.xml` и `robots.txt` собираются там же; в sitemap у каждого адреса проставлены
-альтернативные языковые версии и `lastmod` по дате снапшота. Картинки превью (1200×630, по одной
-на язык) собираются отдельно:
+The search-engine texts sit in the same file as the language list
+([`src/i18n/site.ts`](frontend/src/i18n/site.ts)) and are read from that one place by both the build
+and the app: otherwise the tab title and the description in the results would drift apart one day.
+The list of the sixteen participants is substituted into the intro block from the snapshot — a query
+like "Team Falcons TI15 fantasy" should find the page rather than an empty shell.
+
+`sitemap.xml` and `robots.txt` are generated in the same step; in the sitemap every address carries
+its alternate language versions and a `lastmod` taken from the snapshot date. The preview images
+(1200×630, one per language) are built separately:
 
 ```bash
 .venv/Scripts/python backend/tools/build_og_image.py
 ```
 
-Две оговорки. Первая: `robots.txt` для проектной страницы GitHub Pages лежит по адресу
-`/fantasy-analyzer-dota2/robots.txt`, а краулер читает его только из корня домена — то есть у
-`myka322.github.io` он общий на все репозитории и нам не подчиняется. Индексацией здесь
-управляют мета-теги на самих страницах, а sitemap отдаётся в Search Console ссылкой. Вторая:
-попасть в выдачу без внешних ссылок страница может нескоро — сайт нужно один раз добавить в
-[Google Search Console](https://search.google.com/search-console) и отправить туда sitemap.
+Two caveats. First: for a GitHub Pages project site, `robots.txt` ends up at
+`/fantasy-analyzer-dota2/robots.txt`, while a crawler only reads it from the domain root — that root
+belongs to `myka322.github.io` as a whole and is not ours to control. Indexing here is driven by the
+meta tags on the pages themselves, with the sitemap handed to Search Console by link. Second:
+without external links it can take a while to appear in results — the site has to be added once to
+[Google Search Console](https://search.google.com/search-console) and the sitemap submitted there.
+The Search Console property has to be the URL prefix **including the subdirectory**
+(`https://myka322.github.io/fantasy-analyzer-dota2/`): a domain-root property looks for the
+verification file at the root of `myka322.github.io`, which this repository cannot serve.
 
-### Автокоммит локальных правок
+### Auto-committing local edits
 
 ```bash
 pwsh -File tools/autocommit.ps1
 ```
 
-Скрипт следит за файлами и коммитит с пушем после паузы в 45 секунд — правки копятся и уходят
-одним коммитом, иначе каждое сохранение файла в редакторе плодило бы отдельный. Каталоги из
-`.gitignore` (база, кэш матчей, `node_modules`, `.venv`) не отслеживаются. Флаги: `-DebounceSeconds`
-меняет паузу, `-NoPush` коммитит без отправки.
+The script watches the files and commits with a push after a 45-second pause — edits pile up and
+leave in a single commit, otherwise every save in the editor would spawn one of its own. Directories
+from `.gitignore` (the database, the match cache, `node_modules`, `.venv`) are not watched. Flags:
+`-DebounceSeconds` changes the pause, `-NoPush` commits without pushing.
 
-### Что не попадает в репозиторий
+### What stays out of the repository
 
-`backend/data/` — база и кэш матчей (около 400 МБ, восстанавливаются командой `ingest-ti`), и
-исходные ассеты в полном разрешении: 80 портретов весят 79 МБ. В репозитории лежат их WebP-копии
-в `frontend/public/assets` — 1 МБ на всё, собираются `tools/optimise_assets.py`.
+`backend/data/` — the database and the match cache (about 400 MB, restored by `ingest-ti`), and the
+source assets at full resolution: 80 portraits weigh 79 MB. What the repository holds are their WebP
+copies in `frontend/public/assets` — 1 MB for the lot, produced by `tools/optimise_assets.py`.
 
 ---
 
-## Тесты
+## Tests
 
 ```bash
 .venv/Scripts/python -m pytest
 ```
 
-345 тестов. Из содержательных:
+355 tests. The substantive ones:
 
-- Все девять карточек с экрана War Banner воспроизводятся формулой точно (130/100/180,
-  150/180/120, 160/130/130) — это самая прямая проверка скоринга, какая возможна.
-- Glicko-2 сходится с эталонным примером из статьи Гликмана (1464.06 / 151.52 / 0.05999).
-- Каждый прогон Swiss даёт ровно те размеры корзин, что и компендиум: 1 / 2 / 5 / 5 / 2 / 1.
-- Волатильный игрок с тем же средним обгоняет стабильного — прямое следствие правила «топ-2 карты
-  лучшей серии», и главная причина, по которой средним тут пользоваться нельзя.
-- Маппинг статов проверяется на реальном разобранном матче, а не на выдуманной фикстуре.
-- Словарь интерфейса проверяется против конфига: у каждого титула, стата, роли и трейта должен
-  быть перевод. Проверка идёт через границу языков намеренно — новый титул без перевода не
-  сломает ни сборку фронтенда, ни тесты бэкенда по отдельности, страница просто молча покажет
-  русскую строку тому, кто выбрал китайский.
+- All nine cards from the War Banner screen are reproduced by the formula exactly (130/100/180,
+  150/180/120, 160/130/130) — the most direct check of the scoring that exists.
+- Glicko-2 matches the reference example from Glickman's paper (1464.06 / 151.52 / 0.05999).
+- Every Swiss run produces exactly the bucket sizes the compendium has: 1 / 2 / 5 / 5 / 2 / 1.
+- A volatile player with the same average beats a steady one — a direct consequence of the "best two
+  maps of the best series" rule, and the main reason averages are useless here.
+- The stat mapping is checked against a real parsed match, not an invented fixture.
+- Form cuts are checked on the edge cases: a streak counts only the latest run, the form window does
+  not overlap its baseline, and every map lands in exactly one duration bucket.
+- The interface dictionary is checked against the config: every title, stat, role and trait must have
+  a translation, and every language must cover the same key set as English. The check deliberately
+  crosses the language boundary — a new title without a translation would break neither the frontend
+  build nor the backend tests on their own, and the page would just quietly show an English string to
+  someone who picked Chinese.
 
-Отдельно закрыты регрессии, найденные на живых данных:
+Separately, the regressions found on live data are covered:
 
-- серия 429 от OpenDota больше не роняет загрузку (у троттлинга свой бюджет ретраев, сбой одного
-  матча не убивает пачку, ошибка одной команды не останавливает остальные);
-- ветка 5xx не увеличивала счётчик попыток — клиент мог крутиться бесконечно;
-- игрок, сыгравший пару карт за чужую команду, не попадает в её ростер;
-- пересечение составов не стирает разметку соседней команды;
-- заменённый игрок уступает слот преемнику, даже если успел наиграть больше карт
-  (случай Team Vision: SSS 55 карт в марте-апреле против 50 у Noticed в мае-июне).
+- a run of 429s from OpenDota no longer kills ingestion (throttling has its own retry budget, one
+  failed match does not kill the batch, one failed team does not stop the others);
+- the 5xx branch was not incrementing the attempt counter — the client could spin forever;
+- a player who spent a couple of maps on someone else's team does not end up in its roster;
+- overlapping rosters do not erase the markup of a neighbouring team;
+- a replaced player yields the slot to their successor even when they played more maps
+  (the Team Vision case: SSS with 55 maps in March–April against Noticed's 50 in May–June).

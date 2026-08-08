@@ -48,6 +48,35 @@ export interface ProfileTitle {
   note_params?: Record<string, string | number>;
 }
 
+/** Часть выборки: сторона карты, корзина по длительности, класс соперника. */
+export interface ProfileSplit {
+  key: string;
+  games: number;
+  wins: number;
+}
+
+/** Разрезы, которые одинаково читаются у команды и у игрока. */
+export interface ProfileTrends {
+  /** Последние 30 дней и предыдущие — до 90-го дня. */
+  form: ProfileSplit;
+  baseline: ProfileSplit;
+  /** +3 — три победы подряд, −2 — два поражения. */
+  streak: number;
+  sides: ProfileSplit[];
+  durations: ProfileSplit[];
+}
+
+/** Очки за карту по всему пулу статов роли — сравнимо внутри роли. */
+export interface ProfileFantasyForm {
+  maps: number;
+  mean: number;
+  median: number;
+  best: number;
+  p90: number;
+  /** Коэффициент вариации: чем меньше, тем надёжнее ожидание за период. */
+  spread: number;
+}
+
 export interface ProfilePlayer {
   account_id: number;
   name: string | null;
@@ -67,6 +96,11 @@ export interface ProfilePlayer {
   fantasy_units: Record<string, number>;
   heroes: ProfileHero[];
   matches: ProfileMatch[];
+  trends?: ProfileTrends | null;
+  /** Сколько карт сыграно с какого лейна — по разметке OpenDota. */
+  lanes?: Record<string, number>;
+  hero_pool?: { distinct: number; top3_share: number } | null;
+  fantasy_form?: ProfileFantasyForm | null;
 }
 
 export interface ProfileTeam {
@@ -83,6 +117,11 @@ export interface ProfileTeam {
   last_game: string | null;
   team_averages: Record<string, number>;
   opponents: { name: string; games: number; wins: number }[];
+  trends?: ProfileTrends | null;
+  /** Средний рейтинг соперника за период — цена побед. */
+  opponent_rating?: number | null;
+  vs_stronger?: ProfileSplit | null;
+  first_blood_rate?: number | null;
   rating_history: { d: string; r: number; rd: number }[];
   roster: number[];
   /** Пул героев всего состава: у каждого героя видно, кто из игроков его берёт. */

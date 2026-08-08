@@ -20,13 +20,24 @@ import { STATIC_MODE, findRole, loadSnapshot, type HeroPick } from "./snapshot";
 export type { HeroPick };
 import {
   loadProfiles,
+  type ProfileFantasyForm,
   type ProfileHero,
   type ProfileMatch,
   type ProfilePlayer,
+  type ProfileSplit,
   type ProfileTeam,
+  type ProfileTrends,
 } from "./profiles";
 
-export type { ProfileHero, ProfileMatch, ProfilePlayer, ProfileTeam };
+export type {
+  ProfileFantasyForm,
+  ProfileHero,
+  ProfileMatch,
+  ProfilePlayer,
+  ProfileSplit,
+  ProfileTeam,
+  ProfileTrends,
+};
 
 export type { Availability, GroupColor, StatValue };
 
@@ -358,6 +369,10 @@ interface PlayerPageResponse {
   fantasy_units: Record<string, number>;
   heroes: ProfileHero[];
   matches: MatchRowResponse[];
+  trends?: ProfileTrends | null;
+  lanes?: Record<string, number>;
+  hero_pool?: { distinct: number; top3_share: number } | null;
+  fantasy_form?: ProfileFantasyForm | null;
 }
 
 interface TeamPageResponse {
@@ -377,6 +392,10 @@ interface TeamPageResponse {
   rating_history: { as_of: string; rating: number; rd: number }[];
   roster: PlayerPageResponse[];
   matches: MatchRowResponse[];
+  trends?: ProfileTrends | null;
+  opponent_rating?: number | null;
+  vs_stronger?: ProfileSplit | null;
+  first_blood_rate?: number | null;
 }
 
 function liveMatch(row: MatchRowResponse): ProfileMatch {
@@ -425,6 +444,10 @@ function liveTeam(page: TeamPageResponse): ProfileTeam {
     })),
     roster: page.roster.map((p) => p.account_id),
     matches: page.matches.map(liveMatch),
+    trends: page.trends,
+    opponent_rating: page.opponent_rating,
+    vs_stronger: page.vs_stronger,
+    first_blood_rate: page.first_blood_rate,
   };
 }
 

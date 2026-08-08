@@ -25,18 +25,61 @@ export interface TraitRule {
   effects: { scope: string; amount: number }[];
 }
 
+/** Правило начисления очков за стат — копия StatRule из backend/app/fantasy. */
+export interface StatScoring {
+  key: string;
+  label: string;
+  color: GroupColor;
+  availability: Availability;
+  note: string;
+  /** per_unit | linear | flat | capped */
+  kind?: string;
+  per_unit?: number;
+  base?: number;
+  value_if_true?: number;
+  max_points?: number;
+}
+
+/** Coaching Title: процент к очкам, если условие выполнено. */
+export interface TitleRule {
+  key: string;
+  label: string;
+  bonus: number;
+  condition: string;
+  estimator: string;
+  /** Список героев — только у титулов-приставок, они же цветовые. */
+  heroes?: string[];
+}
+
 export interface RulesSnapshot {
   qualities: Record<string, number>;
   traits: TraitRule[];
   role_slots: Record<string, string[]>;
   banner_slots: number;
-  stats: {
-    key: string;
-    label: string;
-    color: GroupColor;
-    availability: Availability;
-    note: string;
-  }[];
+  stats: StatScoring[];
+  titles?: { prefixes: TitleRule[]; suffixes: TitleRule[] };
+}
+
+/**
+ * Очки за стат до бонусов эмблемы.
+ *
+ * Тот же расчёт, что в `StatRule.points` на бэкенде: снапшот отдаёт вид правила
+ * и коэффициенты, поэтому страница матча считает очки для любой карты, а не
+ * только для тех, что посчитаны заранее.
+ */
+export function statPoints(rule: StatScoring, value: number): number {
+  switch (rule.kind) {
+    case "per_unit":
+      return (rule.per_unit ?? 0) * value;
+    case "linear":
+      return (rule.base ?? 0) + (rule.per_unit ?? 0) * value;
+    case "flat":
+      return value ? (rule.value_if_true ?? 0) : 0;
+    case "capped":
+      return (rule.max_points ?? 0) * Math.min(Math.max(value, 0), 1);
+    default:
+      return 0;
+  }
 }
 
 export interface Emblem {

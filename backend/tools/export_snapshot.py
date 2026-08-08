@@ -86,6 +86,23 @@ def export_rules() -> dict:
             }
             for s in rules.stats.values()
         ],
+        # Титулы вместе со списками героев: по ним страница матча проверяет, что
+        # сработало бы на конкретной карте. Без списков осталась бы половина
+        # титулов — те, которым хватает длительности и результата.
+        "titles": {
+            group: [
+                {
+                    "key": title["key"],
+                    "label": title["label"],
+                    "bonus": title["bonus"],
+                    "condition": title.get("condition", ""),
+                    "estimator": title.get("estimator", ""),
+                    **({"heroes": title["heroes"]} if title.get("heroes") else {}),
+                }
+                for title in items
+            ]
+            for group, items in rules.titles.items()
+        },
     }
 
 
@@ -335,6 +352,23 @@ def export_roles(
     return rows
 
 
+def _split(split) -> dict:
+    return {"key": split.key, "games": split.games, "wins": split.wins}
+
+
+def _trends(trends) -> dict | None:
+    """Разрезы выборки в JSON. Ключи короткие — их читает не человек, а страница."""
+    if trends is None:
+        return None
+    return {
+        "form": _split(trends.form),
+        "baseline": _split(trends.baseline),
+        "streak": trends.streak,
+        "sides": [_split(s) for s in trends.sides],
+        "durations": [_split(s) for s in trends.durations],
+    }
+
+
 def _match_rows(rows) -> list[dict]:
     out = []
     for row in rows:
@@ -423,6 +457,28 @@ def _player_page(profile, advisor=None, heroes=None) -> dict:
             for h in profile.heroes
         ],
         "matches": _match_rows(profile.matches),
+        "trends": _trends(profile.trends),
+        "lanes": profile.lanes,
+        "hero_pool": (
+            {
+                "distinct": profile.hero_pool.distinct,
+                "top3_share": round(profile.hero_pool.top3_share, 3),
+            }
+            if profile.hero_pool
+            else None
+        ),
+        "fantasy_form": (
+            {
+                "maps": profile.fantasy_form.maps,
+                "mean": round(profile.fantasy_form.mean),
+                "median": round(profile.fantasy_form.median),
+                "best": round(profile.fantasy_form.best),
+                "p90": round(profile.fantasy_form.p90),
+                "spread": round(profile.fantasy_form.spread, 3),
+            }
+            if profile.fantasy_form
+            else None
+        ),
     }
 
 
@@ -498,6 +554,16 @@ def export_profiles(
                     {"d": as_of.date().isoformat(), "r": round(rating, 1), "rd": round(rd, 1)}
                     for as_of, rating, rd in profile.rating_history[::2]
                 ],
+                "trends": _trends(profile.trends),
+                "opponent_rating": (
+                    round(profile.opponent_rating, 1) if profile.opponent_rating else None
+                ),
+                "vs_stronger": _split(profile.vs_stronger) if profile.vs_stronger else None,
+                "first_blood_rate": (
+                    round(profile.first_blood_rate, 3)
+                    if profile.first_blood_rate is not None
+                    else None
+                ),
                 "roster": [p.account_id for p in profile.roster],
                 # Пул героев команды — сумма выборов всего состава за период.
                 "heroes": _team_heroes(profile),
@@ -550,9 +616,14 @@ def main() -> int:
 
     init_db()
     with session_scope() as session:
+        from app.services.profiles import load_heroes as _load_heroes  # noqa: PLC0415
+
         snapshot = {
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "rules": export_rules(),
+            # Справочник героев целиком: в матче OpenDota лежит только hero_id, а
+            # странице матча нужны и название, и проверка титулов по списку.
+            "heroes": {str(hero_id): name for hero_id, name in sorted(_load_heroes().items())},
             "teams": export_teams(session),
             "group": export_group(session, args.simulations),
             "roles": export_roles(

@@ -80,6 +80,70 @@ CARDS = {
         "lead": "基于真实比赛的梦幻联赛与赛果预测",
         "details": ("战旗纹章搭配 · 位置得分预测\n瑞士轮分组概率 · 战队与选手主页"),
     },
+    "es": {
+        "file": "og-es.png",
+        "lead": "Fantasy Draft y Predictions a partir de partidas reales",
+        "details": (
+            "Emblemas del War Banner · proyección de puntos por rol\n"
+            "probabilidades de casillas Swiss · páginas de equipos y jugadores"
+        ),
+    },
+    "pt": {
+        "file": "og-pt.png",
+        "lead": "Fantasy Draft e Predictions a partir de partidas reais",
+        "details": (
+            "Emblemas do War Banner · projeção de pontos por função\n"
+            "probabilidades das casas do suíço · páginas de times e jogadores"
+        ),
+    },
+    "de": {
+        "file": "og-de.png",
+        "lead": "Fantasy Draft und Predictions aus echten Spielen",
+        "details": (
+            "War-Banner-Embleme · Punkteprojektion je Rolle\n"
+            "Wahrscheinlichkeiten im Schweizer System · Team- und Spielerseiten"
+        ),
+    },
+    "fr": {
+        "file": "og-fr.png",
+        "lead": "Fantasy Draft et Predictions à partir de vrais matchs",
+        "details": (
+            "Emblèmes de la War Banner · projection de points par rôle\n"
+            "probabilités des cases suisses · pages d'équipes et de joueurs"
+        ),
+    },
+    "pl": {
+        "file": "og-pl.png",
+        "lead": "Fantasy Draft i Predictions na podstawie prawdziwych meczów",
+        "details": (
+            "Emblematy War Banner · prognoza punktów roli\n"
+            "prawdopodobieństwa pól szwajcarskich · strony drużyn i graczy"
+        ),
+    },
+    "tr": {
+        "file": "og-tr.png",
+        "lead": "Gerçek maçlara dayalı Fantasy Draft ve Predictions",
+        "details": (
+            "War Banner amblemleri · rol başına puan öngörüsü\n"
+            "İsviçre sistemi kutu olasılıkları · takım ve oyuncu sayfaları"
+        ),
+    },
+    "id": {
+        "file": "og-id.png",
+        "lead": "Fantasy Draft dan Predictions dari pertandingan nyata",
+        "details": (
+            "Emblem War Banner · proyeksi poin per peran\n"
+            "probabilitas kotak Swiss · halaman tim dan pemain"
+        ),
+    },
+    "vi": {
+        "file": "og-vi.png",
+        "lead": "Fantasy Draft và Predictions từ các trận đấu thật",
+        "details": (
+            "Huy hiệu War Banner · dự phóng điểm theo vai trò\n"
+            "xác suất các ô Thụy Sĩ · trang đội và tuyển thủ"
+        ),
+    },
 }
 
 # Шрифты Windows: bold для заголовка, обычный для остального. Для китайского

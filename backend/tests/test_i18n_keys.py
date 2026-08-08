@@ -32,18 +32,35 @@ NOTE_KEYS = {
 }
 
 
-def dictionary_keys() -> set[str]:
-    """Ключи из всех файлов словаря — по левой части записи `"ключ": {`."""
-    keys: set[str] = set()
-    for path in MESSAGES.glob("*.ts"):
-        keys |= set(re.findall(r'^\s*"([\w.\-]+)":\s*\{', path.read_text(encoding="utf-8"), re.M))
-    return keys
+def locale_files() -> list[Path]:
+    """Словари языков: файл на язык, index.ts — загрузчик, а не словарь."""
+    return sorted(path for path in MESSAGES.glob("*.ts") if path.stem != "index")
+
+
+def dictionary_keys(locale: str = "en") -> set[str]:
+    """Ключи словаря — по левой части записи `"ключ": "подпись",`."""
+    path = MESSAGES / f"{locale}.ts"
+    return set(re.findall(r'^\s*"([\w.\-]+)":\s*"', path.read_text(encoding="utf-8"), re.M))
 
 
 def test_dictionary_is_not_empty() -> None:
     # Страховка от того, что файлы переехали и регулярка молча нашла ноль
     # ключей — тогда все проверки ниже прошли бы «успешно».
     assert len(dictionary_keys()) > 100
+
+
+def test_every_language_covers_the_reference() -> None:
+    """Пропуск ключа в языке — английская строка посреди чужой страницы.
+
+    Тип `Dictionary` ловит это при сборке фронтенда, но здесь дешевле: новый
+    титул добавляют в конфиге на Python, и увидеть непереведённый ключ хочется
+    в том же прогоне тестов, а не через сборку.
+    """
+    reference = dictionary_keys("en")
+    for path in locale_files():
+        keys = dictionary_keys(path.stem)
+        assert not reference - keys, f"{path.name}: не хватает {sorted(reference - keys)[:5]}"
+        assert not keys - reference, f"{path.name}: лишние ключи {sorted(keys - reference)[:5]}"
 
 
 def test_every_title_condition_is_translated() -> None:

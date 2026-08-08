@@ -18,6 +18,7 @@ import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
 import HeroPool, { HeroIcon } from "./HeroPool";
 import PlayerPortrait from "./PlayerPortrait";
 import TitleTable from "./TitleTable";
+import TrendPanel, { SplitBar, TrendValue } from "./TrendPanel";
 import { MatchTable, StatGrid } from "./profileBits";
 import { Button, Notice, Panel, Stat, chartTooltip } from "./ui";
 
@@ -179,6 +180,45 @@ export default function TeamPage({
           />
         </div>
       </Panel>
+
+      {team.trends && (
+        <Panel title={t("trends.title")} subtitle={t("trends.teamSubtitle")}>
+          <TrendPanel
+            trends={team.trends}
+            extra={
+              <div className="grid gap-x-6 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
+                    {t("trends.opposition")}
+                  </p>
+                  <TrendValue
+                    label={t("trends.opponentRating")}
+                    value={team.opponent_rating ? n(team.opponent_rating) : t("common.dash")}
+                  />
+                  {team.first_blood_rate != null && (
+                    <TrendValue
+                      label={t("trends.firstBlood")}
+                      hint={t("trends.firstBloodHint")}
+                      value={`${Math.round(team.first_blood_rate * 100)}%`}
+                    />
+                  )}
+                </div>
+                {team.vs_stronger && team.vs_stronger.games > 0 && (
+                  <div>
+                    <p className="mb-1 text-[11px] tracking-wide text-neutral-500 uppercase">
+                      {t("trends.vsStronger")}
+                    </p>
+                    <SplitBar label={t("trends.stronger")} split={team.vs_stronger} />
+                    <p className="mt-1 text-[11px] text-neutral-600">
+                      {t("trends.strongerHint")}
+                    </p>
+                  </div>
+                )}
+              </div>
+            }
+          />
+        </Panel>
+      )}
 
       {team.rating_history.length > 2 && (
         <Panel title={t("team.ratingTitle")} subtitle={t("team.ratingSubtitle")}>

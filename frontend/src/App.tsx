@@ -5,6 +5,7 @@ import FantasyPanel from "./components/FantasyPanel";
 import GroupPanel from "./components/GroupPanel";
 import InventoryAnalyzer from "./components/InventoryAnalyzer";
 import LanguageSwitch from "./components/LanguageSwitch";
+import MatchPanel from "./components/MatchPanel";
 import ProfilesPanel from "./components/ProfilesPanel";
 import RosterPanel from "./components/RosterPanel";
 import TeamsPanel from "./components/TeamsPanel";
@@ -16,7 +17,8 @@ import { STATIC_MODE, loadSnapshot } from "./snapshot";
 interface Tab {
   key: string;
   label: MessageKey;
-  element: React.ReactNode;
+  /** У вкладки матча содержимое зависит от адреса, поэтому она рисуется отдельно. */
+  element?: React.ReactNode;
   /** Вкладке нужен живой бэкенд. */
   live: boolean;
 }
@@ -25,6 +27,7 @@ const TABS: Tab[] = ([
   { key: "emblems", label: "app.tab.emblems", element: <EmblemAnalyzer />, live: false },
   { key: "inventory", label: "app.tab.inventory", element: <InventoryAnalyzer />, live: false },
   { key: "profiles", label: "app.tab.profiles", element: <ProfilesPanel />, live: false },
+  { key: "match", label: "app.tab.match", live: false },
   { key: "roster", label: "app.tab.roster", element: <RosterPanel />, live: false },
   { key: "predictions", label: "app.tab.predictions", element: <GroupPanel />, live: false },
   { key: "teams", label: "app.tab.teams", element: <TeamsPanel />, live: true },
@@ -32,10 +35,44 @@ const TABS: Tab[] = ([
   { key: "data", label: "app.tab.data", element: <DataPanel />, live: true },
 ] satisfies Tab[]).filter((tab) => !STATIC_MODE || !tab.live);
 
+/** Адрес открытого матча: `#/match/8922016200`. */
+const MATCH_HASH = /^#\/match\/(\d+)/;
+
 export default function App() {
   const { t, dt } = useT();
   const [active, setActive] = useState("emblems");
+  const [matchId, setMatchId] = useState<number | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+
+  // Матч живёт в адресе, а не в состоянии: ссылкой на разбор конкретной карты
+  // делятся, и она должна открывать ту же страницу у соседа. Хеш, а не путь, —
+  // на GitHub Pages некому переписать `/match/123` в index.html.
+  useEffect(() => {
+    const read = () => {
+      const found = MATCH_HASH.exec(window.location.hash);
+      setMatchId(found ? Number(found[1]) : null);
+      if (found) setActive("match");
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+
+  const openMatch = (id: number | null) => {
+    window.location.hash = id ? `#/match/${id}` : "";
+    setMatchId(id);
+    setActive("match");
+  };
+
+  const openTab = (key: string) => {
+    if (key !== "match" && window.location.hash) {
+      // Хеш от прошлого матча в адресе соседней вкладки только путает: по такой
+      // ссылке страница откроется на матче, а не на том, чем делились.
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      setMatchId(null);
+    }
+    setActive(key);
+  };
 
   useEffect(() => {
     if (!STATIC_MODE) return;
@@ -65,7 +102,7 @@ export default function App() {
             {TABS.map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setActive(tab.key)}
+                onClick={() => openTab(tab.key)}
                 className={`rounded px-3 py-1.5 text-xs tracking-wide uppercase transition ${
                   active === tab.key
                     ? "bg-[#c8a24a] text-black"
@@ -80,7 +117,13 @@ export default function App() {
         </div>
       </header>
 
-      <main>{TABS.find((tab) => tab.key === active)?.element}</main>
+      <main>
+        {active === "match" ? (
+          <MatchPanel matchId={matchId} onOpen={openMatch} />
+        ) : (
+          TABS.find((tab) => tab.key === active)?.element
+        )}
+      </main>
     </div>
   );
 }
