@@ -16,8 +16,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { GROUP_COLOR, heroIcon } from "../assets";
+import { GROUP_COLOR, heroIcon, itemIcon, loadItemManifest } from "../assets";
 import { statPoints, type RulesSnapshot, type StatScoring } from "../engine/scoring";
+import { findPair, loadHeadToHead, type HeadToHead } from "../headToHead";
 import { useT } from "../i18n";
 import {
   fantasyStats,
@@ -29,7 +30,26 @@ import {
   type OpenDotaMatch,
 } from "../opendota";
 import { loadSnapshot, type Snapshot } from "../snapshot";
+import MatchMap, { clock } from "./MatchMap";
 import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
+
+// Расходники в таймлайне покупок только мешают: тангошки и телепорты берут
+// каждые пару минут, и за ними не видно предметов, которые собирали.
+const CONSUMABLES = new Set([
+  "tango",
+  "tango_single",
+  "flask",
+  "clarity",
+  "faerie_fire",
+  "enchanted_mango",
+  "branches",
+  "tpscroll",
+  "ward_observer",
+  "ward_sentry",
+  "ward_dispenser",
+]);
+
+const BUILD_LENGTH = 10;
 
 interface Row {
   player: MatchPlayer;
@@ -40,6 +60,11 @@ interface Row {
   role: string;
   banner: { color: string; stat: string; label: string; points: number }[];
   total: number;
+  /** Инвентарь на конец игры: внутренние имена предметов, пустые слоты — null. */
+  items: (string | null)[];
+  neutral: string | null;
+  /** Порядок сборки: время покупки и предмет, без расходников. */
+  build: { time: number; item: string }[];
 }
 
 /**
@@ -165,6 +190,43 @@ function playerName(player: MatchPlayer): string {
   return player.name || player.personaname || (player.account_id ? String(player.account_id) : "—");
 }
 
+/** Внутреннее имя предмета -> подпись: `power_treads` -> `Power Treads`. */
+function itemLabel(name: string): string {
+  return name
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function ItemIcon({ name, size = 28 }: { name: string | null; size?: number }) {
+  const icon = name ? itemIcon(name) : null;
+  if (!name) {
+    return (
+      <span
+        className="inline-block rounded-sm border border-[#20232c] bg-[#141720]"
+        style={{ width: size, height: (size * 3) / 4 }}
+      />
+    );
+  }
+  return icon ? (
+    <img
+      src={icon}
+      alt={itemLabel(name)}
+      title={itemLabel(name)}
+      className="rounded-sm object-cover"
+      style={{ width: size, height: (size * 3) / 4 }}
+    />
+  ) : (
+    <span
+      className="inline-flex items-center justify-center rounded-sm border border-[#2a2e3a] text-[8px] text-neutral-500"
+      style={{ width: size, height: (size * 3) / 4 }}
+      title={itemLabel(name)}
+    >
+      {name.slice(0, 3)}
+    </span>
+  );
+}
+
 export default function MatchPanel({
   matchId,
   onOpen,
@@ -175,14 +237,21 @@ export default function MatchPanel({
   const { t, n, nc, dt, tryT, stat: statLabel, role: roleLabel } = useT();
   const [query, setQuery] = useState(matchId ? String(matchId) : "");
   const [match, setMatch] = useState<OpenDotaMatch | null>(null);
+  // Манифест иконок грузится вне React: до него `itemIcon` честно отвечает
+  // «иконки нет», поэтому предметы рисуются только после загрузки.
+  const [iconsReady, setIconsReady] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [meetings, setMeetings] = useState<HeadToHead | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    // Правила и справочник героев лежат в снапшоте — он же нужен вкладке
-    // эмблем, поэтому второй раз по сети не пойдёт.
+    // Правила и справочники героев с предметами лежат в снапшоте — он же нужен
+    // вкладке эмблем, поэтому второй раз по сети не пойдёт. Манифест иконок
+    // предметов и личные встречи нужны только здесь и грузятся вместе с ней.
     loadSnapshot().then(setSnapshot).catch(() => undefined);
+    loadItemManifest().then(() => setIconsReady(true));
+    loadHeadToHead().then(setMeetings).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -207,6 +276,9 @@ export default function MatchPanel({
     if (!match || !snapshot) return null;
     const rules = snapshot.rules;
     const heroes = snapshot.heroes ?? {};
+    const items = snapshot.items ?? {};
+    const itemName = (id: number | undefined) =>
+      id ? (items[String(id)] ?? null) : null;
 
     const rows: Row[] = match.players.map((player) => {
       const stats = fantasyStats(player);
@@ -222,6 +294,19 @@ export default function MatchPanel({
         role: "core",
         banner: [],
         total: 0,
+        items: [
+          player.item_0,
+          player.item_1,
+          player.item_2,
+          player.item_3,
+          player.item_4,
+          player.item_5,
+        ].map(itemName),
+        neutral: itemName(player.item_neutral),
+        build: (player.purchase_log ?? [])
+          .filter((entry) => !CONSUMABLES.has(entry.key))
+          .slice(0, BUILD_LENGTH)
+          .map((entry) => ({ time: entry.time, item: entry.key })),
       };
     });
 
@@ -253,6 +338,25 @@ export default function MatchPanel({
         [false, analysis.rows.filter((row) => !row.radiant)],
       ] as const)
     : [];
+
+  // Личные встречи: пара ищется по id команд, а имена берутся из той же
+  // выгрузки — в матче OpenDota команда бывает под старым названием.
+  const meetingList = findPair(meetings, match?.radiant_team?.team_id, match?.dire_team?.team_id);
+  const first = match?.radiant_team?.team_id;
+  const record = meetingList.reduce(
+    (acc, meeting) => {
+      if (!meeting.w) acc.draws += 1;
+      else if (meeting.w === first) acc.first += 1;
+      else acc.second += 1;
+      return acc;
+    },
+    { first: 0, second: 0, draws: 0 },
+  );
+  const teamName = (teamId: number | undefined | null) =>
+    (teamId && meetings?.teams[String(teamId)]) ||
+    (teamId === match?.radiant_team?.team_id
+      ? (match?.radiant_team?.name ?? "Radiant")
+      : (match?.dire_team?.name ?? "Dire"));
 
   return (
     <div className="space-y-4">
@@ -355,6 +459,58 @@ export default function MatchPanel({
             )}
           </Panel>
 
+          {meetingList.length > 1 && (
+            <Panel
+              title={t("h2h.title")}
+              subtitle={t("h2h.subtitle", { days: meetings?.days ?? 180 })}
+            >
+              <div className="mb-3 flex items-baseline gap-3 text-sm">
+                <span className="text-neutral-300">{teamName(match.radiant_team?.team_id)}</span>
+                <span className="tabular text-lg text-[#c8a24a]">
+                  {record.first}–{record.second}
+                </span>
+                <span className="text-neutral-300">{teamName(match.dire_team?.team_id)}</span>
+                {record.draws > 0 && (
+                  <span className="text-[11px] text-neutral-500">
+                    {t("h2h.unknown", { n: record.draws })}
+                  </span>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                <table className="w-full min-w-[420px] text-xs">
+                  <tbody>
+                    {meetingList.map((meeting) => (
+                      <tr
+                        key={meeting.id}
+                        className={`border-t border-[#20232c] ${
+                          meeting.id === match.match_id ? "bg-[#1d2029]" : ""
+                        }`}
+                      >
+                        <td className="py-1 whitespace-nowrap">
+                          <a
+                            href={`#/match/${meeting.id}`}
+                            className="text-neutral-400 hover:text-[#c8a24a]"
+                          >
+                            {meeting.d}
+                          </a>
+                        </td>
+                        <td className="py-1 text-neutral-300">
+                          {meeting.w ? teamName(meeting.w) : t("common.dash")}
+                        </td>
+                        <td className="tabular py-1 text-right text-neutral-500">
+                          {t("common.minutes", { n: Math.round(meeting.dur / 60) })}
+                        </td>
+                        <td className="max-w-[16rem] truncate py-1 pl-3 text-neutral-600">
+                          {meeting.league ?? ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          )}
+
           {sides.map(([radiant, rows]) => (
             <Panel
               key={String(radiant)}
@@ -370,7 +526,7 @@ export default function MatchPanel({
               }
             >
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[860px] text-xs">
+                <table className="w-full min-w-[1080px] text-xs">
                   <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
                     <tr>
                       <th className="py-1 text-left">{t("match.hero")}</th>
@@ -383,6 +539,7 @@ export default function MatchPanel({
                       <th className="py-1 text-right">{t("match.heroDamage")}</th>
                       <th className="py-1 text-right">{t("match.wards")}</th>
                       <th className="py-1 text-right">{t("match.fantasy")}</th>
+                      <th className="py-1 pl-3 text-left">{t("match.items")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -422,6 +579,20 @@ export default function MatchPanel({
                           <td className="tabular py-1 text-right font-medium text-[#c8a24a]">
                             {n(row.total)}
                           </td>
+                          <td className="py-1 pl-3">
+                            {iconsReady && (
+                              <span className="flex items-center gap-0.5">
+                                {row.items.map((item, index) => (
+                                  <ItemIcon key={index} name={item} size={26} />
+                                ))}
+                                {row.neutral && (
+                                  <span className="ml-1">
+                                    <ItemIcon name={row.neutral} size={22} />
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -430,6 +601,40 @@ export default function MatchPanel({
               </div>
             </Panel>
           ))}
+
+          {analysis.parsed && (
+            <Panel title={t("map.title")} subtitle={t("map.subtitle")}>
+              <MatchMap match={match} playerName={playerName} />
+            </Panel>
+          )}
+
+          {iconsReady && analysis.rows.some((row) => row.build.length > 0) && (
+            <Panel title={t("match.buildTitle")} subtitle={t("match.buildSubtitle")}>
+              <div className="space-y-2">
+                {analysis.rows.map((row) => (
+                  <div
+                    key={row.player.player_slot}
+                    className="flex items-start gap-3 border-b border-[#20232c] pb-2 last:border-0"
+                  >
+                    <div className="w-40 shrink-0 text-xs">
+                      <div className="truncate text-neutral-200">{playerName(row.player)}</div>
+                      <div className="truncate text-[11px] text-neutral-500">{row.hero}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {row.build.map((entry, index) => (
+                        <div key={`${entry.item}-${index}`} className="text-center">
+                          <ItemIcon name={entry.item} size={30} />
+                          <div className="tabular text-[10px] text-neutral-500">
+                            {clock(entry.time)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
 
           <Panel title={t("match.fantasyTitle")} subtitle={t("match.fantasySubtitle")}>
             <div className="grid gap-2 sm:grid-cols-2">

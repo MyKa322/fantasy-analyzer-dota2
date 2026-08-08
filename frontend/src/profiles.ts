@@ -116,7 +116,7 @@ export interface ProfileTeam {
   first_game: string | null;
   last_game: string | null;
   team_averages: Record<string, number>;
-  opponents: { name: string; games: number; wins: number }[];
+  opponents: { team_id?: number; name: string; games: number; wins: number }[];
   trends?: ProfileTrends | null;
   /** Средний рейтинг соперника за период — цена побед. */
   opponent_rating?: number | null;

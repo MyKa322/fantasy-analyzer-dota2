@@ -178,6 +178,32 @@ async def cmd_ingest_heroes(_: argparse.Namespace) -> None:
     print(f"{HEROES_PATH}: {len(mapping)} героев")
 
 
+# Справочник предметов: в матче лежат id слотов инвентаря, а лог покупок и
+# файлы иконок названы внутренним именем. Связывает одно с другим тот же
+# репозиторий констант odota, что и для героев.
+ITEMS_URL = "https://raw.githubusercontent.com/odota/dotaconstants/master/build/item_ids.json"
+
+
+async def cmd_ingest_items(_: argparse.Namespace) -> None:
+    """Обновить справочник предметов: в слотах инвентаря лежат только id."""
+    import json
+
+    import httpx
+
+    from app.services.profiles import ITEMS_PATH
+
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:
+        response = await http.get(ITEMS_URL)
+        response.raise_for_status()
+        payload = response.json()
+
+    mapping = {str(int(item_id)): str(name) for item_id, name in payload.items()}
+    ITEMS_PATH.write_text(
+        json.dumps(mapping, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8"
+    )
+    print(f"{ITEMS_PATH}: {len(mapping)} предметов")
+
+
 def cmd_backfill(args: argparse.Namespace) -> None:
     """Перечитать матчи из локального кэша ответов OpenDota — без сети.
 
@@ -427,6 +453,9 @@ def main() -> int:
 
     p = sub.add_parser("ingest-heroes", help="обновить справочник героев")
     p.set_defaults(func=cmd_ingest_heroes, is_async=True)
+
+    p = sub.add_parser("ingest-items", help="обновить справочник предметов")
+    p.set_defaults(func=cmd_ingest_items, is_async=True)
 
     p = sub.add_parser(
         "backfill", help="перечитать матчи из локального кэша (без обращений к API)"

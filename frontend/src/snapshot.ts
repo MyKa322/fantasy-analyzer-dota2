@@ -78,6 +78,8 @@ export interface Snapshot {
   rules: RulesSnapshot & { version: string; source: string; trait_bonus_mode: string };
   /** id героя -> название. Нужен странице матча: в матче лежит только id. */
   heroes?: Record<string, string>;
+  /** id предмета -> внутреннее имя: им названы иконки и лог покупок. */
+  items?: Record<string, string>;
   teams: {
     team_id: number;
     name: string;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -12,6 +12,7 @@ import {
 import { api, type ProfilePlayer, type ProfileTeam } from "../api";
 import { teamCrest } from "../assets";
 import { optimiseBanner } from "../engine/scoring";
+import { findPair, loadHeadToHead, type HeadToHead } from "../headToHead";
 import { useT } from "../i18n";
 import { winRate } from "../profiles";
 import { STATIC_MODE, loadSnapshot, type Snapshot } from "../snapshot";
@@ -39,10 +40,19 @@ export default function TeamPage({
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [titleRole, setTitleRole] = useState("core");
   const [error, setError] = useState<string | null>(null);
+  // Личные встречи: список раскрывается по клику на сопернике, поэтому файл
+  // грузится один раз на страницу, а не на каждое раскрытие.
+  const [headToHead, setHeadToHead] = useState<HeadToHead | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  useEffect(() => {
+    loadHeadToHead().then(setHeadToHead).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setTeam(null);
     setError(null);
+    setExpanded(null);
     api
       .teamPage(teamId)
       .then(({ team: loaded, roster: players }) => {
@@ -433,14 +443,57 @@ export default function TeamPage({
         >
           <table className="w-full text-xs">
             <tbody>
-              {team.opponents.map((opponent) => (
-                <tr key={opponent.name} className="border-t border-[#20232c]">
-                  <td className="py-1 text-neutral-300">{opponent.name}</td>
-                  <td className="tabular py-1 text-right text-neutral-400">
-                    {opponent.wins}–{opponent.games - opponent.wins}
-                  </td>
-                </tr>
-              ))}
+              {team.opponents.map((opponent) => {
+                const open = opponent.team_id != null && opponent.team_id === expanded;
+                const meetings = open ? findPair(headToHead, team.team_id, opponent.team_id) : [];
+                return (
+                  <React.Fragment key={opponent.team_id ?? opponent.name}>
+                    <tr className="border-t border-[#20232c]">
+                      <td className="py-1 text-neutral-300">
+                        {opponent.team_id == null ? (
+                          opponent.name
+                        ) : (
+                          <button
+                            onClick={() =>
+                              setExpanded(open ? null : (opponent.team_id ?? null))
+                            }
+                            className="hover:text-[#c8a24a]"
+                            title={t("h2h.show")}
+                          >
+                            {open ? "▾ " : "▸ "}
+                            {opponent.name}
+                          </button>
+                        )}
+                      </td>
+                      <td className="tabular py-1 text-right text-neutral-400">
+                        {opponent.wins}–{opponent.games - opponent.wins}
+                      </td>
+                    </tr>
+                    {open &&
+                      meetings.map((meeting) => (
+                        <tr key={meeting.id} className="text-[11px]">
+                          <td className="py-0.5 pl-4">
+                            <a
+                              href={`#/match/${meeting.id}`}
+                              className="text-neutral-500 hover:text-[#c8a24a]"
+                            >
+                              {meeting.d}
+                            </a>
+                          </td>
+                          <td className="py-0.5 text-right">
+                            {meeting.w == null ? (
+                              <span className="text-neutral-600">{t("common.dash")}</span>
+                            ) : meeting.w === team.team_id ? (
+                              <span className="text-emerald-400">W</span>
+                            ) : (
+                              <span className="text-red-400">L</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </Panel>

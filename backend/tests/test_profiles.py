@@ -175,7 +175,10 @@ def test_team_profile_counts_opponents(session):
     seed(session)
     profile = team_profile(session, 10207962, days=None)
     assert profile.opponents
-    name, games, wins = profile.opponents[0]
+    team_id, name, games, wins = profile.opponents[0]
+    # Id соперника нужен странице: по нему открываются личные встречи.
+    assert team_id == 10207961
+    assert name
     assert games == 6
     assert 0 <= wins <= games
 

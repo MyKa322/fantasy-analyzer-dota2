@@ -545,8 +545,8 @@ def export_profiles(
                 else None,
                 "team_averages": {k: round(v, 2) for k, v in profile.team_averages.items()},
                 "opponents": [
-                    {"name": name, "games": games, "wins": wins}
-                    for name, games, wins in profile.opponents
+                    {"team_id": team_id, "name": name, "games": games, "wins": wins}
+                    for team_id, name, games, wins in profile.opponents
                 ],
                 # История рейтинга прореживается: точек бывает под сотню, а на
                 # графике шириной в панель разница не видна.
@@ -598,6 +598,59 @@ def export_profiles(
     return {"days": days, "min_games": min_games, "teams": teams_out, "players": players_out}
 
 
+def export_head_to_head(session, *, days: int) -> dict:
+    """Личные встречи: все матчи между парами команд за период.
+
+    Отдельным файлом, а не полем в профиле: страница матча спрашивает ровно один
+    вопрос — «сколько раз эти двое уже играли и чем кончалось», — и тащить ради
+    него двухмегабайтные профили незачем. Ключ пары — два id по возрастанию,
+    поэтому порядок команд в матче на поиск не влияет.
+    """
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from app.db.models import Match  # noqa: PLC0415
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    names = {
+        team.team_id: team.compendium_name or team.name for team in session.scalars(select(Team))
+    }
+
+    pairs: dict[str, list[dict]] = {}
+    used: set[int] = set()
+    query = (
+        select(Match)
+        .where(Match.start_time >= since)
+        .where(Match.radiant_team_id.is_not(None))
+        .where(Match.dire_team_id.is_not(None))
+        .order_by(Match.start_time.desc())
+    )
+    for match in session.scalars(query):
+        low, high = sorted((int(match.radiant_team_id), int(match.dire_team_id)))
+        if low == high:
+            continue
+        winner = None
+        if match.radiant_win is not None:
+            winner = match.radiant_team_id if match.radiant_win else match.dire_team_id
+        row = {
+            "id": match.match_id,
+            "d": match.start_time.date().isoformat(),
+            "r": int(match.radiant_team_id),
+            "w": int(winner) if winner else None,
+            "dur": match.duration,
+        }
+        if match.league_name:
+            row["league"] = match.league_name
+        pairs.setdefault(f"{low}:{high}", []).append(row)
+        used.update((low, high))
+
+    log.info("личных встреч: пар %d, матчей %d", len(pairs), sum(len(v) for v in pairs.values()))
+    return {
+        "days": days,
+        "teams": {str(team_id): names[team_id] for team_id in sorted(used) if team_id in names},
+        "pairs": pairs,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--simulations", type=int, default=20_000)
@@ -616,7 +669,10 @@ def main() -> int:
 
     init_db()
     with session_scope() as session:
-        from app.services.profiles import load_heroes as _load_heroes  # noqa: PLC0415
+        from app.services.profiles import (  # noqa: PLC0415
+            load_heroes as _load_heroes,
+            load_items as _load_items,
+        )
 
         snapshot = {
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -624,6 +680,9 @@ def main() -> int:
             # Справочник героев целиком: в матче OpenDota лежит только hero_id, а
             # странице матча нужны и название, и проверка титулов по списку.
             "heroes": {str(hero_id): name for hero_id, name in sorted(_load_heroes().items())},
+            # То же с предметами: в слотах инвентаря лежат id, а иконки названы
+            # внутренним именем предмета.
+            "items": _load_items(),
             "teams": export_teams(session),
             "group": export_group(session, args.simulations),
             "roles": export_roles(
@@ -640,6 +699,7 @@ def main() -> int:
             ti_matches=args.profile_matches,
             other_matches=max(5, args.profile_matches // 2),
         )
+        head_to_head = export_head_to_head(session, days=args.history_days)
 
     # Снапшот без команд формально валиден, но страница по нему пустая: не из
     # чего выбрать в анализаторе эмблем и некого показать в профилях. Такое уже
@@ -678,6 +738,17 @@ def main() -> int:
         profiles_path.stat().st_size / 1024,
         len(profiles["teams"]),
         len(profiles["players"]),
+    )
+
+    # Личные встречи — третий файл по той же причине: их спрашивает страница
+    # матча, а она не грузит ни профили, ни половину снапшота.
+    h2h_path = args.output.with_name("head_to_head.json")
+    write(h2h_path, head_to_head)
+    log.info(
+        "%s: %.0f КБ, пар %d",
+        h2h_path,
+        h2h_path.stat().st_size / 1024,
+        len(head_to_head["pairs"]),
     )
     return 0
 

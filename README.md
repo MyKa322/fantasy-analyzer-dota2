@@ -105,7 +105,8 @@ Dashboard tabs: **Emblems** — the best War Banner, what each stat is worth, fo
 split of a duo by player; **My emblems** — the inverse problem: enter what your rolls already
 produced and get the TI15 duos ranked for that exact set; **Profiles** — a page for any team and
 any player in the database: matches, averages, heroes, rating and our analysis on top; **Match** —
-any game by its id, pulled live from OpenDota and scored by compendium rules; **Roster** —
+any game by its id, pulled live from OpenDota: the scoreboard with items, the ward map with a
+timeline, the head-to-head record and compendium points for the map; **Roster** —
 candidates per role across the 16 participants and the best combinations; **Predictions** — Swiss
 bucket probabilities and a ready prediction layout; **Ratings** — the Glicko-2 table and the trend
 with its uncertainty band; **Custom banner** — a manual builder with a point projection; **Data** —
@@ -133,6 +134,8 @@ no other way to get them. The line runs here:
 | Stat prices, quality and trait bonuses, titles | the in-game compendium glossary → [`ti15_fantasy.yaml`](backend/config/ti15_fantasy.yaml) | by hand |
 | Rosters when a substitute has not played yet | [`ti15_rosters.yaml`](backend/config/ti15_rosters.yaml) — takes precedence over the automation | by hand |
 | Player portraits, logos, hero and emblem icons | the compendium design archive, squeezed into WebP | `tools/optimise_assets.py` |
+| Item reference (inventory slots hold ids) | [dotaconstants](https://github.com/odota/dotaconstants) → [`items.json`](backend/config/items.json) | `cli.py ingest-items` |
+| The minimap, its markers and item icons | an export of the game's own interface (`panorama/`, `materials/`), squeezed into WebP | `tools/optimise_assets.py` |
 | A single match on the **Match** tab | [OpenDota API](https://docs.opendota.com) `/matches/{id}`, requested by the browser itself | on every request, not cached in the repository |
 
 **About players.** There is no "give me this player's statistics" request: everything on a player
@@ -243,12 +246,32 @@ lane split from the OpenDota markup.
 **Match breakdown.** The **Match** tab takes any match id and pulls the game straight from the
 public OpenDota API in the browser — it is the one place where the page talks to someone else's
 data live, because the snapshot only knows the matches of the sixteen participants. On top of the
-usual scoreboard (heroes, KDA, last hits, GPM/XPM, net worth, damage, wards) it adds what a
-statistics site has no reason to compute: the compendium points this map is worth for each player
-on the best neutral banner of their role, and which Coaching Titles would have fired on this map and
-on whom. Roles are inferred from the match — mid by lane, the Support Duo as the two lowest net
-worths — and the page says so. Any match page is a link: `#/match/8922016200`, and the date in a
+usual scoreboard (heroes, KDA, last hits, GPM/XPM, net worth, damage, wards, final items) it adds
+what a statistics site has no reason to compute: the compendium points this map is worth for each
+player on the best neutral banner of their role, and which Coaching Titles would have fired on this
+map and on whom. Roles are inferred from the match — mid by lane, the Support Duo as the two lowest
+net worths — and the page says so. Any match page is a link: `#/match/8922016200`, and the date in a
 profile's match table is that link.
+
+**The map and the timeline.** Per-tick hero positions are not in the open API — only parsing the
+replay itself gives those. What the API does give is the thing the map is opened for: every ward
+with its coordinates and lifetime, the places players died inside a teamfight, and the objective
+events. So the page draws the game's own minimap with two views: the whole match at once — every
+ward placed, which is the map of what a team always lights and never does — and a timeline you can
+scrub or play, showing what was alive at that minute and where the fight going on was killing
+people. Next to it runs the event feed: towers, barracks, Roshan, aegis, first blood, big fights;
+clicking an event jumps the timeline to it.
+
+**Items and the build order.** The final inventory sits in the scoreboard, and under it the first
+purchases with their timings — consumables left out, or tangoes and TPs would bury the items that
+were actually built. The icons and the minimap come from an export of the game's own interface; only
+the map, three markers and the item icons are kept, squeezed into WebP.
+
+**Head to head.** Two teams that met before are worth looking at through those meetings, so the
+match page shows the whole record between them for the period, and each opponent on a team page
+expands into the same list. Every row links to the breakdown of that map. The data is a separate
+[`head_to_head.json`](frontend/public/data/head_to_head.json) (~200 KB): the question is asked by
+the match page, and it loads neither the profiles nor half the snapshot.
 
 Point-by-point data instead of a single average. For every stat you see not just the average points
 but the median with a quartile (one blowout map should not decide anything), the share of maps where
@@ -354,8 +377,10 @@ backend/
   tools/build_og_image.py         social preview images, one per language
 frontend/                         React + TS + Tailwind + Recharts
   src/engine/scoring.ts           the emblem maths in the browser, ported from the backend
-  src/opendota.ts                 the OpenDota client for the match page
-  src/components/MatchPanel.tsx   match breakdown: scoreboard, compendium points, titles
+  src/opendota.ts                 the OpenDota client for the match page, map coordinates
+  src/headToHead.ts               the head-to-head file: every meeting of a pair of teams
+  src/components/MatchPanel.tsx   match breakdown: scoreboard, items, compendium points, titles
+  src/components/MatchMap.tsx     the minimap: wards, deaths, the timeline and the event feed
   src/components/TrendPanel.tsx   form and style cuts, shared by both profile pages
   src/i18n/site.ts                languages, version addresses, descriptions for search engines
   src/i18n/messages/en.ts         the reference dictionary — it defines the key set
@@ -434,9 +459,10 @@ The GitHub Pages page works **without a backend**: everything that needs a datab
 is computed ahead of time into `frontend/public/data/snapshot.json` (~760 KB), and the emblem maths
 is mirrored in TypeScript in `frontend/src/engine/scoring.ts` — which is why the banner search, the
 roll restriction and the per-stat rankings all run right in the browser. Team and player pages read
-a separate `profiles.json` (~2 MB) that is only fetched when you open the **Profiles** tab. The
-**Match** tab needs neither: it asks OpenDota directly. Tabs that require a live server ("Data",
-"Ratings", the manual builder) are hidden in this mode.
+a separate `profiles.json` (~2 MB) that is only fetched when you open the **Profiles** tab, and the
+head-to-head record is a third file (`head_to_head.json`, ~200 KB). The match itself comes from
+OpenDota directly. Tabs that require a live server ("Data", "Ratings", the manual builder) are
+hidden in this mode.
 
 Refresh the snapshot by hand:
 
@@ -514,8 +540,10 @@ from `.gitignore` (the database, the match cache, `node_modules`, `.venv`) are n
 ### What stays out of the repository
 
 `backend/data/` — the database and the match cache (about 400 MB, restored by `ingest-ti`), and the
-source assets at full resolution: 80 portraits weigh 79 MB. What the repository holds are their WebP
-copies in `frontend/public/assets` — 1 MB for the lot, produced by `tools/optimise_assets.py`.
+source assets at full resolution: 80 portraits weigh 79 MB, and the interface export (`panorama/`,
+`materials/`) is 4600 files and 137 MB, of which the page needs the minimap, three markers and the
+item icons. What the repository holds are their WebP copies in `frontend/public/assets` — under
+2 MB for the lot, produced by `tools/optimise_assets.py`.
 
 ---
 

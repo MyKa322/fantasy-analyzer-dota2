@@ -388,7 +388,7 @@ interface TeamPageResponse {
   first_game: string | null;
   last_game: string | null;
   team_averages: Record<string, number>;
-  opponents: { name: string; games: number; wins: number }[];
+  opponents: { team_id?: number; name: string; games: number; wins: number }[];
   rating_history: { as_of: string; rating: number; rd: number }[];
   roster: PlayerPageResponse[];
   matches: MatchRowResponse[];

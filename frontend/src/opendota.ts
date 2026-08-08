@@ -13,6 +13,41 @@ import { tr } from "./i18n";
 
 const BASE = "https://api.opendota.com/api";
 
+/** Варда в логе: координаты в сетке 64…192, время — секунды от начала игры. */
+export interface WardEntry {
+  time: number;
+  x: number;
+  y: number;
+  player_slot?: number;
+  /** Идентификатор сущности: по нему постановка сходится со снятием. */
+  ehandle?: number;
+}
+
+export interface PurchaseEntry {
+  time: number;
+  key: string;
+}
+
+/** Событие матча: вышки, Рошан, аегис, первая кровь. */
+export interface ObjectiveEntry {
+  time: number;
+  type: string;
+  key?: string | number;
+  unit?: string;
+  player_slot?: number;
+  team?: number;
+  slot?: number;
+}
+
+export interface TeamfightEntry {
+  start: number;
+  end: number;
+  last_death?: number;
+  deaths?: number;
+  /** По игроку: где он умирал в этом файте, {x: {y: количество}}. */
+  players?: { deaths_pos?: Record<string, Record<string, number>> }[];
+}
+
 /** Игрок в матче — только те поля, которые страница действительно читает. */
 export interface MatchPlayer {
   account_id?: number | null;
@@ -47,6 +82,20 @@ export interface MatchPlayer {
   firstblood_claimed?: number | null;
   item_uses?: Record<string, number> | null;
   killed?: Record<string, number> | null;
+  // Инвентарь на момент конца игры: id предметов, имена — в справочнике снапшота.
+  item_0?: number;
+  item_1?: number;
+  item_2?: number;
+  item_3?: number;
+  item_4?: number;
+  item_5?: number;
+  item_neutral?: number;
+  // Логи разобранного реплея. У неразобранного матча их нет вовсе.
+  obs_log?: WardEntry[] | null;
+  sen_log?: WardEntry[] | null;
+  obs_left_log?: WardEntry[] | null;
+  sen_left_log?: WardEntry[] | null;
+  purchase_log?: PurchaseEntry[] | null;
 }
 
 export interface MatchTeam {
@@ -73,7 +122,21 @@ export interface OpenDotaMatch {
   series_type?: number | null;
   radiant_gold_adv?: number[] | null;
   radiant_xp_adv?: number[] | null;
+  objectives?: ObjectiveEntry[] | null;
+  teamfights?: TeamfightEntry[] | null;
   players: MatchPlayer[];
+}
+
+/**
+ * Координаты OpenDota -> доля стороны миникарты.
+ *
+ * В логах лежит игровая сетка: играбельная часть карты укладывается в 64…192 по
+ * обеим осям, ось Y растёт на север. Проверено по `lane_pos`: у радиантского
+ * керри центр масс попадает в правый нижний угол, у даерского — в левый
+ * верхний, миды сходятся к центру.
+ */
+export function mapPosition(x: number, y: number): { left: number; top: number } {
+  return { left: ((x - 64) / 128) * 100, top: ((192 - y) / 128) * 100 };
 }
 
 const cache = new Map<number, OpenDotaMatch>();

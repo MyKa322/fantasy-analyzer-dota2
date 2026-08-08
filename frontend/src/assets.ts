@@ -108,6 +108,39 @@ export function heroIcon(heroId: number | null | undefined): string | null {
   return file ? asset_(`heroes/${file}`) : null;
 }
 
+/**
+ * Иконки предметов. Имя файла — внутреннее имя предмета, оно же лежит в логе
+ * покупок OpenDota. Манифест нужен, чтобы не просить картинку, которой нет:
+ * набор предметов меняется каждый патч, а выгрузка интерфейса — раз в патч.
+ */
+let itemFiles: Set<string> | null = null;
+
+export async function loadItemManifest(): Promise<void> {
+  if (itemFiles) return;
+  try {
+    const response = await fetch(`${asset_("items/manifest.json")}?v=${__BUILD_ID__}`);
+    itemFiles = new Set(response.ok ? ((await response.json()) as string[]) : []);
+  } catch {
+    itemFiles = new Set();
+  }
+}
+
+export function itemIcon(name: string | null | undefined): string | null {
+  if (!name || !itemFiles?.has(name)) return null;
+  return asset_(`items/${name}.webp`);
+}
+
+/** Миникарта и маркеры на ней — из выгрузки интерфейса игры. */
+export const MAP_IMAGE = asset_("map/minimap.webp");
+export const MAP_MARKER = {
+  ward: asset_("map/ward.webp"),
+  death: asset_("map/death.webp"),
+  roshan: asset_("map/roshan.webp"),
+  tower: asset_("map/tower.webp"),
+  racks: asset_("map/racks.webp"),
+  ancient: asset_("map/ancient.webp"),
+} as const;
+
 /** Ник -> сравнимая форма: только латиница и цифры. */
 export function normaliseNickname(nickname: string): string {
   return nickname

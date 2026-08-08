@@ -40,6 +40,7 @@ from ..ingest.stat_mapping import PROFILE_FIELDS
 log = logging.getLogger(__name__)
 
 HEROES_PATH = Path(__file__).resolve().parents[2] / "config" / "heroes.json"
+ITEMS_PATH = Path(__file__).resolve().parents[2] / "config" / "items.json"
 
 # Средние считаются по разобранным матчам: в остальных половины полей нет.
 DEFAULT_DAYS = 180
@@ -301,7 +302,9 @@ class TeamProfile:
     # Средние по команде за карту: сумма по пятерым, а не среднее — так принято
     # читать командные числа (килы команды, а не килы среднего игрока).
     team_averages: dict[str, float] = field(default_factory=dict)
-    opponents: list[tuple[str, int, int]] = field(default_factory=list)
+    # (team_id, название, карт, побед). Id нужен странице: по нему открываются
+    # личные встречи, а названия у команд меняются вместе с брендом.
+    opponents: list[tuple[int, str, int, int]] = field(default_factory=list)
     trends: Trends | None = None
     # Средний рейтинг соперника за период и отдельно — счёт против тех, кто
     # выше самой команды. Двадцать побед над квалификационным составом и пять
@@ -343,6 +346,23 @@ def load_heroes(path: Path | str = HEROES_PATH) -> dict[int, str]:
     игрока должна открываться и без сети.
     """
     return {hero_id: entry["name"] for hero_id, entry in _load_hero_file(path).items()}
+
+
+def load_items(path: Path | str = ITEMS_PATH) -> dict[str, str]:
+    """id предмета -> внутреннее имя (`power_treads`). Им же названы иконки.
+
+    Справочник обновляется командой `cli.py ingest-items`: набор предметов
+    меняется каждый патч, а в матче лежат только id слотов инвентаря.
+    """
+    path = Path(path)
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        log.warning("не удалось прочитать справочник предметов %s", path)
+        return {}
+    return {str(item_id): str(name) for item_id, name in raw.items()}
 
 
 def load_hero_npc_names(path: Path | str = HEROES_PATH) -> dict[int, str]:
@@ -680,8 +700,8 @@ def team_profile(
     own_rating = ratings[team_id][0] if team_id in ratings else None
 
     wins = 0
-    opponents: Counter[str] = Counter()
-    opponent_wins: Counter[str] = Counter()
+    opponents: Counter[int] = Counter()
+    opponent_wins: Counter[int] = Counter()
     game_rows: list[GameRow] = []
     opponent_ratings: list[float] = []
     stronger = [0, 0]  # карты и победы против соперника с рейтингом выше своего
@@ -706,9 +726,8 @@ def team_profile(
         if won is not None:
             wins += int(won)
             if opponent_id:
-                name = team_names.get(opponent_id, str(opponent_id))
-                opponents[name] += 1
-                opponent_wins[name] += int(won)
+                opponents[int(opponent_id)] += 1
+                opponent_wins[int(opponent_id)] += int(won)
 
     parsed = [m for m in matches if m.is_parsed]
 
@@ -838,7 +857,13 @@ def team_profile(
         matches=match_rows,
         team_averages=team_averages,
         opponents=[
-            (name, games, opponent_wins[name]) for name, games in opponents.most_common(10)
+            (
+                opponent_id,
+                team_names.get(opponent_id, str(opponent_id)),
+                games,
+                opponent_wins[opponent_id],
+            )
+            for opponent_id, games in opponents.most_common(10)
         ],
         trends=_trends(game_rows),
         opponent_rating=_mean(opponent_ratings) if opponent_ratings else None,

@@ -69,6 +69,13 @@ jobs:
           ANALYZER_OPENDOTA_API_KEY: ${{ secrets.OPENDOTA_API_KEY }}
         run: python tools/cli.py ingest-heroes
 
+      # То же с предметами: в слотах инвентаря лежат id, а страница матча
+      # показывает иконки. Набор меняется каждый патч.
+      - name: Обновить справочник предметов
+        working-directory: backend
+        continue-on-error: true
+        run: python tools/cli.py ingest-items
+
       - name: Экспортировать снапшот
         working-directory: backend
         run: python tools/export_snapshot.py --simulations 20000
@@ -85,7 +92,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add frontend/public/data/snapshot.json frontend/public/data/profiles.json \
-                  backend/config/heroes.json
+                  frontend/public/data/head_to_head.json \
+                  backend/config/heroes.json backend/config/items.json
           if git diff --staged --quiet; then
             echo "данные не изменились — коммит не нужен"
             echo "changed=false" >> "$GITHUB_OUTPUT"

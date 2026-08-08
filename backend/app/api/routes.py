@@ -1125,8 +1125,8 @@ def profile_team(
         matches=[_match_row_out(m) for m in profile.matches],
         team_averages={k: round(v, 2) for k, v in profile.team_averages.items()},
         opponents=[
-            {"name": name, "games": games, "wins": wins}
-            for name, games, wins in profile.opponents
+            {"team_id": team_id, "name": name, "games": games, "wins": wins}
+            for team_id, name, games, wins in profile.opponents
         ],
         trends=_trends_out(profile.trends),
         opponent_rating=(

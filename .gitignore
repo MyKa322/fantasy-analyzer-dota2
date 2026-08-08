@@ -18,6 +18,10 @@ backend/.env
 /teams/
 /fantasy_craft/
 /heroes/
+# Выгрузка интерфейса из игры: 4600 файлов на 137 МБ, из них нужны миникарта,
+# три маркера и иконки предметов. Их ужатые копии лежат в репозитории.
+/panorama/
+/materials/
 dota2-fantasy-design-main/players/
 dota2-fantasy-design-main/teams/
 dota2-fantasy-design-main/fantasy_craft/
