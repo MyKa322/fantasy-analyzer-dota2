@@ -30,7 +30,7 @@ import {
   type OpenDotaMatch,
 } from "../opendota";
 import { loadSnapshot, type Snapshot } from "../snapshot";
-import MatchMap, { clock } from "./MatchMap";
+import MatchMap, { clock, type MapPlayer } from "./MatchMap";
 import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
 // Расходники в таймлайне покупок только мешают: тангошки и телепорты берут
@@ -320,6 +320,20 @@ export default function MatchPanel({
     return { rows, titles: evaluateTitles(match, rows, rules), parsed: isParsed(match) };
   }, [match, snapshot]);
 
+  // Состав в том виде, в каком его читает карта: слот, ник, герой и сторона.
+  // Отдельным списком, чтобы карта не разбирала матч во второй раз.
+  const mapRoster = useMemo<MapPlayer[]>(
+    () =>
+      (analysis?.rows ?? []).map((row) => ({
+        slot: row.player.player_slot,
+        name: playerName(row.player),
+        hero: row.hero,
+        heroId: row.player.hero_id,
+        radiant: row.radiant,
+      })),
+    [analysis],
+  );
+
   const advantage = useMemo(() => {
     const gold = match?.radiant_gold_adv;
     if (!gold?.length) return [];
@@ -604,7 +618,7 @@ export default function MatchPanel({
 
           {analysis.parsed && (
             <Panel title={t("map.title")} subtitle={t("map.subtitle")}>
-              <MatchMap match={match} playerName={playerName} />
+              <MatchMap match={match} roster={mapRoster} />
             </Panel>
           )}
 
