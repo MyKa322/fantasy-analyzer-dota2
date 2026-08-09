@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AdBanner from "./components/AdBanner";
 import DataPanel from "./components/DataPanel";
 import EmblemAnalyzer from "./components/EmblemAnalyzer";
 import FantasyPanel from "./components/FantasyPanel";
@@ -116,6 +117,8 @@ export default function App() {
           <LanguageSwitch />
         </div>
       </header>
+
+      <AdBanner />
 
       <main>
         {active === "match" ? (
