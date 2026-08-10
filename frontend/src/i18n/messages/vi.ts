@@ -500,6 +500,8 @@ const vi: Dictionary = {
   // --- замена в составе -----------------------------------------------------
   "emblems.substitution": "Thay đổi đội hình",
   "emblems.substitutionNote": "{name} vào vị trí này, nhưng dự báo được tính từ chính vị trí đó: {games} ván do {replaced} thi đấu. Trong mẫu không có trận đấu giải nào của riêng {name}.",
+  // --- равные варианты ------------------------------------------------------
+  "inventory.tied": "Còn {count} nữa nằm trong khoảng 1% so với mục này — với dữ liệu hiện có chúng ngang nhau, và số ván sau mỗi lựa chọn đáng cân nhắc hơn điểm số: {teams}.",
 };
 
 export default vi;

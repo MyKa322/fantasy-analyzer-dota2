@@ -38,6 +38,7 @@ from app.fantasy.advisor import EmblemAdvisor  # noqa: E402
 from app.fantasy.presets import neutral_banner  # noqa: E402
 from app.fantasy.projection import RoleProjector  # noqa: E402
 from app.fantasy.rules import load_rules  # noqa: E402
+from app.fantasy.shrinkage import shrink_to_role_mean  # noqa: E402
 from app.services.analysis import (  # noqa: E402
     build_role_history,
     latest_ratings,
@@ -265,6 +266,9 @@ def export_roles(
     all_series = sorted({series, *series_options})
 
     rows: list[dict] = []
+    # Статы копятся отдельно: сжатие к среднему по роли сравнивает команды между
+    # собой, а значит применимо только когда собраны все.
+    pending: list[tuple[str, list]] = []
     for role, entries in candidates.items():
         for team_id, team_name, account_ids in entries:
             history = build_role_history(session, team_id, role, account_ids, since=since)
@@ -364,6 +368,10 @@ def export_roles(
                     "titles": _titles(advisor.title_advice(history, heroes=heroes)),
                 }
             )
+            pending.append((role, values))
+
+    for row, values in zip(rows, shrink_to_role_mean(pending), strict=True):
+        row["stats"] = [_stat_row(v) for v in values]
 
     return rows
 

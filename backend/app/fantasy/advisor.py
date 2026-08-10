@@ -80,6 +80,10 @@ class StatValue:
     # Форма: очки за последние 30 дней делить на очки за предыдущие 60.
     # None — если одной из половин слишком мало карт, чтобы сравнение значило.
     trend: float | None = None
+    # Разброс очков по картам. Нужен, чтобы понять, насколько точно среднее:
+    # у команды с 29 картами и у команды со 134 это разная точность, а в
+    # сравнении ролей между собой они иначе идут на равных.
+    std_points: float = 0.0
 
     @property
     def is_negligible(self) -> bool:
@@ -308,6 +312,7 @@ class EmblemAdvisor:
                     p75_points=float(np.percentile(column, 75)) if len(column) else 0.0,
                     hit_rate=float((units > 0).mean()) if len(units) else 0.0,
                     trend=self._trend(games, column, now=now),
+                    std_points=float(column.std(ddof=1)) if len(column) > 1 else 0.0,
                     availability=source.availability if source else "exact",
                     games=len(games),
                 )
@@ -761,14 +766,33 @@ class EmblemAdvisor:
         now: datetime | None = None,
         min_games: int = 5,
     ) -> list[InventoryFit]:
-        """Кому из участников TI15 эти эмблемы принесут больше всего очков."""
-        fits: list[InventoryFit] = []
-        for history in histories:
-            if len(history.games) < min_games:
-                continue
-            if self.inventory_gaps(inventory, history.role):
-                continue  # этой роли инвентарь не хватает ни в какой команде
-            fits.append(self.fit_inventory(history, inventory, now=now))
+        """Кому из участников TI15 эти эмблемы принесут больше всего очков.
+
+        Оценки сжимаются к среднему по роли: здесь берётся максимум по всем
+        кандидатам, а он достаётся не сильнейшему, а самому шумному, если не
+        поправить на размер выборки. Подробности — в app/fantasy/shrinkage.py.
+        """
+        from .shrinkage import shrink_to_role_mean  # noqa: PLC0415
+
+        eligible = [
+            history
+            for history in histories
+            if len(history.games) >= min_games
+            and not self.inventory_gaps(inventory, history.role)
+        ]
+        adjusted = shrink_to_role_mean(
+            [
+                (history.role, self.stat_values(history, role=history.role, now=now))
+                for history in eligible
+            ]
+        )
+
+        fits = [
+            self.fit_inventory(
+                history, inventory, now=now, values={v.stat: v for v in values}
+            )
+            for history, values in zip(eligible, adjusted, strict=True)
+        ]
         fits.sort(key=lambda f: -f.expected_card_points)
         return fits
 

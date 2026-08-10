@@ -500,6 +500,8 @@ const tr: Dictionary = {
   // --- замена в составе -----------------------------------------------------
   "emblems.substitution": "Kadro değişikliği",
   "emblems.substitutionNote": "Bu mevkiye {name} geçti ama projeksiyon mevkinin kendisinden geliyor: {replaced} oyuncusunun oynadığı {games} harita. Örneklemde {name} adına lig maçı yok.",
+  // --- равные варианты ------------------------------------------------------
+  "inventory.tied": "Bunun %1 içinde {count} daha var — bu veriyle aralarında fark yok ve her birinin arkasındaki harita sayısı puandan daha çok şey söyler: {teams}.",
 };
 
 export default tr;

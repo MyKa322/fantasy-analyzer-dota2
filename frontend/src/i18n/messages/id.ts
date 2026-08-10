@@ -500,6 +500,8 @@ const id: Dictionary = {
   // --- замена в составе -----------------------------------------------------
   "emblems.substitution": "Perubahan roster",
   "emblems.substitutionNote": "Slot ini diisi {name}, tetapi proyeksinya dihitung dari slot itu sendiri: {games} peta yang dimainkan {replaced}. Tidak ada pertandingan liga milik {name} dalam sampel.",
+  // --- равные варианты ------------------------------------------------------
+  "inventory.tied": "Ada {count} lagi dalam jarak 1% dari ini — dengan data yang ada keduanya setara, dan jumlah peta di belakang masing-masing lebih berarti daripada poinnya: {teams}.",
 };
 
 export default id;

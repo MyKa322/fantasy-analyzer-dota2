@@ -118,6 +118,18 @@ export default function InventoryAnalyzer() {
     setInventory([...inventory, { stat: "kills", quality: "tier_3", trait: null }]);
 
   const best = result?.fits[0];
+
+  // Разница в пределах процента — это не преимущество, а разброс выборки.
+  // Показывать одного победителя, когда данные не отличают его от следующих,
+  // значит выдавать случайность за вывод.
+  const TIE = 0.01;
+  const tied = useMemo(() => {
+    const fits = result?.fits ?? [];
+    if (!fits.length) return [];
+    const top = fits[0].expected_card_points;
+    return fits.slice(1).filter((f) => f.expected_card_points >= top * (1 - TIE));
+  }, [result]);
+
   const bestByRole = useMemo(() => {
     const map = new Map<string, InventoryFit>();
     for (const fit of result?.fits ?? []) if (!map.has(fit.role)) map.set(fit.role, fit);
@@ -308,6 +320,19 @@ export default function InventoryAnalyzer() {
                 value={best.period_ceiling ? n(best.period_ceiling) : "—"}
               />
             </div>
+
+            {tied.length > 0 && (
+              <p className="mt-3 rounded border border-[#3A4048] bg-[#1C1F24] px-3 py-2 text-[11px] leading-relaxed text-neutral-300">
+                {t("inventory.tied", {
+                  // Склонение — через tp: «2 варианта», а не «2 вариант(ов)».
+                  count: tp("plural.options", tied.length),
+                  teams: tied
+                    .slice(0, 3)
+                    .map((f) => `${f.team_name} (${f.games})`)
+                    .join(", "),
+                })}
+              </p>
+            )}
 
             {best.unused.length > 0 && (
               <p className="mt-3 text-[11px] text-neutral-500">

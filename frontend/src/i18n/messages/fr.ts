@@ -500,6 +500,8 @@ const fr: Dictionary = {
   // --- замена в составе -----------------------------------------------------
   "emblems.substitution": "Changement de line-up",
   "emblems.substitutionNote": "{name} prend le poste, mais la projection vient du poste lui-même : {games} cartes jouées par {replaced}. {name} n'a aucun match de ligue à lui dans l'échantillon.",
+  // --- равные варианты ------------------------------------------------------
+  "inventory.tied": "{count} de plus tiennent dans 1% de celle-ci : sur ces données elles se valent, et le nombre de cartes derrière chacune compte plus que les points : {teams}.",
 };
 
 export default fr;

@@ -500,6 +500,8 @@ const pl: Dictionary = {
   // --- замена в составе -----------------------------------------------------
   "emblems.substitution": "Zmiana w składzie",
   "emblems.substitutionNote": "Slot zajął {name}, ale prognoza liczona jest z samego slotu: {games} map rozegranych przez {replaced}. Własnych meczów ligowych {name} nie ma w próbce.",
+  // --- равные варианты ------------------------------------------------------
+  "inventory.tied": "Kolejne {count} mieszczą się w 1% od tej — na tych danych są nie do odróżnienia, a liczba map pod każdą waży więcej niż punkty: {teams}.",
 };
 
 export default pl;

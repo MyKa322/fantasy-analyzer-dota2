@@ -500,6 +500,8 @@ const es: Dictionary = {
   // --- замена в составе -----------------------------------------------------
   "emblems.substitution": "Cambio de roster",
   "emblems.substitutionNote": "{name} ocupa la posición, pero la proyección se basa en la posición misma: {games} mapas jugados por {replaced}. {name} no tiene partidas de liga propias en la muestra.",
+  // --- равные варианты ------------------------------------------------------
+  "inventory.tied": "Hay {count} más dentro del 1% de esta: con estos datos son equivalentes, y el número de mapas de cada una pesa más que los puntos: {teams}.",
 };
 
 export default es;

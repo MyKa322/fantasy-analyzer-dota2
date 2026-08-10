@@ -231,6 +231,27 @@ judge a player nor build a roster. Averages are computed only over matches with 
 the share of those is shown explicitly: in the rest OpenDota reports neither wards nor stuns, and
 including them would drag everything down at once.
 
+**A correction for sample size, so the leaderboard is not won by noise.** Picking the best of 48
+candidates (16 teams × 3 roles) is a maximum over noisy estimates, and a maximum goes to whoever has
+the smallest sample, not the strongest play: a shorter history has a wider spread and lands in the
+upper tail more often than it deserves. This was not theoretical. On the snapshot of 2026-08-09, the
+mid of Team Resilience stood 7.5% above a field whose next ten teams fit inside 2% of one another —
+on 29 maps against 100+ for everyone else. Eight maps later the same estimate fell 6% and lost the
+top spot, while teams with a hundred maps moved by 0–0.1% over the same refresh.
+
+Every stat estimate is therefore pulled toward the average for its role, the more so the less
+reliable it is — classic empirical-Bayes shrinkage, `lambda = tau² / (tau² + se²)`, in
+`backend/app/fantasy/shrinkage.py`. `se` is the standard error of the team's mean, `tau` the spread
+between teams once the average measurement noise has been subtracted from it. In practice lambda
+runs about 0.35–0.55 for a 30-map history and 0.75–0.90 for 130 maps. The spread between teams is
+estimated from the interquartile range rather than the variance, and this is not fastidiousness: the
+very outlier the correction exists for would otherwise inflate the variance itself, decide that the
+differences exceed the noise, and switch the correction off — defending itself.
+
+Where the data genuinely cannot separate the leaders, the page says so instead of naming a winner:
+if the next options sit within 1% of the best one, **My emblems** lists them and points at the map
+counts rather than the points.
+
 **Form and style: the cuts that a single average hides.** Every team and player page carries the
 same block — the record over the last 30 days against the previous two months (in percentage
 points, not "twice as good"), the current win or loss streak, the split by side (Radiant / Dire) and
