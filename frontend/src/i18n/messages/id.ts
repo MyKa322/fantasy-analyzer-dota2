@@ -497,6 +497,9 @@ const id: Dictionary = {
   "map.lifetime": "Umur",
   "map.summary": "Ringkasan visi",
   "map.summaryHint": "Umur dirata-ratakan atas observer: ward yang hilang lebih cepat berarti ward yang ditemukan lawan.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Perubahan roster",
+  "emblems.substitutionNote": "Slot ini diisi {name}, tetapi proyeksinya dihitung dari slot itu sendiri: {games} peta yang dimainkan {replaced}. Tidak ada pertandingan liga milik {name} dalam sampel.",
 };
 
 export default id;

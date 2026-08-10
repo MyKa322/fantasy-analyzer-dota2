@@ -24,6 +24,19 @@ group_stage:
     # остальные — Bo1. Формат TI15 официально не объявлен; правится здесь.
     regular_best_of: 1
     decisive_best_of: 3
+    # Объявленные пары первого раунда (экран сетки, 2026-08-10). Без них
+    # симулятор разбивает первый раунд по посеву — сильнейший против слабейшего,
+    # — а настоящая сетка от посева отличается, и все 20 000 прогонов стартовали
+    # бы с матчей, которых не будет. Раунд расписывается целиком или никак.
+    first_round:
+      - ["Team Falcons", "LGD Gaming"]
+      - ["Iron Wing", "Nigma Galaxy"]
+      - ["BoomBoys", "OG"]
+      - ["Team Vision", "Team Resilience"]
+      - ["Team Spirit", "Xtreme Gaming"]
+      - ["Team Liquid", "Vici Gaming"]
+      - ["Aurora Gaming", "GamerLegion"]
+      - ["Team Yandex", "Huligani"]
   # Порядок как на экране предсказаний, сверху вниз / слева направо.
   buckets:
     - key: "4-0"

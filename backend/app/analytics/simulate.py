@@ -104,6 +104,7 @@ class SwissSimulator:
         *,
         engine: Glicko2 | None = None,
         seed: int | None = None,
+        first_round: Sequence[tuple[int, int]] | None = None,
     ) -> None:
         if len(ratings) != config.teams:
             raise ValueError(
@@ -122,8 +123,30 @@ class SwissSimulator:
             key=lambda i: -self.ratings[self.team_ids[i]].rating,
         )
         self._seed_rank = {idx: rank for rank, idx in enumerate(self._seed_order)}
+        self._first_round = self._resolve_first_round(first_round or ())
         self._p_regular = self._probability_matrix(config.swiss.regular_best_of)
         self._p_decisive = self._probability_matrix(config.swiss.decisive_best_of)
+
+    def _resolve_first_round(
+        self, pairs: Sequence[tuple[int, int]]
+    ) -> list[tuple[int, int]]:
+        """Объявленные пары первого раунда (team_id) — в индексы симулятора.
+
+        Пары приходят снаружи, а не из конфига: симулятор знает только те
+        команды, рейтинги которых ему дали, и связка «название -> team_id» лежит
+        уровнем выше. Так его можно гонять и на синтетических командах.
+        """
+        resolved: list[tuple[int, int]] = []
+        for left, right in pairs:
+            try:
+                resolved.append((self._index[left], self._index[right]))
+            except KeyError as exc:
+                # Команда есть в сетке, но не в рейтингах — молча разбивать
+                # раунд по посеву нельзя, иначе расхождение никто не заметит.
+                raise ValueError(
+                    f"пара первого раунда {left} — {right}: нет рейтинга для {exc.args[0]!r}"
+                ) from exc
+        return resolved
 
     def _probability_matrix(self, best_of: int) -> np.ndarray:
         n = len(self.team_ids)
@@ -144,13 +167,23 @@ class SwissSimulator:
         active: Sequence[int],
         records: Mapping[int, tuple[int, int]],
         played: set[tuple[int, int]],
+        *,
+        round_index: int = 0,
     ) -> list[tuple[int, int]]:
         """Разбить активные команды на пары.
 
         Классический Swiss: пары внутри группы с одинаковой записью, верх против
         низа по посеву, повторных встреч избегаем. Нечётный остаток группы
         спускается в следующую (именно так в шестом раунде 3-2 встречается с 2-3).
+
+        Первый раунд, если он объявлен, берётся из конфига как есть: там пары уже
+        известны, и угадывать их по посеву незачем.
         """
+        if round_index == 0 and self._first_round:
+            for a, b in self._first_round:
+                played.add((min(a, b), max(a, b)))
+            return list(self._first_round)
+
         groups: dict[tuple[int, int], list[int]] = defaultdict(list)
         for team in active:
             groups[records[team]].append(team)
@@ -190,12 +223,12 @@ class SwissSimulator:
         last_round_won: dict[int, bool] = {}
         played: set[tuple[int, int]] = set()
 
-        for _ in range(cfg.max_rounds):
+        for round_index in range(cfg.max_rounds):
             active = [i for i in range(n) if i not in finished]
             if not active:
                 break
 
-            for a, b in self._pair_round(active, records, played):
+            for a, b in self._pair_round(active, records, played, round_index=round_index):
                 wins_a, losses_a = records[a]
                 wins_b, losses_b = records[b]
                 decisive = (

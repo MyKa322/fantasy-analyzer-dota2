@@ -302,6 +302,26 @@ export default function EmblemAnalyzer() {
               </div>
             </div>
 
+            {/* Замена в составе: цифры принадлежат не тому, кто выйдет играть,
+                и об этом надо сказать до эмблем, а не в сноске под ними. */}
+            {(best.substitutions ?? []).map((sub) => (
+              <div
+                key={sub.name}
+                className="mb-3 rounded border border-[#3A4048] bg-[#1C1F24] px-3 py-2"
+              >
+                <div className="text-[11px] tracking-wide text-neutral-400 uppercase">
+                  {t("emblems.substitution")}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-neutral-300">
+                  {t("emblems.substitutionNote", {
+                    name: sub.name,
+                    replaced: sub.replaced,
+                    games: sub.games,
+                  })}
+                </p>
+              </div>
+            ))}
+
             <div className="space-y-2">
               {best.slots.map((slot) => (
                 <EmblemCard key={slot.slot} slot={slot} />

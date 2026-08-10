@@ -497,6 +497,9 @@ const de: Dictionary = {
   "map.lifetime": "Standzeit",
   "map.summary": "Bilanz der Sicht",
   "map.summaryHint": "Die Standzeit ist der Schnitt über die Observer: ein früh verschwundener Ward ist einer, den der Gegner gefunden hat.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Wechsel im Roster",
+  "emblems.substitutionNote": "Auf der Position steht {name}, die Prognose kommt aber von der Position selbst: {games} Karten, gespielt von {replaced}. Eigene Ligaspiele von {name} sind in der Stichprobe nicht vorhanden.",
 };
 
 export default de;

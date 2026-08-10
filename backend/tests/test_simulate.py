@@ -158,6 +158,82 @@ def test_wrong_number_of_teams_rejected(group_config):
         SwissSimulator(make_ratings(10), group_config)
 
 
+# --- объявленный первый раунд -------------------------------------------------
+
+# Пары «сильнейшая против сильнейшей», каких посев никогда бы не дал.
+FIXED_FIRST_ROUND = [(1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (15, 16)]
+
+
+def test_declared_first_round_is_played_as_written(group_config):
+    sim = SwissSimulator(make_ratings(), group_config, seed=7, first_round=FIXED_FIRST_ROUND)
+    played: set[tuple[int, int]] = set()
+    pairs = sim._pair_round(range(16), {i: (0, 0) for i in range(16)}, played, round_index=0)
+
+    expected = [(sim._index[a], sim._index[b]) for a, b in FIXED_FIRST_ROUND]
+    assert pairs == expected
+    assert len(played) == 8, "повторные встречи дальше по сетке должны исключаться"
+
+
+def test_declared_first_round_does_not_leak_into_later_rounds(group_config):
+    """Со второго раунда пары снова считаются по записям — сетка их не задаёт."""
+    sim = SwissSimulator(make_ratings(), group_config, seed=7, first_round=FIXED_FIRST_ROUND)
+    records = {i: (1, 0) if i < 8 else (0, 1) for i in range(16)}
+    pairs = sim._pair_round(range(16), records, set(), round_index=1)
+
+    assert sorted(pairs) != sorted(
+        (sim._index[a], sim._index[b]) for a, b in FIXED_FIRST_ROUND
+    )
+    for a, b in pairs:
+        assert records[a] == records[b], "Swiss сводит команды с одинаковой записью"
+
+
+def test_seed_pairing_stays_when_no_first_round_declared(group_config):
+    """Без сетки поведение прежнее: верх против низа по посеву."""
+    sim = SwissSimulator(make_ratings(), group_config, seed=7)
+    pairs = sim._pair_round(range(16), {i: (0, 0) for i in range(16)}, set(), round_index=0)
+
+    ranks = {(sim._seed_rank[a], sim._seed_rank[b]) for a, b in pairs}
+    assert (0, 15) in ranks, "сильнейшая должна встретить слабейшую"
+
+
+def test_first_round_needs_ratings_for_every_listed_team(group_config):
+    with pytest.raises(ValueError, match="нет рейтинга"):
+        SwissSimulator(make_ratings(), group_config, seed=7, first_round=[(1, 999)])
+
+
+def test_declared_first_round_changes_the_odds(group_config):
+    """Ради этого всё и делается: сетка сдвигает вероятности по корзинам.
+
+    По посеву сильнейшая команда первым же матчем получает слабейшую, по
+    объявленной сетке — вторую по силе. Шанс пройти без поражений падает.
+    """
+    seeded = SwissSimulator(make_ratings(), group_config, seed=101)
+    fixed = SwissSimulator(
+        make_ratings(), group_config, seed=101, first_round=FIXED_FIRST_ROUND
+    )
+    favourite = 1
+
+    seeded_odds = seeded.run(simulations=4000).bucket_probability(favourite, "4-0")
+    fixed_odds = fixed.run(simulations=4000).bucket_probability(favourite, "4-0")
+    assert fixed_odds < seeded_odds
+
+
+def test_shipped_first_round_covers_every_team(config):
+    """Сетка в конфиге: восемь пар, все шестнадцать участников по разу."""
+    pairs = config.first_round_ids()
+    assert len(pairs) == 8
+
+    listed = [team for pair in pairs for team in pair]
+    assert len(set(listed)) == 16
+    assert set(listed) == {t for t in config.team_ids.values() if t is not None}
+
+
+def test_first_round_ignored_for_a_different_set_of_teams(config):
+    """Топ-16 по рейтингу — не та сетка, пары к нему не относятся."""
+    assert config.first_round_for(set(range(16))) == ()
+    assert config.first_round_for(set(config.team_ids.values())) == config.first_round_ids()
+
+
 # --- оптимизация предсказаний -------------------------------------------------
 
 

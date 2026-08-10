@@ -379,7 +379,8 @@ def cmd_teams(args: argparse.Namespace) -> None:
 
 
 def cmd_group(args: argparse.Namespace) -> None:
-    config = load_predictions_config().group_stage
+    predictions = load_predictions_config()
+    config = predictions.group_stage
     with session_scope() as session:
         ratings = latest_ratings(session)
         names = {
@@ -402,7 +403,12 @@ def cmd_group(args: argparse.Namespace) -> None:
         print(f"нужно {config.teams} команд с рейтингом, есть {len(chosen)}")
         return
 
-    simulator = SwissSimulator({t: Rating(*ratings[t]) for t in chosen}, config)
+    first_round = predictions.first_round_for(chosen)
+    if predictions.group_stage.swiss.first_round and not first_round:
+        print("сетка первого раунда не подходит этому набору команд — раунд по посеву\n")
+    simulator = SwissSimulator(
+        {t: Rating(*ratings[t]) for t in chosen}, config, first_round=first_round
+    )
     result = simulator.run(simulations=args.simulations)
     plan = optimise_group_predictions(result, config.slots(), config.points)
 

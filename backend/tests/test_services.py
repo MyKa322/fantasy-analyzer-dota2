@@ -245,6 +245,108 @@ def test_unknown_nickname_in_override_is_ignored(session, tmp_path, caplog):
     assert patched["core"] == roles["core"]
 
 
+def _write_substitution(tmp_path, monkeypatch, *, replaces: str = "player103") -> None:
+    """Конфиг с заменой: на мид пришёл Topson, своих карт за команду у него нет."""
+    from app.services import analysis
+
+    override = tmp_path / "rosters.yaml"
+    override.write_text(
+        "overrides:\n"
+        "  Team Liquid:\n"
+        "    mid:\n"
+        "      - name: 'Topson'\n"
+        "        account_id: 94054712\n"
+        f"        replaces: '{replaces}'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(analysis, "ROSTER_OVERRIDES_PATH", override)
+
+
+def test_override_accepts_a_player_who_never_played_for_the_team(
+    session, tmp_path, monkeypatch
+):
+    """Замену перед турниром ником не задать: ников «Topson» в OpenDota десятки."""
+    from app.services import analysis
+
+    _write_substitution(tmp_path, monkeypatch)
+    roles = analysis.infer_team_roles(session, LIQUID)
+    patched = analysis._apply_roster_override(
+        session,
+        LIQUID,
+        "Team Liquid",
+        roles,
+        analysis.load_roster_overrides()["Team Liquid"],
+    )
+    assert patched["mid"] == (94054712,)
+    assert session.get(Player, 94054712).name == "Topson"
+
+
+def test_substitution_falls_back_to_the_history_of_the_replaced_player(
+    session, tmp_path, monkeypatch
+):
+    """Своих карт у пришедшего нет — прогноз считается по картам слота.
+
+    Подменяются именно id выборки: player_names остаётся историей, а
+    roster_names показывает того, кто выйдет играть.
+    """
+    _write_substitution(tmp_path, monkeypatch)
+    # Строку игроку заводит разметка ростера, она в конвейере идёт раньше.
+    session.add(Player(account_id=94054712, name="Topson"))
+    session.flush()
+
+    history = build_role_history(session, LIQUID, "mid", (94054712,))
+    assert history.account_ids == (103,), "в выборке карты заменённого игрока"
+    assert history.games, "иначе роль осталась бы вообще без истории"
+    assert history.player_names == ("player103",)
+    assert history.roster_names == ("Topson",)
+
+    (sub,) = history.substitutions
+    assert (sub.account_id, sub.name) == (94054712, "Topson")
+    assert (sub.replaced_account_id, sub.replaced_name) == (103, "player103")
+
+
+def test_substitution_without_a_resolvable_predecessor_is_ignored(
+    session, tmp_path, monkeypatch, caplog
+):
+    """Некому отдать историю — роль остаётся за автоматикой.
+
+    Иначе слот занял бы игрок без единой карты, и роль молча выпала бы из
+    подбора эмблем вместо того, чтобы показать состав прошлой карты.
+    """
+    from app.services import analysis
+
+    _write_substitution(tmp_path, monkeypatch, replaces="nosuchplayer")
+    roles = analysis.infer_team_roles(session, LIQUID)
+    with caplog.at_level(logging.WARNING):
+        patched = analysis._apply_roster_override(
+            session,
+            LIQUID,
+            "Team Liquid",
+            roles,
+            analysis.load_roster_overrides()["Team Liquid"],
+        )
+    assert patched["mid"] == roles["mid"]
+    assert session.get(Player, 94054712) is None, "чужой игрок не заводится впустую"
+    assert "nosuchplayer" in caplog.text
+
+
+def test_history_without_substitutions_reports_the_roster_as_is(session):
+    """Обычная роль: roster_names — те же имена, никаких пометок."""
+    history = build_role_history(session, LIQUID, "core", (101, 102))
+    assert history.substitutions == ()
+    assert history.roster_names == history.player_names
+
+
+def test_shipped_override_puts_topson_on_lgd_mid():
+    """Конфиг в репозитории описывает замену TaiLung -> Topson перед TI15."""
+    from app.services.analysis import load_roster_overrides
+
+    (entry,) = load_roster_overrides()["LGD Gaming"]["mid"]
+    assert entry["name"] == "Topson"
+    assert entry["account_id"] == 94054712
+    assert entry["replaces"] == "TaiLung"
+
+
 def test_shipped_override_fixes_team_vision():
     """Конфиг в репозитории описывает актуальный состав Team Vision."""
     from app.services.analysis import load_roster_overrides

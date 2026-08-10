@@ -82,6 +82,55 @@ def test_swiss_format_parsed(config):
     assert swiss.decisive_best_of >= swiss.regular_best_of
 
 
+def _config_with_first_round(tmp_path, pairs: str, *, teams: int = 4) -> "PredictionsConfig":
+    names = ["A", "B", "C", "D"][:teams]
+    text = f"""
+version: test
+group_stage:
+  teams: {teams}
+  buckets:
+    - key: "win"
+      slots: {teams // 2}
+    - key: "lose"
+      slots: {teams // 2}
+  swiss:
+    first_round:
+{pairs}
+  points_by_correct: {{1: 30}}
+playoffs:
+  predictions: 14
+  points_by_correct: {{1: 120}}
+teams:
+"""
+    for i, name in enumerate(names):
+        text += f'  - name: "{name}"\n    team_id: {100 + i}\n'
+    path = tmp_path / "first_round.yaml"
+    path.write_text(text, encoding="utf-8")
+    return PredictionsConfig.from_yaml(path)
+
+
+def test_first_round_parsed_into_pairs(tmp_path):
+    config = _config_with_first_round(tmp_path, '      - ["A", "B"]\n      - ["C", "D"]')
+    assert config.group_stage.swiss.first_round == (("A", "B"), ("C", "D"))
+    assert config.first_round_ids() == ((100, 101), (102, 103))
+
+
+def test_half_a_first_round_is_rejected(tmp_path):
+    """Половина пар по сетке, половина по посеву — это два разных турнира."""
+    with pytest.raises(ValueError, match="1 пар"):
+        _config_with_first_round(tmp_path, '      - ["A", "B"]')
+
+
+def test_unknown_team_in_first_round_is_rejected(tmp_path):
+    with pytest.raises(ValueError, match="не из конфига"):
+        _config_with_first_round(tmp_path, '      - ["A", "B"]\n      - ["C", "Zzz"]')
+
+
+def test_team_playing_twice_in_first_round_is_rejected(tmp_path):
+    with pytest.raises(ValueError, match="дважды"):
+        _config_with_first_round(tmp_path, '      - ["A", "B"]\n      - ["A", "D"]')
+
+
 def test_broken_config_is_rejected(tmp_path):
     """Сумма слотов, не равная числу команд, — ошибка конфига, а не данных."""
     broken = tmp_path / "broken.yaml"

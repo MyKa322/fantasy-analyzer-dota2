@@ -444,12 +444,34 @@ The War Banner screen settled these: the number of slots (3), the layout (a colu
 left:
 
 1. **Series format in Swiss.** Decided: decisive matches are Bo3, the rest Bo1
-   (`regular_best_of` / `decisive_best_of` in `ti15_predictions.yaml`).
+   (`regular_best_of` / `decisive_best_of` in `ti15_predictions.yaml`). Round 1 is no longer
+   guessed: once the pairings were announced they went into `swiss.first_round`, and the simulation
+   starts from them instead of splitting the field by seed. It is all or nothing — half the round
+   from the bracket and half from the seeding would be two different tournaments. Later rounds are
+   still paired by record, because they depend on results that have not happened yet.
 2. **Prefix title conditions.** They depend on a hero's colour and type. The lists are filled in by
    hand from the glossary, and a hero that is not on any list simply does not trigger a prefix.
 3. **Substitutions before the tournament.** Rosters are derived from a team's recent matches, but if
    a substitute has not played a single game yet, only a human can see it. `config/ti15_rosters.yaml`
-   exists for that case — whatever is written there beats the automation.
+   exists for that case — whatever is written there beats the automation. A player who has never
+   played for the team at all is written as a dictionary rather than a nickname, because nicknames
+   are not unique in OpenDota:
+
+   ```yaml
+   LGD Gaming:
+     mid:
+       - name: "Topson"
+         account_id: 94054712
+         replaces: "TaiLung"
+   ```
+
+   `replaces` is what makes the role computable. The newcomer has no games in the sample, so the
+   projection is built from the maps of the player he replaced — a mid's points are largely set by
+   how the team plays, so the slot is the best available prior. It is never passed off as the
+   newcomer's own record: the role is flagged as a substitution, and the analyzer says so above the
+   emblems ("the projection is built on the slot itself: N maps played by X"). If `replaces` cannot
+   be resolved, the whole override is dropped and the role goes back to the automation — better the
+   previous line-up than a slot with no history at all.
 
 ---
 

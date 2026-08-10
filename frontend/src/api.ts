@@ -15,7 +15,13 @@ import {
   type StatValue,
 } from "./engine/scoring";
 import { tr } from "./i18n";
-import { STATIC_MODE, findRole, loadSnapshot, type HeroPick } from "./snapshot";
+import {
+  STATIC_MODE,
+  findRole,
+  loadSnapshot,
+  type HeroPick,
+  type Substitution,
+} from "./snapshot";
 
 export type { HeroPick };
 import {
@@ -218,6 +224,8 @@ export interface BannerAdvice {
   team_id: number;
   team_name: string | null;
   player_names: string[];
+  /** Замены в составе: player_names — кто играет, статистика — чья была. */
+  substitutions?: Substitution[];
   slots: SlotAdvice[];
   expected_card_points: number;
   period_mean: number | null;
@@ -857,6 +865,7 @@ const staticApi: typeof live = {
       team_id: payload.team_id,
       team_name: role.team_name,
       player_names: role.players,
+      substitutions: role.substitutions ?? [],
       slots: option.slots.map((s) => ({ ...s, alternatives: [] })),
       expected_card_points: option.total,
       period_mean: option.total * role.period_ratio,

@@ -58,19 +58,44 @@ class RoleGame:
     heroes: Mapping[int, int] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class Substitution:
+    """Замена в составе: пришедшему игроку нечего показать, взяли историю слота.
+
+    Возникает перед турниром, когда команда меняет игрока и своих карт на этом
+    уровне у новичка в выборке нет. Прогноз считается по картам заменённого —
+    очки роли во многом заданы тем, как играет команда, — но выдавать их за
+    статистику пришедшего нельзя, и эта пара имён едет до самой страницы.
+    """
+
+    account_id: int
+    name: str
+    replaced_account_id: int
+    replaced_name: str
+
+
 @dataclass(slots=True)
 class RoleHistory:
     """История конкретной пары/игрока в роли."""
 
     role: str
     team_id: int
+    # Чьи карты в выборке. При замене здесь заменённый игрок, а не пришедший:
+    # по этим id проекция достаёт статы из RoleGame.player_stats.
     account_ids: tuple[int, ...]
     games: list[RoleGame] = field(default_factory=list)
     team_name: str | None = None
     player_names: tuple[str, ...] = ()
+    substitutions: tuple[Substitution, ...] = ()
 
     def __len__(self) -> int:
         return len(self.games)
+
+    @property
+    def roster_names(self) -> tuple[str, ...]:
+        """Кто выйдет играть — для подписи роли, в отличие от player_names."""
+        swap = {s.replaced_name: s.name for s in self.substitutions}
+        return tuple(swap.get(name, name) for name in self.player_names)
 
 
 @dataclass(slots=True)

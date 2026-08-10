@@ -497,6 +497,9 @@ const es: Dictionary = {
   "map.lifetime": "Duración",
   "map.summary": "Resumen de visión",
   "map.summaryHint": "La duración es el promedio de los observers: un ward retirado antes de tiempo es uno que el rival encontró.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Cambio de roster",
+  "emblems.substitutionNote": "{name} ocupa la posición, pero la proyección se basa en la posición misma: {games} mapas jugados por {replaced}. {name} no tiene partidas de liga propias en la muestra.",
 };
 
 export default es;

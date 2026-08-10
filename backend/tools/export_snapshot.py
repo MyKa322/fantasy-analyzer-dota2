@@ -126,7 +126,8 @@ def export_teams(session) -> list[dict]:
 
 
 def export_group(session, simulations: int) -> dict | None:
-    config = load_predictions_config().group_stage
+    predictions = load_predictions_config()
+    config = predictions.group_stage
     ratings = latest_ratings(session)
     names = {t.team_id: t.compendium_name or t.name for t in session.query(Team).all()}
 
@@ -137,7 +138,12 @@ def export_group(session, simulations: int) -> dict | None:
         log.warning("прогноз группы пропущен: рейтингов %d из %d", len(participants), config.teams)
         return None
 
-    simulator = SwissSimulator({t: Rating(*ratings[t]) for t in participants}, config, seed=1)
+    simulator = SwissSimulator(
+        {t: Rating(*ratings[t]) for t in participants},
+        config,
+        seed=1,
+        first_round=predictions.first_round_for(participants),
+    )
     result = simulator.run(simulations=simulations)
     plan = optimise_group_predictions(result, config.slots(), config.points)
 
@@ -284,7 +290,17 @@ def export_roles(
                     "team_id": team_id,
                     "team_name": team_name,
                     "role": role,
-                    "players": list(history.player_names),
+                    # Кто выйдет играть. При замене это не тот, чьи карты в
+                    # выборке, — расхождение расписано в substitutions.
+                    "players": list(history.roster_names),
+                    "substitutions": [
+                        {
+                            "name": s.name,
+                            "replaced": s.replaced_name,
+                            "games": len(history.games),
+                        }
+                        for s in history.substitutions
+                    ],
                     "games": len(history.games),
                     "last_game": history.games[-1].start_time.date().isoformat(),
                     "stats": [_stat_row(v) for v in values],

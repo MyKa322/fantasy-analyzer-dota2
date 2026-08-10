@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Container
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -28,6 +29,10 @@ class SwissFormat:
     max_rounds: int
     regular_best_of: int
     decisive_best_of: int
+    # Объявленные пары первого раунда, названиями команд. Пока их нет, симулятор
+    # разбивает первый раунд по посеву; настоящая сетка от посева отличается, и
+    # вероятности по корзинам считались бы от матчей, которых не будет.
+    first_round: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +120,9 @@ class PredictionsConfig:
                 max_rounds=int(swiss_raw.get("max_rounds", 6)),
                 regular_best_of=int(swiss_raw.get("regular_best_of", 1)),
                 decisive_best_of=int(swiss_raw.get("decisive_best_of", 3)),
+                first_round=tuple(
+                    (str(pair[0]), str(pair[1])) for pair in swiss_raw.get("first_round") or ()
+                ),
             ),
             points=PointsTable({int(k): int(v) for k, v in group_raw["points_by_correct"].items()}),
         )
@@ -143,6 +151,29 @@ class PredictionsConfig:
         config.validate()
         return config
 
+    def first_round_ids(self) -> tuple[tuple[int, int], ...]:
+        """Объявленные пары первого раунда в team_id."""
+        pairs: list[tuple[int, int]] = []
+        for left, right in self.group_stage.swiss.first_round:
+            a, b = self.team_ids.get(left), self.team_ids.get(right)
+            if a is None or b is None:
+                missing = left if a is None else right
+                raise ValueError(f"пара первого раунда {left} — {right}: у {missing} нет team_id")
+            pairs.append((int(a), int(b)))
+        return tuple(pairs)
+
+    def first_round_for(self, team_ids: Container[int]) -> tuple[tuple[int, int], ...]:
+        """Пары первого раунда, если считают именно эту сетку.
+
+        Симулятор можно позвать и на другом наборе команд — топ-16 по рейтингу
+        из CLI, произвольный список из API. Тогда объявленная сетка к нему не
+        относится, и первый раунд снова разбивается по посеву.
+        """
+        pairs = self.first_round_ids()
+        if pairs and all(team in team_ids for pair in pairs for team in pair):
+            return pairs
+        return ()
+
     def validate(self) -> None:
         if self.group_stage.total_slots() != self.group_stage.teams:
             raise ValueError(
@@ -154,6 +185,24 @@ class PredictionsConfig:
             raise ValueError(
                 f"в конфиге {len(self.team_names)} команд, ожидалось {self.group_stage.teams}"
             )
+
+        first_round = self.group_stage.swiss.first_round
+        if not first_round:
+            return
+        # Первый раунд либо расписан целиком, либо не расписан вовсе: половина
+        # пар по сетке, половина по посеву — это не «уточнение», а смесь двух
+        # разных турниров.
+        listed = [name for pair in first_round for name in pair]
+        if len(first_round) * 2 != self.group_stage.teams:
+            raise ValueError(
+                f"в первом раунде {len(first_round)} пар на {self.group_stage.teams} команд"
+            )
+        unknown = sorted(set(listed) - set(self.team_names)) if self.team_names else []
+        if unknown:
+            raise ValueError(f"в первом раунде команды не из конфига: {', '.join(unknown)}")
+        repeated = sorted({name for name in listed if listed.count(name) > 1})
+        if repeated:
+            raise ValueError(f"в первом раунде команда встречается дважды: {', '.join(repeated)}")
 
 
 @lru_cache(maxsize=4)

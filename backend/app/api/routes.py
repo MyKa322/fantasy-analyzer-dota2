@@ -242,12 +242,15 @@ def predict_group(
     team_ids: list[int] | None = Query(None),
 ) -> schemas.GroupPredictionOut:
     """Распределение по корзинам Swiss и оптимальный набор предсказаний."""
-    config = load_predictions_config().group_stage
+    predictions = load_predictions_config()
+    config = predictions.group_stage
     ratings = _tournament_ratings(session, team_ids)
     if len(ratings) != config.teams:
         raise HTTPException(400, f"нужно {config.teams} команд, найдено {len(ratings)}")
 
-    simulator = SwissSimulator(ratings, config, seed=seed)
+    simulator = SwissSimulator(
+        ratings, config, seed=seed, first_round=predictions.first_round_for(ratings)
+    )
     result = simulator.run(simulations=simulations)
     plan = optimise_group_predictions(result, config.slots(), config.points)
 
@@ -645,7 +648,14 @@ def best_banner(
             role=advice.role,
             team_id=advice.team_id,
             team_name=history.team_name,
-            player_names=list(history.player_names),
+            # Играть будет ростер, а карты в выборке — заменённого игрока.
+            player_names=list(history.roster_names),
+            substitutions=[
+                schemas.SubstitutionOut(
+                    name=s.name, replaced=s.replaced_name, games=len(history.games)
+                )
+                for s in history.substitutions
+            ],
             expected_card_points=round(advice.expected_card_points, 1),
             period_mean=round(advice.projection.mean, 1) if advice.projection else None,
             period_ceiling=(

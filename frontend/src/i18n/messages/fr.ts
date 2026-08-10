@@ -497,6 +497,9 @@ const fr: Dictionary = {
   "map.lifetime": "Durée de vie",
   "map.summary": "Bilan de la vision",
   "map.summaryHint": "La durée de vie est moyennée sur les observers : un ward retiré avant l'heure est un ward que l'adversaire a trouvé.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Changement de line-up",
+  "emblems.substitutionNote": "{name} prend le poste, mais la projection vient du poste lui-même : {games} cartes jouées par {replaced}. {name} n'a aucun match de ligue à lui dans l'échantillon.",
 };
 
 export default fr;

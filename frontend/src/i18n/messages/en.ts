@@ -502,6 +502,9 @@ export const en = {
   "map.lifetime": "Lifetime",
   "map.summary": "Vision summary",
   "map.summaryHint": "Lifetime is averaged over observers: a ward killed early is one the enemy found.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Roster change",
+  "emblems.substitutionNote": "{name} takes the slot, but the projection is built on the slot itself: {games} maps played by {replaced}. {name} has no league matches of his own in the sample.",
 } as const;
 
 /** Ключ подписи. Набор задан английским словарём. */

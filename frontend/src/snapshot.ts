@@ -42,11 +42,20 @@ export interface HeroPick {
   players?: { account_id: number; games: number }[];
 }
 
+/** Замена в составе: играть будет один, а карты в выборке — другого. */
+export interface Substitution {
+  name: string;
+  replaced: string;
+  games: number;
+}
+
 export interface RoleSnapshot {
   team_id: number;
   team_name: string;
   role: string;
   players: string[];
+  /** Пусто у всех ролей, где состав не менялся. */
+  substitutions?: Substitution[];
   games: number;
   last_game: string;
   stats: StatValue[];

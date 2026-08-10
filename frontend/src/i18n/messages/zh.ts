@@ -497,6 +497,9 @@ const zh: Dictionary = {
   "map.lifetime": "存活",
   "map.summary": "视野总结",
   "map.summaryHint": "存活时间按假眼平均：提前消失的眼，就是被对面找到的眼。",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "阵容变动",
+  "emblems.substitutionNote": "该位置换成了 {name}，但预测仍按位置本身计算：{replaced} 打过的 {games} 张地图。样本里没有 {name} 自己的联赛比赛。",
 };
 
 export default zh;

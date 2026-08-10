@@ -497,6 +497,9 @@ const pl: Dictionary = {
   "map.lifetime": "Czas życia",
   "map.summary": "Podsumowanie wizji",
   "map.summaryHint": "Czas życia liczony ze średniej po observerach: ward zdjęty przed czasem to ward, który przeciwnik znalazł.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Zmiana w składzie",
+  "emblems.substitutionNote": "Slot zajął {name}, ale prognoza liczona jest z samego slotu: {games} map rozegranych przez {replaced}. Własnych meczów ligowych {name} nie ma w próbce.",
 };
 
 export default pl;

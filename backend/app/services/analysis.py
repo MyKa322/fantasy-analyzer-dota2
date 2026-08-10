@@ -23,7 +23,7 @@ from ..db.models import (
     TeamRating,
     TeamRosterSlot,
 )
-from ..fantasy.projection import RoleGame, RoleHistory
+from ..fantasy.projection import RoleGame, RoleHistory, Substitution
 
 log = logging.getLogger(__name__)
 
@@ -236,8 +236,14 @@ def build_role_history(
     if not account_ids:
         raise ValueError(f"для роли {role!r} команды {team_id} не заданы игроки")
 
+    # Замена в составе: у пришедшего своих карт в выборке нет, берём карты того,
+    # кого он заменил. Дальше по коду account_ids — уже история, а не ростер.
+    swap = roster_substitutions(session, team_id)
+    roster_ids = tuple(account_ids)
+    account_ids = tuple(swap.get(a, a) for a in roster_ids)
+
     squad = squad if squad is not None else squad_account_ids(session, team_id)
-    squad = squad | set(account_ids)
+    squad = squad | set(account_ids) | set(roster_ids)
 
     query = (
         select(PlayerMatchStat, Match)
@@ -281,16 +287,31 @@ def build_role_history(
 
     names = {
         p.account_id: p.name
-        for p in session.scalars(select(Player).where(Player.account_id.in_(account_ids)))
+        for p in session.scalars(
+            select(Player).where(Player.account_id.in_(set(account_ids) | set(roster_ids)))
+        )
     }
     team = session.get(Team, team_id)
+
+    def _name(account_id: int) -> str:
+        return names.get(account_id) or str(account_id)
 
     return RoleHistory(
         role=role,
         team_id=team_id,
         account_ids=tuple(account_ids),
         team_name=team.name if team else None,
-        player_names=tuple(names.get(a) or str(a) for a in account_ids),
+        player_names=tuple(_name(a) for a in account_ids),
+        substitutions=tuple(
+            Substitution(
+                account_id=new_id,
+                name=_name(new_id),
+                replaced_account_id=swap[new_id],
+                replaced_name=_name(swap[new_id]),
+            )
+            for new_id in roster_ids
+            if new_id in swap
+        ),
         games=[
             RoleGame(
                 match_id=match_id,
@@ -313,29 +334,36 @@ ROSTER_OVERRIDES_PATH = Path(__file__).resolve().parents[2] / "config" / "ti15_r
 
 
 def load_roster_overrides(
-    path: Path | str = ROSTER_OVERRIDES_PATH,
+    path: Path | str | None = None,
 ) -> dict[str, dict[str, list[str]]]:
-    """Ручные составы из конфига: {название команды: {роль: [ники]}}."""
-    path = Path(path)
+    """Ручные составы из конфига: {название команды: {роль: [ники]}}.
+
+    Путь берётся в момент вызова, а не при импорте: иначе подменить конфиг в
+    тесте можно было бы только патчем самой функции.
+    """
+    path = Path(path or ROSTER_OVERRIDES_PATH)
     if not path.exists():
         return {}
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return raw.get("overrides") or {}
 
 
-def _apply_roster_override(
-    session: Session,
-    team_id: int,
-    team_name: str,
-    roles: dict[str, tuple[int, ...]],
-    override: Mapping[str, list[str]],
-) -> dict[str, tuple[int, ...]]:
-    """Подставить вручную заданный состав вместо автоматического.
+def _override_entries(raw: object) -> list[dict[str, object]]:
+    """Привести запись роли к списку словарей: строка — это просто ник."""
+    entries: list[dict[str, object]] = []
+    for item in raw or ():  # type: ignore[union-attr]
+        if isinstance(item, str):
+            entries.append({"name": item})
+        elif isinstance(item, Mapping):
+            entries.append(dict(item))
+        else:
+            raise ValueError(f"состав: непонятная запись игрока {item!r}")
+    return entries
 
-    Ник резолвится только среди тех, кто реально играл за эту команду: иначе
-    опечатка в конфиге тихо привела бы в ростер постороннего игрока.
-    """
-    known = {
+
+def _team_nicknames(session: Session, team_id: int) -> dict[str, int]:
+    """Ники тех, кто играл за команду: {ник: account_id}."""
+    return {
         name: account_id
         for account_id, name in session.execute(
             select(Player.account_id, Player.name)
@@ -346,25 +374,104 @@ def _apply_roster_override(
         if name
     }
 
+
+def _apply_roster_override(
+    session: Session,
+    team_id: int,
+    team_name: str,
+    roles: dict[str, tuple[int, ...]],
+    override: Mapping[str, object],
+) -> dict[str, tuple[int, ...]]:
+    """Подставить вручную заданный состав вместо автоматического.
+
+    Ник резолвится только среди тех, кто реально играл за эту команду: иначе
+    опечатка в конфиге тихо привела бы в ростер постороннего игрока. Игрок со
+    стороны задаётся явным account_id — ник в OpenDota не уникален, и такому
+    игроку заводится строка в players, чтобы у слота было имя.
+    """
+    known = _team_nicknames(session, team_id)
+
     resolved: dict[str, tuple[int, ...]] = dict(roles)
-    for role, nicknames in override.items():
+    for role, raw in override.items():
+        entries = _override_entries(raw)
+        # Роль резолвится целиком и только потом попадает в базу: наполовину
+        # применённая замена оставила бы слот за игроком без единой карты.
         account_ids: list[int] = []
-        for nickname in nicknames:
-            account_id = known.get(nickname)
-            if account_id is None:
+        newcomers: list[tuple[int, str | None]] = []
+        for entry in entries:
+            name = entry.get("name")
+            given = entry.get("account_id")
+            replaces = entry.get("replaces")
+            if given is None:
+                account_id = known.get(str(name))
+                problem = None if account_id is not None else f"ник {name!r} не найден"
+            elif replaces and known.get(str(replaces)) is None:
+                # Своих карт у пришедшего нет, а чьи брать — не выяснилось.
+                account_id, problem = None, f"заменённый {replaces!r} не найден"
+            else:
+                account_id = int(given)  # type: ignore[arg-type]
+                problem = None
+                newcomers.append((account_id, str(name) if name else None))
+            if problem is not None:
                 log.warning(
-                    "состав %s: ник %r не найден среди игравших за команду — "
+                    "состав %s: %s среди игравших за команду — "
                     "роль %s остаётся за автоматикой",
                     team_name,
-                    nickname,
+                    problem,
                     role,
                 )
                 account_ids = []
                 break
             account_ids.append(account_id)
-        if account_ids:
-            resolved[role] = tuple(account_ids)
+
+        if not account_ids:
+            continue
+        for account_id, name in newcomers:
+            player = session.get(Player, account_id)
+            if player is None:
+                session.add(Player(account_id=account_id, name=name))
+            elif name and player.name != name:
+                player.name = name
+        resolved[role] = tuple(account_ids)
     return resolved
+
+
+def roster_substitutions(
+    session: Session, team_id: int, *, team_name: str | None = None
+) -> dict[int, int]:
+    """Замены команды из конфига: {account_id пришедшего: account_id заменённого}.
+
+    Заменённый резолвится среди игравших за команду — это его карты пойдут в
+    выборку. Не нашли по нику (опечатка, игрока не было в этой команде) —
+    замена не регистрируется: лучше пустая история роли, чем чужая.
+    """
+    if team_name is None:
+        team = session.get(Team, team_id)
+        team_name = (team.compendium_name or team.name) if team else None
+    override = load_roster_overrides().get(team_name or "")
+    if not override:
+        return {}
+
+    known = _team_nicknames(session, team_id)
+    pairs: dict[int, int] = {}
+    for role, raw in override.items():
+        for entry in _override_entries(raw):
+            replaces = entry.get("replaces")
+            account_id = entry.get("account_id")
+            if not replaces or account_id is None:
+                continue
+            replaced = known.get(str(replaces))
+            if replaced is None:
+                log.warning(
+                    "состав %s: заменённый %r не найден среди игравших за команду — "
+                    "роль %s останется без истории",
+                    team_name,
+                    replaces,
+                    role,
+                )
+                continue
+            pairs[int(account_id)] = replaced  # type: ignore[arg-type]
+    return pairs
 
 
 def ti_team_ids() -> dict[int, str]:

@@ -202,11 +202,20 @@ class SlotAdviceOut(BaseModel):
     alternatives: list[StatValueOut] = []
 
 
+class SubstitutionOut(BaseModel):
+    """Замена в составе: чьи карты в выборке, если играть будет другой."""
+
+    name: str
+    replaced: str
+    games: int
+
+
 class BannerAdviceOut(BaseModel):
     role: str
     team_id: int
     team_name: str | None = None
     player_names: list[str] = []
+    substitutions: list[SubstitutionOut] = []
     slots: list[SlotAdviceOut]
     expected_card_points: float
     period_mean: float | None = None

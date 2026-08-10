@@ -497,6 +497,9 @@ const tr: Dictionary = {
   "map.lifetime": "Ömür",
   "map.summary": "Görüş özeti",
   "map.summaryHint": "Ömür observerlar üzerinden ortalanır: erken kaybolan ward, rakibin bulduğu warddır.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Kadro değişikliği",
+  "emblems.substitutionNote": "Bu mevkiye {name} geçti ama projeksiyon mevkinin kendisinden geliyor: {replaced} oyuncusunun oynadığı {games} harita. Örneklemde {name} adına lig maçı yok.",
 };
 
 export default tr;

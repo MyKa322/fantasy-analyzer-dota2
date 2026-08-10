@@ -497,6 +497,9 @@ const vi: Dictionary = {
   "map.lifetime": "Thời gian sống",
   "map.summary": "Tổng kết tầm nhìn",
   "map.summaryHint": "Thời gian sống lấy trung bình trên mắt quan sát: mắt mất sớm là mắt bị đối phương tìm ra.",
+  // --- замена в составе -----------------------------------------------------
+  "emblems.substitution": "Thay đổi đội hình",
+  "emblems.substitutionNote": "{name} vào vị trí này, nhưng dự báo được tính từ chính vị trí đó: {games} ván do {replaced} thi đấu. Trong mẫu không có trận đấu giải nào của riêng {name}.",
 };
 
 export default vi;
