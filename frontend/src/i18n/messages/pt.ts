@@ -502,7 +502,7 @@ const pt: Dictionary = {
   "emblems.substitution": "Mudança na line-up",
   "emblems.substitutionNote": "{name} assumiu a posição, mas a projeção vem da própria posição: {games} mapas jogados por {replaced}. {name} não tem partidas de liga próprias na amostra.",
   // --- равные варианты ------------------------------------------------------
-  "inventory.tied": "Outras {count} ficam a menos de 1% desta — com estes dados elas se equivalem, e o número de mapas de cada uma pesa mais que os pontos: {teams}.",
+  "inventory.tied": "Também a menos de 1% desta: {count}. Com estes dados elas se equivalem, e o número de mapas de cada uma pesa mais que os pontos: {teams}.",
 };
 
 export default pt;

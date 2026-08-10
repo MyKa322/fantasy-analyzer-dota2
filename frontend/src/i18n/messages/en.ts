@@ -506,7 +506,7 @@ export const en = {
   "emblems.substitution": "Roster change",
   "emblems.substitutionNote": "{name} takes the slot, but the projection is built on the slot itself: {games} maps played by {replaced}. {name} has no league matches of his own in the sample.",
   // --- равные варианты ------------------------------------------------------
-  "inventory.tied": "Another {count} sit within 1% of this one — on this data they are level, and the number of maps behind each matters more than the points: {teams}.",
+  "inventory.tied": "Also within 1% of this one: {count}. On this data they are level, and the number of maps behind each matters more than the points: {teams}.",
 } as const;
 
 /** Ключ подписи. Набор задан английским словарём. */

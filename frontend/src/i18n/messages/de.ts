@@ -501,7 +501,7 @@ const de: Dictionary = {
   "emblems.substitution": "Wechsel im Roster",
   "emblems.substitutionNote": "Auf der Position steht {name}, die Prognose kommt aber von der Position selbst: {games} Karten, gespielt von {replaced}. Eigene Ligaspiele von {name} sind in der Stichprobe nicht vorhanden.",
   // --- равные варианты ------------------------------------------------------
-  "inventory.tied": "Weitere {count} liegen innerhalb von 1% — mit diesen Daten sind sie gleichwertig, und die Zahl der Karten dahinter wiegt schwerer als die Punkte: {teams}.",
+  "inventory.tied": "Ebenfalls innerhalb von 1%: {count}. Mit diesen Daten sind sie gleichwertig, und die Zahl der Karten dahinter wiegt schwerer als die Punkte: {teams}.",
 };
 
 export default de;
