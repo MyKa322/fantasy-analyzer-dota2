@@ -172,7 +172,6 @@ const pl: Dictionary = {
   "inventory.zeroStat": "nie jest śledzone w meczach — liczy się jako zero",
   "inventory.empty": "Dodaj co najmniej trzy emblematy — po jednym na slot sztandaru.",
   "inventory.gap": "{role}: tego zestawu nie da się złożyć — {gaps}. Kolory slotów wyznacza rola i nie rerollują się.",
-  "inventory.bestTitle": "Najlepsza para dla tych emblematów",
   "inventory.unused": "Nie zmieściły się: {stats} — sztandar ma trzy sloty, a każdy kolor jest ustalony.",
   "inventory.chartTitle": "Najlepsze dopasowania dla tego zestawu",
   "inventory.chartSubtitle": "Te same emblematy są warte różnie dla różnych graczy: wartość emblematu to cena statystyki razy to, ile gracz jej wytwarza.",
@@ -502,6 +501,30 @@ const pl: Dictionary = {
   "emblems.substitutionNote": "Slot zajął {name}, ale prognoza liczona jest z samego slotu: {games} map rozegranych przez {replaced}. Własnych meczów ligowych {name} nie ma w próbce.",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "W granicach 1% od tej mieści się również: {count}. Na tych danych są nie do odróżnienia, a liczba map pod każdą waży więcej niż punkty: {teams}.",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "Top 3 pod ten zestaw",
+  "inventory.topSubtitle": "Lider w całości, kolejni dwaj pod nim: różnica między nimi mieści się zwykle w granicach punktu procentowego, a liczba map mówi więcej niż punkty.",
+  "inventory.behind": "−{percent}%",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "Faza grupowa",
+  "stage.title": "Drabinka szwajcarska",
+  "stage.subtitleUpcoming": "Start {date}. Drabinka jest narysowana w całości z góry — format ustala, ile meczów mieści każda grupa bilansu — a wyniki zajmują miejsca, które już na nie czekają.",
+  "stage.subtitlePlayed": "Rozegranych serii: {count}. Rundy wynikają z samych meczów: w systemie szwajcarskim drużyna gra jedną serię na rundę, więc numer rundy to liczba już rozegranych.",
+  "stage.loading": "Ładuję drabinkę…",
+  "stage.round": "Runda {n}",
+  "stage.tbd": "TBD",
+  "stage.eliminationTitle": "Runda eliminacyjna",
+  "stage.eliminationSubtitle": "Tu spotykają się drużyny z bilansem 3-2 i 2-3: pięciu zwycięzców idzie do playoffów, pięciu przegranych wraca do domu.",
+  "stage.eliminationEmpty": "Nikt jeszcze nie doszedł do 3-2 ani 2-3 — runda wypełni się po piątej.",
+  "stage.standingsTitle": "Tabela i mecze bezpośrednie",
+  "stage.standingsSubtitle": "Bilans w grupie i to, jak te drużyny już ze sobą grały: wynik to zwycięstwa tej drużyny nad tym rywalem.",
+  "stage.record": "Bilans",
+  "stage.headToHead": "Grali ze sobą",
+  "stage.noMeetings": "nie grali",
+  "stage.resultsTitle": "Rozegrane serie",
+  "stage.resultsSubtitle": "Każda seria ze swoimi mapami: otwórz jedną, a zobaczysz pełną analizę z minimapą i osią czasu.",
+  "stage.openMap": "mapa",
+  "stage.note": "Map w drabince: {maps}. Dane pochodzą z OpenDoty i odświeżają się raz na dobę, więc wynik pojawia się, gdy powtórka jest już dostępna.",
 };
 
 export default pl;

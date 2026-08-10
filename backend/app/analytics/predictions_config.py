@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Container
 from dataclasses import dataclass, field
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Self
 
 import yaml
+
+
+def _first_date(raw: object) -> date | None:
+    """Первая дата из строки вида «2026-08-13 .. 2026-08-23»."""
+    if isinstance(raw, date):
+        return raw
+    found = re.search(r"\d{4}-\d{2}-\d{2}", str(raw or ""))
+    return date.fromisoformat(found.group()) if found else None
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 DEFAULT_PREDICTIONS_PATH = CONFIG_DIR / "ti15_predictions.yaml"
@@ -87,9 +97,31 @@ class PredictionsConfig:
     playoffs: PlayoffConfig
     team_names: tuple[str, ...]
     team_ids: dict[str, int | None]
+    # Первый день турнира. По нему матчи группового этапа отличаются от
+    # квалификаций и товарищеских: команды те же, а сетка — только начиная
+    # с этой даты.
+    starts: date | None = None
     # Реальные названия организаций для команд, которые компендиум показывает
     # под изменённым именем (BoomBoys -> BetBoom и т.п.).
     team_aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Прежние профили того же коллектива — только чтобы догрузить их матчи.
+    # Ни в рейтинг, ни в прогноз эти id не идут: что взять в выборку роли,
+    # решает пересечение состава, а не тег команды.
+    team_previous_ids: dict[str, tuple[int, ...]] = field(default_factory=dict)
+
+    def ingest_team_ids(self) -> dict[int, str]:
+        """Все team_id, чьи матчи нужно держать в базе: {team_id: название}.
+
+        Нынешний профиль и прежние — под одним названием: догрузка по ним
+        одинаковая, а различать их дальше по коду незачем.
+        """
+        result: dict[int, str] = {}
+        for name, team_id in self.team_ids.items():
+            if team_id is not None:
+                result[int(team_id)] = name
+            for previous in self.team_previous_ids.get(name, ()):
+                result.setdefault(previous, name)
+        return result
 
     def search_names(self, name: str) -> tuple[str, ...]:
         """Все названия, под которыми команду стоит искать во внешних источниках."""
@@ -140,12 +172,18 @@ class PredictionsConfig:
         config = cls(
             version=raw.get("version", "unknown"),
             event=raw.get("event", ""),
+            starts=_first_date(raw.get("dates")),
             group_stage=group,
             playoffs=playoffs,
             team_names=tuple(t["name"] for t in teams_raw),
             team_ids={t["name"]: t.get("team_id") for t in teams_raw},
             team_aliases={
                 t["name"]: tuple(t.get("aliases") or ()) for t in teams_raw if t.get("aliases")
+            },
+            team_previous_ids={
+                t["name"]: tuple(int(i) for i in t["previous_ids"])
+                for t in teams_raw
+                if t.get("previous_ids")
             },
         )
         config.validate()

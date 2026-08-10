@@ -64,6 +64,9 @@ DURATION_BUCKETS: tuple[tuple[str, int, int], ...] = (
 # 4 — лес. Пятой роли в разметке нет, саппорты делят лейн с кором.
 LANE_KEYS = {1: "safe", 2: "mid", 3: "off", 4: "jungle"}
 
+# Порядок ролей в составе на странице команды — как на экране компендиума.
+ROLE_ORDER = {"core": 0, "mid": 1, "support": 2}
+
 
 @dataclass(frozen=True, slots=True)
 class MatchRow:
@@ -444,7 +447,10 @@ def player_directory(session: Session, *, ti_only: bool = False) -> list[dict[st
         if ti_only and slot is None:
             continue
         games = int(counts.get(player.account_id, 0))
-        if not games:
+        # Ноль карт — обычно мусорная строка из чужого матча, но не когда игрок
+        # занимает слот в составе: замена перед турниром своих карт ещё не
+        # сыграла, а страница у неё быть должна.
+        if not games and slot is None:
             continue
         team_id = slot.team_id if slot else player.team_id
         rows.append(
@@ -781,13 +787,22 @@ def team_profile(
     }
     # Сначала размеченный ростер TI, затем остальные по числу карт: стенд-ины
     # видно, но они не вытесняют основу.
-    ordered = sorted(
-        roster_counts.items(),
-        key=lambda item: (item[0] not in slots, -item[1]),
-    )[:roster_limit]
+    #
+    # Слоты берутся целиком, включая тех, кто за команду ещё не сыграл: замена
+    # перед турниром иначе не попала бы на страницу вовсе, а в составе остался
+    # бы тот, кого заменили, — он-то карты сыграл. Заменённый никуда не
+    # пропадает, но уходит ниже основы и без роли.
+    marked = sorted(
+        slots,
+        key=lambda account_id: (ROLE_ORDER.get(slots[account_id], 9), -roster_counts[account_id]),
+    )
+    rest = sorted(
+        (account_id for account_id in roster_counts if account_id not in slots),
+        key=lambda account_id: -roster_counts[account_id],
+    )
 
     roster = []
-    for account_id, _ in ordered:
+    for account_id in (marked + rest)[:roster_limit]:
         profile = player_profile(
             session, account_id, days=days, match_limit=0, hero_limit=5, heroes=heroes
         )

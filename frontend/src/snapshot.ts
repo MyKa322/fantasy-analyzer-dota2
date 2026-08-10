@@ -82,6 +82,28 @@ export interface RoleSnapshot {
   }[];
 }
 
+/** Одна серия сетки группового этапа. */
+export interface StageSeries {
+  round: number;
+  /** Запись левой команды на входе в серию: «0-0», «1-0», … */
+  record: string;
+  left: { team_id: number; name: string; score: number };
+  right: { team_id: number; name: string; score: number };
+  winner_id: number | null;
+  played_at: string;
+  match_ids: number[];
+}
+
+export interface Stage {
+  /** Первый день турнира: до него матчей группового этапа не бывает. */
+  starts: string | null;
+  first_round: { left: string; right: string; left_id: number; right_id: number }[];
+  wins_to_advance: number;
+  losses_to_eliminate: number;
+  series: StageSeries[];
+  standings: { team_id: number; name: string; wins: number; losses: number }[];
+}
+
 export interface Snapshot {
   generated_at: string;
   rules: RulesSnapshot & { version: string; source: string; trait_bonus_mode: string };
@@ -112,6 +134,8 @@ export interface Snapshot {
     expected_correct: number;
     points_percentiles: Record<string, number>;
   } | null;
+  /** Сетка группового этапа. Появилась позже снапшота — может отсутствовать. */
+  stage?: Stage;
   roles: RoleSnapshot[];
 }
 

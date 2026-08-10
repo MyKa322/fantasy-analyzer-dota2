@@ -177,7 +177,6 @@ export const en = {
   "inventory.zeroStat": "not tracked in matches — counted as zero",
   "inventory.empty": "Add at least three emblems — one per banner slot.",
   "inventory.gap": "{role}: this set cannot be built — {gaps}. Slot colours are fixed by the role and never reroll.",
-  "inventory.bestTitle": "Best pair for these emblems",
   "inventory.unused": "Did not fit: {stats} — the banner has three slots and each colour is fixed.",
   "inventory.chartTitle": "Best fits for this set",
   "inventory.chartSubtitle": "The same emblems are worth different amounts to different players: an emblem's value is the stat's price times how much the player produces it.",
@@ -507,6 +506,30 @@ export const en = {
   "emblems.substitutionNote": "{name} takes the slot, but the projection is built on the slot itself: {games} maps played by {replaced}. {name} has no league matches of his own in the sample.",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "Also within 1% of this one: {count}. On this data they are level, and the number of maps behind each matters more than the points: {teams}.",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "Top 3 for this set",
+  "inventory.topSubtitle": "The leader in full, the next two below it: the gap between them is usually inside a percent, and the number of maps says more than the points.",
+  "inventory.behind": "−{percent}%",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "Group stage",
+  "stage.title": "Swiss bracket",
+  "stage.subtitleUpcoming": "Starts {date}. The grid is drawn in full in advance — the format fixes how many matches each record group holds — and results take the places already waiting for them.",
+  "stage.subtitlePlayed": "{count} series played. Rounds are derived from the matches themselves: in Swiss a team plays one series per round, so its round number is how many it had already played.",
+  "stage.loading": "Loading the bracket…",
+  "stage.round": "Round {n}",
+  "stage.tbd": "TBD",
+  "stage.eliminationTitle": "Elimination Round",
+  "stage.eliminationSubtitle": "Teams on 3-2 and 2-3 meet here: five winners go to the playoffs, five losers go home.",
+  "stage.eliminationEmpty": "Nobody has reached 3-2 or 2-3 yet — the round fills up after the fifth.",
+  "stage.standingsTitle": "Standings and head-to-head",
+  "stage.standingsSubtitle": "The record inside the group and how these teams have met before — the score is this team's wins against that opponent.",
+  "stage.record": "Record",
+  "stage.headToHead": "Met before",
+  "stage.noMeetings": "have not met",
+  "stage.resultsTitle": "Series played",
+  "stage.resultsSubtitle": "Every series with its maps: open one for the full breakdown with the map and the timeline.",
+  "stage.openMap": "map",
+  "stage.note": "Maps in the bracket: {maps}. The data comes from OpenDota and is refreshed daily, so a result appears once the replay is up.",
 } as const;
 
 /** Ключ подписи. Набор задан английским словарём. */

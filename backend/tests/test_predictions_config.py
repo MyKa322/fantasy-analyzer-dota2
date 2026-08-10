@@ -82,6 +82,32 @@ def test_swiss_format_parsed(config):
     assert swiss.decisive_best_of >= swiss.regular_best_of
 
 
+def test_previous_profiles_are_listed_for_ingest_only(config):
+    """Прежние теги нужны догрузке, но не прогнозу.
+
+    Коллектив переезжает под новый тег, и без прежних профилей история команды
+    обрывается на дате переименования. При этом рейтинг и корзины считаются
+    только по нынешним шестнадцати.
+    """
+    current = {t for t in config.team_ids.values() if t is not None}
+    ingest = config.ingest_team_ids()
+
+    assert current <= set(ingest), "нынешние профили обязаны остаться"
+    assert len(ingest) > len(current), "иначе прежние теги не подключились"
+    assert config.team_previous_ids["LGD Gaming"] == (9303484, 10144195, 10208068)
+
+
+def test_previous_profiles_do_not_leak_into_the_forecast(config):
+    """Проверка на регрессию: посчитать рейтинг по чужим картам легко и незаметно."""
+    previous = {i for ids in config.team_previous_ids.values() for i in ids}
+    current = {t for t in config.team_ids.values() if t is not None}
+
+    assert not (previous & current), "прежний профиль не может быть и нынешним"
+    assert len(config.team_names) == config.group_stage.teams
+    for pair in config.first_round_ids():
+        assert not set(pair) & previous
+
+
 def _config_with_first_round(tmp_path, pairs: str, *, teams: int = 4) -> "PredictionsConfig":
     names = ["A", "B", "C", "D"][:teams]
     text = f"""

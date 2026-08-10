@@ -172,7 +172,6 @@ const tr: Dictionary = {
   "inventory.zeroStat": "maçlarda takip edilmiyor — sıfır sayılır",
   "inventory.empty": "En az üç amblem ekleyin — sancağın her yuvası için bir tane.",
   "inventory.gap": "{role}: bu set kurulamıyor — {gaps}. Yuva renklerini rol belirler ve yeniden atılmaz.",
-  "inventory.bestTitle": "Bu amblemler için en iyi ikili",
   "inventory.unused": "Sığmayanlar: {stats} — sancakta üç yuva var ve her rengi sabit.",
   "inventory.chartTitle": "Bu set için en iyi uyumlar",
   "inventory.chartSubtitle": "Aynı amblemler farklı oyuncularda farklı değer taşır: bir amblemin değeri, istatistiğin fiyatı çarpı oyuncunun onu ne kadar ürettiğidir.",
@@ -502,6 +501,30 @@ const tr: Dictionary = {
   "emblems.substitutionNote": "Bu mevkiye {name} geçti ama projeksiyon mevkinin kendisinden geliyor: {replaced} oyuncusunun oynadığı {games} harita. Örneklemde {name} adına lig maçı yok.",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "Bunun %1 içinde {count} daha var — bu veriyle aralarında fark yok ve her birinin arkasındaki harita sayısı puandan daha çok şey söyler: {teams}.",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "Bu set için ilk 3",
+  "inventory.topSubtitle": "Lider tam olarak, sonraki ikisi altında: aralarındaki fark genelde bir puanın içinde kalır ve harita sayısı puandan daha çok şey söyler.",
+  "inventory.behind": "−%{percent}",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "Grup aşaması",
+  "stage.title": "İsviçre eşleşmeleri",
+  "stage.subtitleUpcoming": "{date} tarihinde başlıyor. Tablo baştan eksiksiz çiziliyor — her skor grubunda kaç maç olacağını format belirliyor — ve sonuçlar kendilerini bekleyen yerlere oturuyor.",
+  "stage.subtitlePlayed": "Oynanan seri: {count}. Turlar maçların kendisinden çıkıyor: İsviçre sisteminde takım tur başına bir seri oynar, yani tur numarası daha önce oynadığı seri sayısıdır.",
+  "stage.loading": "Tablo yükleniyor…",
+  "stage.round": "{n}. tur",
+  "stage.tbd": "TBD",
+  "stage.eliminationTitle": "Eleme turu",
+  "stage.eliminationSubtitle": "3-2 ve 2-3'lük takımlar burada karşılaşır: beş kazanan playoff'a, beş kaybeden eve gider.",
+  "stage.eliminationEmpty": "Henüz kimse 3-2 veya 2-3'e ulaşmadı — bu tur beşinciden sonra dolar.",
+  "stage.standingsTitle": "Puan durumu ve karşılaşmalar",
+  "stage.standingsSubtitle": "Grup içi skor ve bu takımların daha önce nasıl karşılaştığı: skor, bu takımın o rakibe karşı galibiyetleridir.",
+  "stage.record": "Skor",
+  "stage.headToHead": "Daha önce oynadılar",
+  "stage.noMeetings": "karşılaşmadılar",
+  "stage.resultsTitle": "Oynanan seriler",
+  "stage.resultsSubtitle": "Her seri kendi haritalarıyla: birini açın, mini harita ve zaman çizgisiyle tam çözümlemeyi görün.",
+  "stage.openMap": "harita",
+  "stage.note": "Tablodaki harita sayısı: {maps}. Veriler OpenDota'dan geliyor ve günde bir yenileniyor, bu yüzden sonuç tekrar kaydı yüklendiğinde görünür.",
 };
 
 export default tr;

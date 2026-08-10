@@ -9,6 +9,7 @@ import LanguageSwitch from "./components/LanguageSwitch";
 import MatchPanel from "./components/MatchPanel";
 import ProfilesPanel from "./components/ProfilesPanel";
 import RosterPanel from "./components/RosterPanel";
+import StagePanel from "./components/StagePanel";
 import TeamsPanel from "./components/TeamsPanel";
 import { useT, type MessageKey } from "./i18n";
 import { STATIC_MODE, loadSnapshot } from "./snapshot";
@@ -29,6 +30,7 @@ const TABS: Tab[] = ([
   { key: "inventory", label: "app.tab.inventory", element: <InventoryAnalyzer />, live: false },
   { key: "profiles", label: "app.tab.profiles", element: <ProfilesPanel />, live: false },
   { key: "match", label: "app.tab.match", live: false },
+  { key: "stage", label: "app.tab.stage", live: false },
   { key: "roster", label: "app.tab.roster", element: <RosterPanel />, live: false },
   { key: "predictions", label: "app.tab.predictions", element: <GroupPanel />, live: false },
   { key: "teams", label: "app.tab.teams", element: <TeamsPanel />, live: true },
@@ -123,6 +125,10 @@ export default function App() {
       <main>
         {active === "match" ? (
           <MatchPanel matchId={matchId} onOpen={openMatch} />
+        ) : active === "stage" ? (
+          // Со страницы групповой стадии открывается разбор конкретной карты,
+          // поэтому ей нужен тот же переход, что и таблицам матчей.
+          <StagePanel onOpen={openMatch} />
         ) : (
           TABS.find((tab) => tab.key === active)?.element
         )}

@@ -154,6 +154,19 @@ def test_player_directory_skips_players_without_matches(session):
     assert all(row["games"] > 0 for row in rows)
 
 
+def test_player_directory_keeps_a_newcomer_who_holds_a_slot(session):
+    """Замена перед турниром своих карт ещё не сыграла, а страница ей нужна."""
+    seed(session)
+    session.add(Player(account_id=778, name="Topson"))
+    session.add(TeamRosterSlot(team_id=10207962, account_id=778, role="mid"))
+    session.commit()
+
+    row = next(r for r in player_directory(session) if r["account_id"] == 778)
+    assert row["games"] == 0
+    assert row["role"] == "mid"
+    assert row["is_ti"] is True
+
+
 # --- профиль команды ----------------------------------------------------------
 
 
@@ -169,6 +182,31 @@ def test_team_profile_reports_record_and_roster(session):
     # Командные средние — сумма пятерых, поэтому больше индивидуальных.
     best_player = max(profile.roster, key=lambda p: p.fantasy_units.get("kills", 0))
     assert profile.team_averages["kills"] > best_player.fantasy_units["kills"]
+
+
+def test_roster_shows_the_newcomer_and_demotes_the_replaced(session):
+    """Состав — это кто выйдет играть, а не у кого больше карт.
+
+    Раньше ростер собирался только из тех, у кого есть матчи: замена не
+    попадала на страницу вовсе, а заменённый оставался в основе.
+    """
+    seed(session)
+    session.add(Player(account_id=778, name="Topson"))
+    session.add(TeamRosterSlot(team_id=10207962, account_id=778, role="mid"))
+    session.commit()
+
+    roster = team_profile(session, 10207962, days=None).roster
+    by_name = {p.name: p for p in roster}
+
+    assert "Topson" in by_name, "новичок обязан быть в составе"
+    assert by_name["Topson"].games == 0
+    assert by_name["Topson"].role == "mid"
+
+    # Размеченный слот идёт первым, все остальные — ниже и без роли: они карты
+    # сыграли, но в нынешнем составе их нет.
+    assert roster[0].account_id == 778
+    assert all(p.role is None for p in roster[1:])
+    assert len(roster) == 6, "новичок добавился к пятерым, а не вытеснил их"
 
 
 def test_team_profile_counts_opponents(session):

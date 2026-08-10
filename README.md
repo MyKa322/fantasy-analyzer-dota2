@@ -231,6 +231,24 @@ judge a player nor build a roster. Averages are computed only over matches with 
 the share of those is shown explicitly: in the rest OpenDota reports neither wards nor stuns, and
 including them would drag everything down at once.
 
+**The group stage fills itself in.** The **Group** tab draws the whole Swiss bracket before a single
+match is played, and this is not decoration: the format fixes the shape. After n rounds the number of
+teams on k wins is 16·C(n,k)/2ⁿ, so how many rows sit in every record group — `1-0`, `2-1`, `3-1` —
+is known in advance. Round 1 shows the announced pairings, everything else shows TBD, and results
+occupy places that were already waiting rather than creating them.
+
+Nothing about that is entered by hand. A series belongs to the group stage when both teams are TI15
+participants and it was played on or after the tournament's first day — no league id needed, and
+qualifiers are cut off by the date. Its round is derived the same way the bracket is: in Swiss a team
+plays one series per round, so a series' round number is how many its participants had already
+played. Maps are grouped into series by `series_key`, because a Bo3 is one win and not three. A
+series where both sides hold the same number of maps stays undecided on purpose — that is what a
+half-loaded Bo3 looks like, and counting a winner there would poison every later round.
+
+Below the bracket: the Elimination Round (whoever reaches 3-2 and 2-3), the standings, and how these
+sixteen have met each other before — the score in that column is this team's wins against that
+opponent, taken from `head_to_head.json`.
+
 **A correction for sample size, so the leaderboard is not won by noise.** Picking the best of 48
 candidates (16 teams × 3 roles) is a maximum over noisy estimates, and a maximum goes to whoever has
 the smallest sample, not the strongest play: a shorter history has a wider spread and lands in the

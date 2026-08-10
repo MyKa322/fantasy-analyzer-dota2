@@ -103,29 +103,36 @@ async def cmd_resolve_teams(_: argparse.Namespace) -> None:
 async def cmd_ingest_ti(args: argparse.Namespace) -> None:
     """Загрузить историю всех участников TI15 и разметить их игроков."""
     config = load_predictions_config()
-    teams = {name: tid for name, tid in config.team_ids.items() if tid is not None}
     missing = [n for n, t in config.team_ids.items() if t is None]
     if missing:
         print(f"без team_id в конфиге: {', '.join(missing)} — сначала `resolve-teams`\n")
+
+    # Вместе с нынешними профилями обходим прежние: коллектив переезжает под
+    # новый тег, и без них история команды обрывается на дате переименования.
+    # Лишнего это не принесёт — что взять в выборку роли, решает пересечение
+    # состава, а не тег, под которым сыграна карта.
+    current = {tid for tid in config.team_ids.values() if tid is not None}
+    teams = config.ingest_team_ids()
     if not teams:
         return
 
     totals = {"requested": 0, "parsed": 0, "unparsed": 0, "failed": 0}
     broken: list[str] = []
     async with client() as api:
-        for name, team_id in teams.items():
+        for team_id, name in teams.items():
+            label = name if team_id in current else f"{name} (прежний)"
             try:
                 with session_scope() as session:
                     result = await ingest_team_history(
                         api, session, team_id, days_back=args.days
                     )
             except Exception as exc:  # ошибка на одной команде не должна ронять прогон
-                broken.append(f"{name}: {exc}")
-                print(f"  {name:<18} ОШИБКА: {exc}", flush=True)
+                broken.append(f"{label}: {exc}")
+                print(f"  {label:<28} ОШИБКА: {exc}", flush=True)
                 continue
             for key in totals:
                 totals[key] += result.get(key, 0)
-            print(f"  {name:<18} {result}", flush=True)
+            print(f"  {label:<28} {result}", flush=True)
 
     print(f"\nитого: {totals}")
     if api.throttle_events:

@@ -172,7 +172,6 @@ const vi: Dictionary = {
   "inventory.zeroStat": "không được ghi nhận trong trận — tính bằng không",
   "inventory.empty": "Hãy thêm ít nhất ba huy hiệu — mỗi ô trên cờ một cái.",
   "inventory.gap": "{role}: không dựng được bộ này — {gaps}. Màu của các ô do vai trò quy định và không roll lại.",
-  "inventory.bestTitle": "Cặp đôi tốt nhất cho bộ huy hiệu này",
   "inventory.unused": "Không xếp được: {stats} — lá cờ có ba ô và mỗi ô cố định một màu.",
   "inventory.chartTitle": "Những cặp hợp nhất với bộ này",
   "inventory.chartSubtitle": "Cùng một bộ huy hiệu lại có giá trị khác nhau với từng tuyển thủ: giá trị của huy hiệu là giá của chỉ số nhân với lượng mà tuyển thủ tạo ra.",
@@ -502,6 +501,30 @@ const vi: Dictionary = {
   "emblems.substitutionNote": "{name} vào vị trí này, nhưng dự báo được tính từ chính vị trí đó: {games} ván do {replaced} thi đấu. Trong mẫu không có trận đấu giải nào của riêng {name}.",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "Còn {count} nữa nằm trong khoảng 1% so với mục này — với dữ liệu hiện có chúng ngang nhau, và số ván sau mỗi lựa chọn đáng cân nhắc hơn điểm số: {teams}.",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "Top 3 cho bộ này",
+  "inventory.topSubtitle": "Vị trí đầu hiển thị đầy đủ, hai vị trí tiếp theo bên dưới: chênh lệch giữa chúng thường dưới một phần trăm, và số ván nói lên nhiều hơn điểm số.",
+  "inventory.behind": "−{percent}%",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "Vòng bảng",
+  "stage.title": "Nhánh Swiss",
+  "stage.subtitleUpcoming": "Khởi tranh {date}. Nhánh được vẽ đầy đủ từ trước — thể thức quy định mỗi nhóm thành tích có bao nhiêu trận — và kết quả chỉ việc lấp vào chỗ đã chờ sẵn.",
+  "stage.subtitlePlayed": "Số series đã đấu: {count}. Vòng đấu suy ra từ chính các trận: ở Swiss mỗi đội đánh một series mỗi vòng, nên số vòng chính là số series đội đó đã đấu.",
+  "stage.loading": "Đang tải nhánh…",
+  "stage.round": "Vòng {n}",
+  "stage.tbd": "TBD",
+  "stage.eliminationTitle": "Vòng loại trực tiếp",
+  "stage.eliminationSubtitle": "Các đội 3-2 và 2-3 gặp nhau ở đây: năm đội thắng vào playoff, năm đội thua về nước.",
+  "stage.eliminationEmpty": "Chưa đội nào đạt 3-2 hay 2-3 — vòng này lấp đầy sau vòng năm.",
+  "stage.standingsTitle": "Bảng xếp hạng và đối đầu",
+  "stage.standingsSubtitle": "Thành tích trong bảng và những lần các đội này đã gặp nhau: tỉ số là số trận thắng của đội này trước đối thủ đó.",
+  "stage.record": "Thành tích",
+  "stage.headToHead": "Đã gặp nhau",
+  "stage.noMeetings": "chưa gặp",
+  "stage.resultsTitle": "Các series đã đấu",
+  "stage.resultsSubtitle": "Mỗi series kèm các ván: mở một ván để xem phân tích đầy đủ với bản đồ nhỏ và dòng thời gian.",
+  "stage.openMap": "ván",
+  "stage.note": "Số ván trong nhánh: {maps}. Dữ liệu lấy từ OpenDota và làm mới mỗi ngày một lần, nên kết quả xuất hiện khi bản ghi đã được tải lên.",
 };
 
 export default vi;

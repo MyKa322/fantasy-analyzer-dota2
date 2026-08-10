@@ -93,6 +93,8 @@ export interface Translator {
   nc: (value: number) => string;
   /** Дата и время — для метки свежести данных. */
   dt: (value: string) => string;
+  /** Только дата — для календарных дней вроде старта турнира. */
+  d: (value: string) => string;
 }
 
 const I18nContext = createContext<Translator | null>(null);
@@ -147,6 +149,13 @@ export function createTranslator(locale: Locale, dictionary: Dictionary = en): T
       new Date(value).toLocaleString(intl, {
         dateStyle: "medium",
         timeStyle: "short",
+      }),
+    // Дата без времени. Отдельно от dt: «2026-08-13» разбирается как полночь
+    // UTC, и dt дорисовывал бы к ней местное время — «13 авг., 03:00» вместо
+    // дня, который в календаре турнира и стоит.
+    d: (value) =>
+      new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString(intl, {
+        dateStyle: "medium",
       }),
   };
 }

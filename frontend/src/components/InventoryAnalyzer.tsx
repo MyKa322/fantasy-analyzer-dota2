@@ -130,6 +130,15 @@ export default function InventoryAnalyzer() {
     return fits.slice(1).filter((f) => f.expected_card_points >= top * (1 - TIE));
   }, [result]);
 
+  const runnersUp = (result?.fits ?? []).slice(1, 3);
+
+  /** Отставание от лидера — процент честнее, чем разница в очках. */
+  const behind = (fit: InventoryFit) => {
+    const top = result?.fits[0]?.expected_card_points ?? 0;
+    if (!top) return "";
+    return t("inventory.behind", { percent: n((1 - fit.expected_card_points / top) * 100, 1) });
+  };
+
   const bestByRole = useMemo(() => {
     const map = new Map<string, InventoryFit>();
     for (const fit of result?.fits ?? []) if (!map.has(fit.role)) map.set(fit.role, fit);
@@ -282,10 +291,7 @@ export default function InventoryAnalyzer() {
 
       {best && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-          <Panel
-            title={t("inventory.bestTitle")}
-            subtitle={`${roleLabel(best.role)} · ${best.team_name ?? ""}`}
-          >
+          <Panel title={t("inventory.topTitle")} subtitle={t("inventory.topSubtitle")}>
             <div className="mb-3 flex items-center gap-3">
               {teamCrest(best.team_name) && (
                 <img
@@ -299,7 +305,13 @@ export default function InventoryAnalyzer() {
                   <PlayerPortrait key={nick} teamName={best.team_name} nickname={nick} />
                 ))}
               </div>
-              <div className="text-sm text-neutral-200">{best.player_names.join(" & ")}</div>
+              <div>
+                <div className="text-sm text-neutral-200">{best.team_name}</div>
+                <div className="text-[11px] text-neutral-500">
+                  {roleLabel(best.role)} · {best.player_names.join(" & ")} ·{" "}
+                  {tp("plural.maps", best.games)}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -320,6 +332,41 @@ export default function InventoryAnalyzer() {
                 value={best.period_ceiling ? n(best.period_ceiling) : "—"}
               />
             </div>
+
+            {/* Второй и третий вариант — рядом, а не под катом: разница между
+                ними обычно внутри процента, и показывать одного победителя
+                значит выдавать разброс выборки за вывод. */}
+            {runnersUp.map((fit, index) => (
+              <div
+                key={`${fit.team_id}-${fit.role}`}
+                className="mt-2 flex items-center gap-3 rounded border border-[#20232c] bg-[#1a1d24] px-3 py-2"
+              >
+                <span className="w-3 text-[11px] text-neutral-600">{index + 2}</span>
+                {teamCrest(fit.team_name) && (
+                  <img
+                    src={teamCrest(fit.team_name)!}
+                    alt=""
+                    className="h-6 w-6 shrink-0 object-contain"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs text-neutral-200">
+                    {fit.team_name} · {roleLabel(fit.role)}
+                  </div>
+                  <div className="truncate text-[11px] text-neutral-500">
+                    {fit.slots.map((s) => s.label).join(" → ")}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="tabular text-xs text-neutral-300">
+                    {n(fit.expected_card_points)}
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    {behind(fit)} · {tp("plural.maps", fit.games)}
+                  </div>
+                </div>
+              </div>
+            ))}
 
             {tied.length > 0 && (
               <p className="mt-3 rounded border border-[#3A4048] bg-[#1C1F24] px-3 py-2 text-[11px] leading-relaxed text-neutral-300">

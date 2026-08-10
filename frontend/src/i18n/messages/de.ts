@@ -172,7 +172,6 @@ const de: Dictionary = {
   "inventory.zeroStat": "wird in Spielen nicht erfasst — zählt als null",
   "inventory.empty": "Mindestens drei Embleme hinzufügen — eines pro Banner-Slot.",
   "inventory.gap": "{role}: dieses Set lässt sich nicht bauen — {gaps}. Die Slot-Farben sind durch die Rolle festgelegt und werden nie neu gewürfelt.",
-  "inventory.bestTitle": "Bestes Duo für diese Embleme",
   "inventory.unused": "Nicht untergebracht: {stats} — das Banner hat drei Slots und jede Farbe steht fest.",
   "inventory.chartTitle": "Beste Passungen für dieses Set",
   "inventory.chartSubtitle": "Dieselben Embleme sind für verschiedene Spieler verschieden viel wert: der Wert eines Emblems ist der Preis der Statistik mal dem, was der Spieler davon produziert.",
@@ -502,6 +501,30 @@ const de: Dictionary = {
   "emblems.substitutionNote": "Auf der Position steht {name}, die Prognose kommt aber von der Position selbst: {games} Karten, gespielt von {replaced}. Eigene Ligaspiele von {name} sind in der Stichprobe nicht vorhanden.",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "Ebenfalls innerhalb von 1%: {count}. Mit diesen Daten sind sie gleichwertig, und die Zahl der Karten dahinter wiegt schwerer als die Punkte: {teams}.",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "Top 3 für dieses Set",
+  "inventory.topSubtitle": "Der Erste vollständig, die beiden nächsten darunter: der Abstand liegt meist innerhalb eines Prozentpunkts, und die Zahl der Karten sagt mehr als die Punkte.",
+  "inventory.behind": "−{percent}%",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "Gruppenphase",
+  "stage.title": "Schweizer Tableau",
+  "stage.subtitleUpcoming": "Beginnt am {date}. Das Tableau steht im Voraus vollständig — das Format legt fest, wie viele Partien in jeder Bilanzgruppe stehen — und die Ergebnisse belegen die schon vorbereiteten Plätze.",
+  "stage.subtitlePlayed": "Gespielte Serien: {count}. Die Runden ergeben sich aus den Partien selbst: im Schweizer System spielt ein Team eine Serie pro Runde, seine Rundennummer ist also die Zahl der bereits gespielten.",
+  "stage.loading": "Lade das Tableau…",
+  "stage.round": "Runde {n}",
+  "stage.tbd": "TBD",
+  "stage.eliminationTitle": "Ausscheidungsrunde",
+  "stage.eliminationSubtitle": "Hier treffen die Teams mit 3-2 und 2-3 aufeinander: fünf Sieger gehen in die Playoffs, fünf Verlierer nach Hause.",
+  "stage.eliminationEmpty": "Bis 3-2 oder 2-3 hat es noch niemand geschafft — die Runde füllt sich nach der fünften.",
+  "stage.standingsTitle": "Tabelle und direkte Duelle",
+  "stage.standingsSubtitle": "Die Bilanz innerhalb der Gruppe und wie diese Teams schon gegeneinander gespielt haben: der Stand sind die Siege dieses Teams gegen jenen Gegner.",
+  "stage.record": "Bilanz",
+  "stage.headToHead": "Schon gespielt",
+  "stage.noMeetings": "noch nie",
+  "stage.resultsTitle": "Gespielte Serien",
+  "stage.resultsSubtitle": "Jede Serie mit ihren Karten: eine öffnen und die vollständige Auswertung mit Minikarte und Zeitleiste sehen.",
+  "stage.openMap": "Karte",
+  "stage.note": "Karten im Tableau: {maps}. Die Daten kommen von OpenDota und werden täglich aktualisiert, ein Ergebnis erscheint also, sobald das Replay online ist.",
 };
 
 export default de;

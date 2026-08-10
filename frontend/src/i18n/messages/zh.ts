@@ -172,7 +172,6 @@ const zh: Dictionary = {
   "inventory.zeroStat": "比赛数据中不统计——按 0 计算",
   "inventory.empty": "至少添加三个纹章——战旗每个槽位一个。",
   "inventory.gap": "{role}：这套纹章凑不齐——{gaps}。槽位颜色由位置固定，无法重掷。",
-  "inventory.bestTitle": "最适合这套纹章的双人组",
   "inventory.unused": "没能放下：{stats}——战旗只有三个槽位，且每个槽位颜色固定。",
   "inventory.chartTitle": "这套纹章的最佳归属",
   "inventory.chartSubtitle": "同样的纹章在不同选手身上价值不同：纹章的价值等于数据项单价乘以该选手的实际产出。",
@@ -502,6 +501,30 @@ const zh: Dictionary = {
   "emblems.substitutionNote": "该位置换成了 {name}，但预测仍按位置本身计算：{replaced} 打过的 {games} 张地图。样本里没有 {name} 自己的联赛比赛。",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "另有 {count} 与它相差不到 1%——按现有数据无法区分，此时各自的地图数比分数更值得看：{teams}。",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "该套装的前三",
+  "inventory.topSubtitle": "第一名完整展示，后两名列在下方：它们之间的差距通常不到一个百分点，此时地图数比分数更能说明问题。",
+  "inventory.behind": "−{percent}%",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "小组赛",
+  "stage.title": "瑞士轮对阵",
+  "stage.subtitleUpcoming": "{date} 开赛。对阵图提前完整画出——赛制决定了每个战绩分组有多少场比赛——结果只是填进早已备好的位置。",
+  "stage.subtitlePlayed": "已进行 {count} 个系列赛。轮次由比赛本身推出：瑞士轮每队每轮打一个系列赛，所以轮次就是它此前打过的场数。",
+  "stage.loading": "正在加载对阵图…",
+  "stage.round": "第 {n} 轮",
+  "stage.tbd": "待定",
+  "stage.eliminationTitle": "淘汰轮",
+  "stage.eliminationSubtitle": "战绩 3-2 与 2-3 的队伍在此相遇：五支获胜进入淘汰赛，五支落败离开。",
+  "stage.eliminationEmpty": "目前还没有队伍达到 3-2 或 2-3——该轮在第五轮之后才会填满。",
+  "stage.standingsTitle": "积分与交手记录",
+  "stage.standingsSubtitle": "小组内战绩，以及这些队伍此前的交手：比分为该队对该对手的胜场。",
+  "stage.record": "战绩",
+  "stage.headToHead": "此前交手",
+  "stage.noMeetings": "未曾交手",
+  "stage.resultsTitle": "已进行的系列赛",
+  "stage.resultsSubtitle": "每个系列赛及其地图：打开任意一张，可看到含小地图与时间轴的完整分析。",
+  "stage.openMap": "地图",
+  "stage.note": "对阵图中的地图数：{maps}。数据来自 OpenDota，每日更新一次，因此结果在录像上传后才会出现。",
 };
 
 export default zh;

@@ -177,6 +177,53 @@ def export_group(session, simulations: int) -> dict | None:
     }
 
 
+def export_stage(session) -> dict:
+    """Сетка группового этапа: объявленный первый раунд плюс сыгранное.
+
+    До старта турнира сыгранного нет, и сетка состоит из одного первого раунда с
+    парами из конфига — как её и показывают за три дня до начала. Дальше она
+    наполняется сама: раунды выводятся из матчей между участниками.
+    """
+    from app.analytics.group_stage import build_group_stage  # noqa: PLC0415
+    from app.services.analysis import ti_team_ids  # noqa: PLC0415
+
+    predictions = load_predictions_config()
+    teams = ti_team_ids()
+    stage = build_group_stage(session, teams, starts=predictions.starts)
+
+    def side(entry) -> dict:
+        return {"team_id": entry.team_id, "name": entry.name, "score": entry.score}
+
+    return {
+        "starts": predictions.starts.isoformat() if predictions.starts else None,
+        # Пары первого раунда известны заранее — их показывают до старта, когда
+        # выводить сетку ещё не из чего.
+        "first_round": [
+            {"left": teams.get(a, str(a)), "right": teams.get(b, str(b)),
+             "left_id": a, "right_id": b}
+            for a, b in predictions.first_round_for(teams)
+        ],
+        "wins_to_advance": predictions.group_stage.swiss.wins_to_advance,
+        "losses_to_eliminate": predictions.group_stage.swiss.losses_to_eliminate,
+        "series": [
+            {
+                "round": s.round,
+                "record": s.record,
+                "left": side(s.left),
+                "right": side(s.right),
+                "winner_id": s.winner_id,
+                "played_at": s.played_at.isoformat(),
+                "match_ids": list(s.match_ids),
+            }
+            for s in stage.series
+        ],
+        "standings": [
+            {"team_id": s.team_id, "name": s.name, "wins": s.wins, "losses": s.losses}
+            for s in stage.standings
+        ],
+    }
+
+
 def _stat_row(value) -> dict:
     return {
         "stat": value.stat,
@@ -709,6 +756,7 @@ def main() -> int:
             "items": _load_items(),
             "teams": export_teams(session),
             "group": export_group(session, args.simulations),
+            "stage": export_stage(session),
             "roles": export_roles(
                 session,
                 history_days=args.history_days,

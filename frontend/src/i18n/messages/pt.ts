@@ -173,7 +173,6 @@ const pt: Dictionary = {
   "inventory.zeroStat": "não é registrado nas partidas — conta como zero",
   "inventory.empty": "Adicione ao menos três emblemas — um por slot do estandarte.",
   "inventory.gap": "{role}: este conjunto não pode ser montado — {gaps}. As cores dos slots são fixadas pela função e não são rerroladas.",
-  "inventory.bestTitle": "Melhor dupla para estes emblemas",
   "inventory.unused": "Não couberam: {stats} — o estandarte tem três slots e cada cor é fixa.",
   "inventory.chartTitle": "Melhores encaixes para este conjunto",
   "inventory.chartSubtitle": "Os mesmos emblemas valem diferente para jogadores diferentes: o valor de um emblema é o preço da estatística vezes o quanto o jogador a produz.",
@@ -503,6 +502,30 @@ const pt: Dictionary = {
   "emblems.substitutionNote": "{name} assumiu a posição, mas a projeção vem da própria posição: {games} mapas jogados por {replaced}. {name} não tem partidas de liga próprias na amostra.",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "Também a menos de 1% desta: {count}. Com estes dados elas se equivalem, e o número de mapas de cada uma pesa mais que os pontos: {teams}.",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "Top 3 para este conjunto",
+  "inventory.topSubtitle": "O líder por inteiro e os dois seguintes abaixo: a diferença entre eles costuma ficar dentro de um ponto percentual, e o número de mapas diz mais que os pontos.",
+  "inventory.behind": "−{percent}%",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "Fase de grupos",
+  "stage.title": "Chave suíça",
+  "stage.subtitleUpcoming": "Começa em {date}. A chave é desenhada inteira com antecedência — o formato define quantas partidas há em cada grupo de campanha — e os resultados ocupam os lugares que já os esperam.",
+  "stage.subtitlePlayed": "{count} séries jogadas. As rodadas saem das próprias partidas: no suíço cada equipe joga uma série por rodada, então o número da rodada é quantas ela já havia jogado.",
+  "stage.loading": "Carregando a chave…",
+  "stage.round": "Rodada {n}",
+  "stage.tbd": "TBD",
+  "stage.eliminationTitle": "Rodada de eliminação",
+  "stage.eliminationSubtitle": "Aqui se cruzam as equipes com 3-2 e 2-3: cinco vencedoras vão aos playoffs, cinco perdedoras vão para casa.",
+  "stage.eliminationEmpty": "Ninguém chegou a 3-2 ou 2-3 ainda — a rodada se preenche depois da quinta.",
+  "stage.standingsTitle": "Classificação e confrontos",
+  "stage.standingsSubtitle": "A campanha dentro do grupo e como estas equipes já se enfrentaram: o placar são as vitórias desta equipe contra aquele adversário.",
+  "stage.record": "Campanha",
+  "stage.headToHead": "Já se enfrentaram",
+  "stage.noMeetings": "não se enfrentaram",
+  "stage.resultsTitle": "Séries jogadas",
+  "stage.resultsSubtitle": "Cada série com seus mapas: abra um e verá a análise completa com o minimapa e a linha do tempo.",
+  "stage.openMap": "mapa",
+  "stage.note": "Mapas na chave: {maps}. Os dados vêm da OpenDota e são atualizados diariamente, então um resultado aparece quando o replay está no ar.",
 };
 
 export default pt;

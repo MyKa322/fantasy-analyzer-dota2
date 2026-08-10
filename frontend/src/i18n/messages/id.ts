@@ -172,7 +172,6 @@ const id: Dictionary = {
   "inventory.zeroStat": "tidak dilacak dalam pertandingan — dihitung nol",
   "inventory.empty": "Tambahkan setidaknya tiga emblem — satu untuk tiap slot banner.",
   "inventory.gap": "{role}: set ini tidak bisa disusun — {gaps}. Warna slot ditentukan peran dan tidak pernah di-reroll.",
-  "inventory.bestTitle": "Duo terbaik untuk emblem ini",
   "inventory.unused": "Tidak muat: {stats} — banner punya tiga slot dan tiap warnanya tetap.",
   "inventory.chartTitle": "Kecocokan terbaik untuk set ini",
   "inventory.chartSubtitle": "Emblem yang sama bernilai berbeda bagi pemain berbeda: nilai sebuah emblem adalah harga statistik dikali seberapa banyak pemain menghasilkannya.",
@@ -502,6 +501,30 @@ const id: Dictionary = {
   "emblems.substitutionNote": "Slot ini diisi {name}, tetapi proyeksinya dihitung dari slot itu sendiri: {games} peta yang dimainkan {replaced}. Tidak ada pertandingan liga milik {name} dalam sampel.",
   // --- равные варианты ------------------------------------------------------
   "inventory.tied": "Ada {count} lagi dalam jarak 1% dari ini — dengan data yang ada keduanya setara, dan jumlah peta di belakang masing-masing lebih berarti daripada poinnya: {teams}.",
+  // --- топ-3 под набор ------------------------------------------------------
+  "inventory.topTitle": "Tiga teratas untuk set ini",
+  "inventory.topSubtitle": "Pemuncak selengkapnya, dua berikutnya di bawahnya: selisih di antara mereka biasanya kurang dari satu persen, dan jumlah peta lebih berarti daripada poin.",
+  "inventory.behind": "−{percent}%",
+  // --- групповой этап -------------------------------------------------------
+  "app.tab.stage": "Babak grup",
+  "stage.title": "Bagan Swiss",
+  "stage.subtitleUpcoming": "Mulai {date}. Bagan digambar utuh sejak awal — format menentukan berapa pertandingan di tiap kelompok rekor — dan hasil tinggal mengisi tempat yang sudah menunggu.",
+  "stage.subtitlePlayed": "Seri yang dimainkan: {count}. Ronde diturunkan dari pertandingannya sendiri: di sistem Swiss satu tim memainkan satu seri per ronde, jadi nomor rondenya adalah berapa yang sudah dimainkan.",
+  "stage.loading": "Memuat bagan…",
+  "stage.round": "Ronde {n}",
+  "stage.tbd": "TBD",
+  "stage.eliminationTitle": "Ronde eliminasi",
+  "stage.eliminationSubtitle": "Di sini tim dengan rekor 3-2 dan 2-3 bertemu: lima pemenang ke playoff, lima yang kalah pulang.",
+  "stage.eliminationEmpty": "Belum ada yang mencapai 3-2 atau 2-3 — ronde ini terisi setelah ronde kelima.",
+  "stage.standingsTitle": "Klasemen dan pertemuan",
+  "stage.standingsSubtitle": "Rekor di dalam grup dan bagaimana tim-tim ini pernah bertemu: skornya adalah kemenangan tim ini atas lawan tersebut.",
+  "stage.record": "Rekor",
+  "stage.headToHead": "Pernah bertemu",
+  "stage.noMeetings": "belum pernah",
+  "stage.resultsTitle": "Seri yang dimainkan",
+  "stage.resultsSubtitle": "Setiap seri dengan petanya: buka salah satu untuk analisis lengkap dengan minimap dan garis waktu.",
+  "stage.openMap": "peta",
+  "stage.note": "Peta di bagan: {maps}. Data berasal dari OpenDota dan diperbarui sekali sehari, jadi hasil muncul setelah replay tersedia.",
 };
 
 export default id;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type GroupPrediction, type PredictionsConfig } from "../api";
+import { teamCrest } from "../assets";
 import { useT } from "../i18n";
 import { STATIC_MODE } from "../snapshot";
 import { Button, Field, Notice, Panel, Stat, selectClass } from "./ui";
@@ -51,7 +52,7 @@ export default function GroupPanel() {
   const pickByTeam = new Map<number, string>(
     (prediction?.plan ?? [])
       .filter((pick) => pick.team_id != null)
-      .map((pick) => [pick.team_id as number, pick.pick]),
+      .map((pick) => [pick.team_id as number, pick.bucket]),
   );
 
   return (
@@ -180,16 +181,68 @@ export default function GroupPanel() {
 
       {prediction && (
         <Panel title={t("group.planTitle")} subtitle={t("group.planSubtitle")}>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {prediction.plan.map((pick) => (
-              <div
-                key={pick.key}
-                className="rounded border border-[#2a2e3a] bg-[#1d2029] px-3 py-2"
-              >
-                <div className="text-sm text-neutral-100">{pick.key}</div>
-                <div className="text-xs text-[#c8a24a]">{pick.label ?? pick.pick}</div>
-              </div>
-            ))}
+          {/* Доска корзин, как на экране предсказаний: раскладка по местам, а не
+              список строк. Разница не косметическая — ставится ровно столько
+              команд, сколько в корзине мест, и это должно быть видно сразу. */}
+          <div className="space-y-3">
+            {buckets.map((bucket) => {
+              const picked = prediction.plan.filter((pick) => pick.bucket === bucket.key);
+              return (
+                <section key={bucket.key}>
+                  <header className="mb-1.5 flex items-baseline gap-2 border-b border-[#2a2e3a] pb-1">
+                    <h3 className="text-sm tracking-wide text-[#c8a24a] uppercase">
+                      {bucket.label}
+                    </h3>
+                    <span className="tabular text-[11px] text-neutral-500">
+                      {picked.length}/{bucket.slots}
+                    </span>
+                    <span className="truncate text-[11px] text-neutral-600">
+                      {bucket.description}
+                    </span>
+                  </header>
+
+                  <div className="flex flex-wrap gap-2">
+                    {picked.map((pick) => {
+                      const team = prediction.teams.find((x) => x.team_id === pick.team_id);
+                      const chance = team?.probabilities[bucket.key] ?? 0;
+                      return (
+                        <div
+                          key={pick.team_id ?? pick.team_name}
+                          className="flex w-[168px] items-center gap-2 rounded border border-[#2a2e3a] bg-[#1d2029] px-2 py-2"
+                          title={`${bucket.label}: ${(chance * 100).toFixed(1)}%`}
+                        >
+                          {teamCrest(pick.team_name) ? (
+                            <img
+                              src={teamCrest(pick.team_name)!}
+                              alt=""
+                              className="h-8 w-8 shrink-0 object-contain"
+                            />
+                          ) : (
+                            <span className="h-8 w-8 shrink-0 rounded bg-[#2a2e3a]" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate text-xs text-neutral-100">{pick.team_name}</div>
+                            <div className="tabular text-[11px] text-neutral-500">
+                              {(chance * 100).toFixed(1)}%
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* Пустые места корзины: без них не видно, что доска ещё не
+                        заполнена, а в зачёт идут именно все слоты. */}
+                    {Array.from({ length: Math.max(bucket.slots - picked.length, 0) }).map(
+                      (_, index) => (
+                        <div
+                          key={`empty-${index}`}
+                          className="h-[52px] w-[168px] rounded border border-dashed border-[#2a2e3a]"
+                        />
+                      ),
+                    )}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         </Panel>
       )}

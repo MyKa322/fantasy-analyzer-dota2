@@ -81,11 +81,13 @@ export interface BucketProbability {
   expected_series: number;
 }
 
+/** Одна ставка плана: какую команду в какую корзину. */
 export interface PredictionPick {
-  key: string;
-  pick: string;
-  label: string | null;
   team_id?: number | null;
+  team_name: string;
+  bucket: string;
+  /** Подпись корзины из конфига — «4-0», «Elimination Round Winner». */
+  label: string | null;
 }
 
 export interface GroupPrediction {
@@ -743,11 +745,11 @@ const staticApi: typeof live = {
         expected_series: t.expected_series,
       })),
       plan: snapshot.group.plan.map((p) => ({
-        key: p.name,
-        pick: p.bucket,
+        team_id: p.team_id,
+        team_name: p.name,
+        bucket: p.bucket,
         label:
           snapshot.group?.buckets.find((b) => b.key === p.bucket)?.label ?? p.bucket,
-        team_id: p.team_id,
       })),
       expected_points: snapshot.group.expected_points,
       expected_correct: snapshot.group.expected_correct,
