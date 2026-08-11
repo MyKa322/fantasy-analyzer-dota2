@@ -84,6 +84,19 @@ class StatValue:
     # у команды с 29 картами и у команды со 134 это разная точность, а в
     # сравнении ролей между собой они иначе идут на равных.
     std_points: float = 0.0
+    # Эффективный размер выборки: сколько карт «стоит» оценка с учётом того, что
+    # свежие карты весят больше.
+    #
+    # Число карт для этого не годится. `base_points` — не простое среднее, а
+    # взвешенное по свежести (полураспад 30 дней), и точность такого среднего
+    # задаётся не количеством слагаемых, а тем, насколько неравномерно
+    # распределены веса: n_eff = (Σw)² / Σw². На реальных данных 134 карты за
+    # 180 дней дают n_eff ≈ 72, то есть вдвое меньше номинала.
+    #
+    # Отдельным полем, а не пересчётом на месте: веса живут в проекторе и к
+    # моменту сжатия их уже нет, а подставить туда `games` — ровно та ошибка,
+    # из-за которой поправка на размер выборки работала вполсилы.
+    effective_games: float = 0.0
 
     @property
     def is_negligible(self) -> bool:
@@ -278,6 +291,11 @@ class EmblemAdvisor:
         account_ids = tuple(account_ids if account_ids is not None else history.account_ids)
         allowed = self.rules.available_stats(role)
 
+        # Эффективный размер выборки считается один раз: он зависит только от
+        # весов карт, а не от стата.
+        squared = float(np.square(weights).sum())
+        effective_games = float(weights.sum() ** 2 / squared) if squared > 0 else 0.0
+
         values: list[StatValue] = []
         for stat_key in self.rules.stats:
             if stat_key not in allowed:
@@ -315,6 +333,7 @@ class EmblemAdvisor:
                     std_points=float(column.std(ddof=1)) if len(column) > 1 else 0.0,
                     availability=source.availability if source else "exact",
                     games=len(games),
+                    effective_games=effective_games,
                 )
             )
 

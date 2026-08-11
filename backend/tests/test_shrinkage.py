@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from dataclasses import replace
+
 from app.fantasy.advisor import StatValue
 from app.fantasy.shrinkage import shrink_to_role_mean
 
@@ -160,3 +162,78 @@ def test_shape_and_order_are_preserved():
     for values in adjusted:
         assert {v.stat for v in values} == {"kills", "gpm"}
         assert values == sorted(values, key=lambda v: -v.base_points)
+
+
+# --- эффективный размер выборки -----------------------------------------------
+#
+# `base_points` — взвешенное по свежести среднее, и его точность задаётся не
+# числом карт, а `n_eff = (Σw)²/Σw²`. Подстановка числа карт занижала стандартную
+# ошибку примерно вдвое и недожимала как раз маленькие выборки.
+
+
+def test_effective_games_wins_over_the_raw_count():
+    """При равном числе карт сильнее сжимается тот, у кого меньше n_eff.
+
+    Обе команды отыграли по 100 карт, но у лидера они собраны в узкое окно, и
+    взвешенное среднее опирается всего на 20 из них. Поправка обязана считать по
+    ним, а не по номиналу.
+    """
+    honest = [("mid", [value(base=1000.0 + i * 2, games=100, std=100.0)]) for i in range(15)]
+
+    leader = value(base=LEADER, games=100, std=100.0)
+    by_count = shrink_to_role_mean([*honest, ("mid", [leader])])[-1][0]
+
+    thin = replace(leader, effective_games=20.0)
+    by_effective = shrink_to_role_mean([*honest, ("mid", [thin])])[-1][0]
+
+    field_best = max(v[0].base_points for _, v in honest)
+    assert by_effective.base_points < by_count.base_points
+    assert by_effective.base_points < field_best
+
+
+def test_raw_count_is_the_fallback_when_effective_is_unset():
+    """Значения, посчитанные без весов, не должны потерять поправку вовсе.
+
+    У них `effective_games` нулевой, и делить на ноль нельзя: сжатие обязано
+    продолжить работать по числу карт.
+    """
+    entries = field(leader_games=29)
+    assert all(v[0].effective_games == 0.0 for _, v in entries)
+
+    after = [values[0].base_points for values in shrink_to_role_mean(entries)]
+    assert lead(after) < 0.02
+
+
+def test_stat_values_report_effective_games_below_the_map_count():
+    """Сквозная проверка: advisor обязан отдавать n_eff меньше числа карт.
+
+    Веса экспоненциальные, поэтому равенство возможно только если все карты
+    сыграны в один момент — на истории в несколько месяцев этого не бывает.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from app.fantasy.advisor import EmblemAdvisor
+    from app.fantasy.projection import RoleGame, RoleHistory
+
+    now = datetime(2026, 8, 11, tzinfo=timezone.utc)
+    games = [
+        RoleGame(
+            match_id=i,
+            start_time=now - timedelta(days=4 * i),
+            series_key=f"series:{i}",
+            player_stats={1: {"kills": 5.0}, 2: {"kills": 4.0}},
+            won=True,
+        )
+        for i in range(30)
+    ]
+    history = RoleHistory(
+        team_id=1, role="mid", account_ids=(1, 2), player_names=("a", "b"), games=games
+    )
+
+    values = EmblemAdvisor().stat_values(history, role="mid", now=now)
+
+    assert values
+    effective = values[0].effective_games
+    assert 0 < effective < len(games)
+    # Полураспад 30 дней на окне в 120 — эффективная выборка примерно вдвое меньше.
+    assert effective < len(games) * 0.75
