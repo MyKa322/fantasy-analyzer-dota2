@@ -102,6 +102,14 @@ class Match(Base):
     # Patient» (+23%, если первой крови не было до 10:00) и «the Flayed Twins
     # Acolyte» (+9%, если она пролилась до стартового горна, то есть в минусе).
     first_blood_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Разобран ли реплей нами. Отдельно от `is_parsed`: то — «OpenDota разобрала
+    # и отдала статы», это — «у нас есть события из самого .dem». Второе строго
+    # богаче первого, но появляется у матчей независимо, и склеивать их в один
+    # флаг значит потерять возможность спросить «что мы можем посчитать сами».
+    replay_parsed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # Версия парсера, которым разобран реплей: по ней видно, какие матчи надо
+    # перечитать после исправления в разборе.
+    replay_version: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     is_lan: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -135,6 +143,15 @@ class PlayerMatchStat(Base):
     # Обычная статистика матча (ассисты, XPM, нетворт, урон) — она не участвует
     # в очках Fantasy и лежит отдельно, чтобы случайно туда не попасть.
     profile: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Основной источник статов строки: opendota или replay.
+    source: Mapped[str] = mapped_column(String(16), default="opendota", index=True)
+    # Отклонения от основного источника по отдельным статам: {"madstone_collected":
+    # "replay"}. Хранится только разница, потому что у подавляющего большинства
+    # строк источник один на все восемнадцать статов, и полная карта раздула бы
+    # таблицу без единого нового факта.
+    stat_sources: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Версия парсера для той части статов, что пришла из реплея.
+    parser_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Денормализованное время матча — чтобы фильтровать окно без join.
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
@@ -205,6 +222,51 @@ class TeamRosterSlot(Base):
 
     def __repr__(self) -> str:
         return f"<TeamRosterSlot {self.team_id} {self.role} {self.account_id}>"
+
+
+class MatchFeature(Base):
+    """Материализованные фичи уровня матча.
+
+    Отдельная таблица, а не колонки в `matches`: состав фич меняется куда чаще
+    схемы матча, и каждая новая метрика не должна быть миграцией. Версия рядом со
+    значениями — по ней видно, какие строки посчитаны старым кодом.
+    """
+
+    __tablename__ = "match_features"
+
+    match_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("matches.match_id", ondelete="CASCADE"), primary_key=True
+    )
+    features: Mapped[dict] = mapped_column(JSON, default=dict)
+    features_version: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def __repr__(self) -> str:
+        return f"<MatchFeature {self.match_id} v{self.features_version}>"
+
+
+class PlayerMatchFeature(Base):
+    """Материализованные фичи уровня «игрок в карте»."""
+
+    __tablename__ = "player_match_features"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    match_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("matches.match_id", ondelete="CASCADE"), index=True
+    )
+    account_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    features: Mapped[dict] = mapped_column(JSON, default=dict)
+    features_version: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    # Денормализованное время — чтобы фильтровать окно без join, как в статах.
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    __table_args__ = (
+        UniqueConstraint("match_id", "account_id", name="uq_player_match_feature"),
+        Index("ix_features_account_time", "account_id", "start_time"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PlayerMatchFeature m={self.match_id} p={self.account_id}>"
 
 
 class IngestState(Base):

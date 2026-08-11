@@ -11,6 +11,7 @@ import { teamCrest } from "../assets";
 import { loadHeadToHead, pairKey, type HeadToHead } from "../headToHead";
 import { useT } from "../i18n";
 import { loadSnapshot, type Stage, type StageSeries } from "../snapshot";
+import StageAnalyticsPanel from "./StageAnalytics";
 import { Notice, Panel } from "./ui";
 
 /** Одна строка сетки: либо сыгранная серия, либо пустое место под неё. */
@@ -205,6 +206,10 @@ export default function StagePanel({ onOpen }: { onOpen?: (id: number) => void }
           ))}
         </div>
       </Panel>
+
+      {/* Аналитика идёт сразу за сеткой: сетка показывает результат, а этот
+          блок — его смысл. У снапшотов, снятых до её появления, её просто нет. */}
+      {stage.analytics && <StageAnalyticsPanel analytics={stage.analytics} />}
 
       <Panel title={t("stage.eliminationTitle")} subtitle={t("stage.eliminationSubtitle")}>
         {elimination.length ? (

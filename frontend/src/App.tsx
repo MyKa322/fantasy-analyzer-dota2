@@ -4,6 +4,7 @@ import DataPanel from "./components/DataPanel";
 import EmblemAnalyzer from "./components/EmblemAnalyzer";
 import FantasyPanel from "./components/FantasyPanel";
 import GroupPanel from "./components/GroupPanel";
+import { ChangelogButton, RepositoryLink } from "./components/HeaderLinks";
 import InventoryAnalyzer from "./components/InventoryAnalyzer";
 import LanguageSwitch from "./components/LanguageSwitch";
 import MatchPanel from "./components/MatchPanel";
@@ -117,6 +118,8 @@ export default function App() {
             ))}
           </nav>
           <LanguageSwitch />
+          <ChangelogButton />
+          <RepositoryLink />
         </div>
       </header>
 

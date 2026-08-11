@@ -94,6 +94,46 @@ export interface StageSeries {
   match_ids: number[];
 }
 
+/** Команда в аналитике этапа. Величины, которых нет, приходят null — не нулём. */
+export interface StageTeamAnalytics {
+  team_id: number;
+  name: string;
+  wins: number;
+  losses: number;
+  map_diff: number;
+  rating: number | null;
+  /** Сумма вероятностей выиграть каждую сыгранную серию. */
+  expected_wins: number | null;
+  /** Победы сверх ожидаемых: больше нуля — играет выше своего рейтинга. */
+  performance: number | null;
+  opponent_rating: number | null;
+  /** +n подряд выигранных серий, -n подряд проигранных. */
+  streak: number;
+  status: "alive" | "advanced" | "eliminated";
+  avg_duration_min: number | null;
+  avg_kill_diff: number | null;
+  upsets_won: number;
+  upsets_lost: number;
+}
+
+export interface StageMatchup {
+  left_id: number;
+  right_id: number;
+  left: string;
+  right: string;
+  left_win_probability: number | null;
+  rating_gap: number | null;
+  toss_up: boolean;
+}
+
+export interface StageAnalytics {
+  started: boolean;
+  upsets: number;
+  teams: StageTeamAnalytics[];
+  rounds: { round: number; series: number; decided: number; upsets: number; maps: number }[];
+  matchups: StageMatchup[];
+}
+
 export interface Stage {
   /** Первый день турнира: до него матчей группового этапа не бывает. */
   starts: string | null;
@@ -102,6 +142,8 @@ export interface Stage {
   losses_to_eliminate: number;
   series: StageSeries[];
   standings: { team_id: number; name: string; wins: number; losses: number }[];
+  /** Аналитика этапа. Появилась позже сетки — у старых снапшотов её нет. */
+  analytics?: StageAnalytics;
 }
 
 export interface Snapshot {

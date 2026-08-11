@@ -33,10 +33,13 @@ from app.ingest.pipeline import (  # noqa: E402
     ingest_team_history,
     resolve_compendium_teams,
 )
+from app.eval import default_ladder, walk_forward  # noqa: E402
+from app.features import materialize  # noqa: E402
 from app.services.analysis import (  # noqa: E402
     build_role_history,
     infer_team_roles,
     latest_ratings,
+    load_match_records,
     mark_ti_participants,
     recompute_ratings,
     ti_candidates,
@@ -374,6 +377,47 @@ def cmd_ratings(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_features(args: argparse.Namespace) -> None:
+    """Пересчитать витрину фич для устаревших матчей."""
+    from datetime import datetime, timedelta, timezone
+
+    since = datetime.now(timezone.utc) - timedelta(days=args.days) if args.days else None
+    with session_scope() as session:
+        result = materialize(session, since=since, force=args.force)
+    print(result)
+
+
+def cmd_evaluate(args: argparse.Namespace) -> None:
+    """Прогнать лестницу моделей по истории вперёд по времени.
+
+    Печатает не одну модель, а всю лестницу: число само по себе ничего не значит,
+    значение имеет только разрыв с предыдущей ступенью.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    since = datetime.now(timezone.utc) - timedelta(days=args.days)
+    with session_scope() as session:
+        matches = load_match_records(session, since=since)
+
+    if not matches:
+        print(f"нет матчей за последние {args.days} дней — сначала `ingest-ti`")
+        return
+
+    result = walk_forward(
+        matches,
+        default_ladder(),
+        period_days=args.period,
+        warmup_periods=args.warmup,
+    )
+    print(f"матчей загружено: {len(matches)}")
+    print(result.table())
+
+    best = result.best()
+    if best is not None:
+        print(f"\nлучшая по log loss: {best.name}")
+        print(best.calibration_table())
+
+
 def cmd_teams(args: argparse.Namespace) -> None:
     with session_scope() as session:
         ratings = latest_ratings(session)
@@ -493,6 +537,22 @@ def main() -> int:
     p.add_argument("--days", type=int, default=365)
     p.add_argument("--period", type=int, default=7)
     p.set_defaults(func=cmd_ratings, is_async=False)
+
+    p = sub.add_parser("features", help="пересчитать витрину фич")
+    p.add_argument("--days", type=int, default=0, help="окно истории; 0 — вся база")
+    p.add_argument("--force", action="store_true", help="пересчитать, не глядя на версию")
+    p.set_defaults(func=cmd_features, is_async=False)
+
+    p = sub.add_parser("evaluate", help="проверить модели прогноза вперёд по времени")
+    p.add_argument("--days", type=int, default=365, help="окно истории")
+    p.add_argument("--period", type=int, default=7, help="длина рейтингового периода")
+    p.add_argument(
+        "--warmup",
+        type=int,
+        default=4,
+        help="сколько первых периодов не идёт в зачёт (разгон моделей)",
+    )
+    p.set_defaults(func=cmd_evaluate, is_async=False)
 
     p = sub.add_parser("teams", help="показать рейтинг команд")
     p.add_argument("--limit", type=int, default=30)

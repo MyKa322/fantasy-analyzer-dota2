@@ -78,6 +78,22 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("matches", "stats_version", "INTEGER DEFAULT 0"),
     ("matches", "first_blood_time", "INTEGER"),
     ("player_match_stats", "profile", "JSON"),
+    # Провенанс: откуда взят каждый стат. Значение по умолчанию — opendota,
+    # потому что всё, что уже лежит в базе, добыто именно оттуда.
+    ("matches", "replay_parsed", "BOOLEAN DEFAULT 0"),
+    ("matches", "replay_version", "VARCHAR(32)"),
+    ("player_match_stats", "source", "VARCHAR(16) DEFAULT 'opendota'"),
+    ("player_match_stats", "stat_sources", "JSON"),
+    ("player_match_stats", "parser_version", "VARCHAR(32)"),
+)
+
+
+# Индексы для добавленных колонок: `create_all` существующую таблицу не трогает,
+# поэтому индекс к дописанной колонке нужно создать отдельно.
+_ADDED_INDEXES: tuple[tuple[str, str, str], ...] = (
+    ("ix_matches_replay_parsed", "matches", "replay_parsed"),
+    ("ix_matches_replay_version", "matches", "replay_version"),
+    ("ix_player_match_stats_source", "player_match_stats", "source"),
 )
 
 
@@ -94,6 +110,16 @@ def _ensure_columns(engine: Engine) -> None:
             if not existing or column in existing:
                 continue
             connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+
+        for name, table, column in _ADDED_INDEXES:
+            existing = {
+                row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")
+            }
+            if column not in existing:
+                continue
+            connection.execute(
+                text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({column})")
+            )
 
 
 def init_db() -> None:

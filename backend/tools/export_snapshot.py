@@ -184,15 +184,35 @@ def export_stage(session) -> dict:
     парами из конфига — как её и показывают за три дня до начала. Дальше она
     наполняется сама: раунды выводятся из матчей между участниками.
     """
+    from app.analytics.group_analytics import build_group_analytics  # noqa: PLC0415
     from app.analytics.group_stage import build_group_stage  # noqa: PLC0415
-    from app.services.analysis import ti_team_ids  # noqa: PLC0415
+    from app.services.analysis import latest_ratings, ti_team_ids  # noqa: PLC0415
 
     predictions = load_predictions_config()
     teams = ti_team_ids()
     stage = build_group_stage(session, teams, starts=predictions.starts)
+    swiss = predictions.group_stage.swiss
+    first_round = predictions.first_round_for(teams)
+
+    analytics = build_group_analytics(
+        session,
+        stage,
+        teams,
+        ratings=latest_ratings(session),
+        first_round=first_round,
+        wins_to_advance=swiss.wins_to_advance,
+        losses_to_eliminate=swiss.losses_to_eliminate,
+        regular_best_of=swiss.regular_best_of,
+        decisive_best_of=swiss.decisive_best_of,
+    )
 
     def side(entry) -> dict:
         return {"team_id": entry.team_id, "name": entry.name, "score": entry.score}
+
+    def rounded(value: float | None, digits: int = 2) -> float | None:
+        """Числа в снапшоте округляются: 12 знаков после запятой утяжеляют файл
+        и не значат ничего — оценка всё равно точна до десятых."""
+        return None if value is None else round(value, digits)
 
     return {
         "starts": predictions.starts.isoformat() if predictions.starts else None,
@@ -221,6 +241,52 @@ def export_stage(session) -> dict:
             {"team_id": s.team_id, "name": s.name, "wins": s.wins, "losses": s.losses}
             for s in stage.standings
         ],
+        "analytics": {
+            "started": analytics.started,
+            "upsets": analytics.upsets,
+            "teams": [
+                {
+                    "team_id": t.team_id,
+                    "name": t.name,
+                    "wins": t.wins,
+                    "losses": t.losses,
+                    "map_diff": t.map_diff,
+                    "rating": rounded(t.rating, 0),
+                    "expected_wins": rounded(t.expected_wins),
+                    "performance": rounded(t.performance),
+                    "opponent_rating": rounded(t.opponent_rating, 0),
+                    "streak": t.streak,
+                    "status": t.status,
+                    "avg_duration_min": rounded(t.avg_duration_min, 1),
+                    "avg_kill_diff": rounded(t.avg_kill_diff, 1),
+                    "upsets_won": t.upsets_won,
+                    "upsets_lost": t.upsets_lost,
+                }
+                for t in analytics.teams
+            ],
+            "rounds": [
+                {
+                    "round": r.round,
+                    "series": r.series,
+                    "decided": r.decided,
+                    "upsets": r.upsets,
+                    "maps": r.maps,
+                }
+                for r in analytics.rounds
+            ],
+            "matchups": [
+                {
+                    "left_id": m.left_id,
+                    "right_id": m.right_id,
+                    "left": m.left,
+                    "right": m.right,
+                    "left_win_probability": rounded(m.left_win_probability, 4),
+                    "rating_gap": rounded(m.rating_gap, 0),
+                    "toss_up": m.is_toss_up,
+                }
+                for m in analytics.matchups
+            ],
+        },
     }
 
 
