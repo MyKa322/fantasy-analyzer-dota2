@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AdBanner from "./components/AdBanner";
+import AdminPanel from "./components/AdminPanel";
 import DataPanel from "./components/DataPanel";
 import EmblemAnalyzer from "./components/EmblemAnalyzer";
 import FantasyPanel from "./components/FantasyPanel";
@@ -78,12 +79,14 @@ export default function App() {
     setActive(key);
   };
 
+  // Метку храним как есть, а не отформатированной: её же читает панель
+  // обновления, чтобы сравнить открытую вкладку с тем, что лежит на сайте.
   useEffect(() => {
     if (!STATIC_MODE) return;
     loadSnapshot()
-      .then((s) => setGeneratedAt(dt(s.generated_at)))
+      .then((s) => setGeneratedAt(s.generated_at))
       .catch(() => undefined);
-  }, [dt]);
+  }, []);
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 py-6">
@@ -96,7 +99,7 @@ export default function App() {
             {t("app.tagline")}
             {generatedAt && (
               <span className="ml-2 text-neutral-500">
-                {t("app.generatedAt", { date: generatedAt })}
+                {t("app.generatedAt", { date: dt(generatedAt) })}
               </span>
             )}
           </p>
@@ -119,6 +122,7 @@ export default function App() {
           </nav>
           <LanguageSwitch />
           <ChangelogButton />
+          <AdminPanel generatedAt={generatedAt} />
           <RepositoryLink />
         </div>
       </header>

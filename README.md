@@ -167,7 +167,7 @@ share of such matches is shown next to the numbers.
 | Every day at 04:20 UTC | workflow `refresh-data`: fresh matches for 150 days, rating recomputation, hero reference, snapshot and profile export, commit |
 | Right after the data commit | workflow `deploy`: the page is rebuilt and published to Pages |
 | On every push touching `frontend/**` | the same — the page is rebuilt |
-| Manually | `workflow_dispatch` on `refresh-data` (with a depth option) or `cli.py ingest-ti` locally |
+| Manually | the refresh button in the page header (below), `workflow_dispatch` on `refresh-data`, or `cli.py ingest-ti` locally |
 
 04:20 UTC is not an arbitrary hour: by then yesterday's replays are parsed, and without a parsed
 replay a map is useless for Fantasy.
@@ -175,6 +175,34 @@ replay a map is useless for Fantasy.
 How fresh the data is can be read off the page itself: the header carries "data as of <date>" —
 that is the snapshot's `generated_at`, i.e. the moment of export, not the moment you opened the
 page.
+
+### Refreshing on demand
+
+Once a day is enough in the off-season, but on tournament days a match starts every fifty minutes.
+Hence the refresh button in the header: it triggers the same two workflows and shows which step
+they are on. The full loop from click to new numbers on the site takes about two minutes — some
+forty seconds to recompute, a minute to publish.
+
+The button is visible to the owner only, and only in the owner's browser. It appears under one of
+two conditions: `?admin` is in the address, or a token is already in `localStorage`. For a reader
+it does not exist — no button, no markup.
+
+The token is a personal fine-grained one, scoped to this repository alone, with a single permission
+— **Actions: Read and write**
+([create one](https://github.com/settings/personal-access-tokens/new)). It is entered once, kept in
+`localStorage`, and only ever sent to `api.github.com`. It never goes into the build and cannot:
+the page is public, and any secret in its code is a secret for everyone. The flip side of keeping
+it in the browser is that whoever reaches that browser can trigger the repository's workflows — so
+on a shared machine use "forget the token", and give the token a short expiry.
+
+If no new matches turn up, the snapshot does not change and the publish step never runs; the panel
+says so. OpenDota's result appears not right after a match but once the replay has been parsed.
+
+The same thing without a browser, from the laptop:
+
+```bash
+gh workflow run refresh-data.yml && gh run watch
+```
 
 Between runs the database lives in the Actions cache: without it every run would pull seven hundred
 matches again and hit OpenDota's daily limit (2000 requests without a key). Match bodies are cached
@@ -536,7 +564,7 @@ Three workflows:
 | file | when | what it does |
 |---|---|---|
 | `.github/workflows/deploy.yml` | push to `main` touching `frontend/**` | builds the static site and publishes it to Pages |
-| `.github/workflows/refresh-data.yml` | daily at 04:20 UTC | pulls fresh matches, recomputes ratings and analytics, commits the snapshot and triggers the deploy |
+| `.github/workflows/refresh-data.yml` | daily at 04:20 UTC, and on demand — from the header button or `workflow_dispatch` | pulls fresh matches, recomputes ratings and analytics, commits the snapshot and triggers the deploy |
 | `.github/workflows/tests.yml` | push and pull request | pytest on the backend, a type-checked build on the frontend |
 
 The match database lives in the Actions cache between runs — otherwise every run would pull seven
