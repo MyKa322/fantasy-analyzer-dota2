@@ -1,14 +1,19 @@
 // Сетка плей-офф: восемь команд, double elimination, четырнадцать серий.
 //
-// Сетка рисуется целиком заранее — как и групповая, — но по другой причине.
-// В Swiss число мест выводится из формата, здесь оно задано объявленной сеткой:
-// четвертьфиналы известны, остальные места ждут участников. Пустое место — это
-// не отсутствие данных, а нерешённая серия, и у него есть что показать: кто
-// туда дойдёт и с какой вероятностью.
+// Рисуется деревом, а не колонками, и это не украшение. Вопрос к сетке всегда
+// один: «куда отсюда попадает победитель» — на него отвечает линия, а колонка
+// рядом заставляет искать ответ глазами. Поэтому раскладка повторяет ту, что
+// показывает компендиум: верхняя лента, под ней нижняя, гранд-финал справа.
 //
-// Второе, ради чего страница существует: у каждой серии два разных вопроса —
-// «кто здесь окажется» и «кто здесь выиграет». Для четвертьфинала первый ответ
-// тривиален, для гранд-финала — нет, и путать их нельзя.
+// Места считаются по дереву: четвертьфиналы стоят с равным шагом, каждая
+// следующая серия — посередине между теми, кто её кормит. Так координаты
+// выводятся из структуры, а не проставляются руками, и при любой правке сетки
+// линии остаются на местах.
+//
+// В пустое место вписан прогноз: кто вероятнее всего его займёт и с какой
+// вероятностью. Это и есть ответ на «кто с кем сыграет дальше» — до того, как
+// сыграно. Два числа не смешиваются: у участника показан шанс выиграть серию,
+// у прогноза — шанс до места дойти, и подписаны они по-разному.
 
 import { useEffect, useMemo, useState } from "react";
 import { teamCrest } from "../assets";
@@ -20,6 +25,121 @@ import { Notice, Panel, Stat } from "./ui";
 const UPPER_ROUNDS = ["ubqf", "ubsf", "ubf", "gf"] as const;
 const LOWER_ROUNDS = ["lbr1", "lbr2", "lbsf", "lbf"] as const;
 
+// --- геометрия сетки ----------------------------------------------------------
+
+const CARD_W = 208;
+// Высота задаётся карточке явно, а не набирается содержимым: по ней считаются
+// и места, и линии, и разъехаться они не должны.
+const CARD_H = 74;
+/** Шаг между соседними сериями раунда. */
+const PITCH = 96;
+/** Ширина колонки вместе с промежутком под линии. */
+const COLUMN = CARD_W + 52;
+/** Отступ ленты раундов сверху и зазор между верхней и нижней сетками. */
+const HEADER_H = 30;
+const BAND_GAP = 56;
+
+interface Placed {
+  match: PlayoffMatch;
+  x: number;
+  y: number;
+}
+
+/**
+ * Координаты всех четырнадцати мест.
+ *
+ * Верхняя сетка — обычное дерево: четвертьфиналы с равным шагом, дальше каждая
+ * серия посередине между своими. Нижняя идёт лентой под ней: раунд в раунд, а
+ * полуфинал и финал — посередине пары. Гранд-финал стоит между лентами: сверху
+ * в него приходит верхний финал, снизу — нижний.
+ */
+function layout(matches: PlayoffMatch[]): { placed: Placed[]; width: number; height: number } {
+  const byKey = new Map(matches.map((match) => [match.key, match]));
+  const y: Record<string, number> = {};
+  const x: Record<string, number> = {};
+
+  const upperTop = HEADER_H;
+  ["ubqf1", "ubqf2", "ubqf3", "ubqf4"].forEach((key, index) => {
+    x[key] = 0;
+    y[key] = upperTop + index * PITCH;
+  });
+  const middle = (a: string, b: string) => (y[a] + y[b]) / 2;
+  x.ubsf1 = COLUMN;
+  y.ubsf1 = middle("ubqf1", "ubqf2");
+  x.ubsf2 = COLUMN;
+  y.ubsf2 = middle("ubqf3", "ubqf4");
+  // Финал верхней стоит в одной колонке с финалом нижней — как в компендиуме:
+  // так видно, что в гранд-финал они приходят с равных прав.
+  x.ubf = COLUMN * 3;
+  y.ubf = middle("ubsf1", "ubsf2");
+
+  const lowerTop = upperTop + 3 * PITCH + CARD_H + BAND_GAP + HEADER_H;
+  ["lbr1_1", "lbr1_2"].forEach((key, index) => {
+    x[key] = 0;
+    y[key] = lowerTop + index * PITCH;
+  });
+  ["lbr2_1", "lbr2_2"].forEach((key, index) => {
+    x[key] = COLUMN;
+    y[key] = lowerTop + index * PITCH;
+  });
+  x.lbsf = COLUMN * 2;
+  y.lbsf = middle("lbr2_1", "lbr2_2");
+  x.lbf = COLUMN * 3;
+  y.lbf = y.lbsf;
+
+  // Гранд-финал — между лентами: к нему сходятся оба финала.
+  x.gf = COLUMN * 4;
+  y.gf = middle("ubf", "lbf");
+
+  const placed = Object.keys(x)
+    .map((key) => {
+      const match = byKey.get(key);
+      return match ? { match, x: x[key], y: y[key] } : null;
+    })
+    .filter((entry): entry is Placed => entry !== null);
+
+  return {
+    placed,
+    width: COLUMN * 4 + CARD_W,
+    height: Math.max(...Object.values(y)) + CARD_H + 8,
+  };
+}
+
+/** Кто кого кормит внутри своей ленты — эти связи и рисуются линиями. */
+const LINKS: [from: string, to: string][] = [
+  ["ubqf1", "ubsf1"],
+  ["ubqf2", "ubsf1"],
+  ["ubqf3", "ubsf2"],
+  ["ubqf4", "ubsf2"],
+  ["ubsf1", "ubf"],
+  ["ubsf2", "ubf"],
+  ["ubf", "gf"],
+  ["lbr1_1", "lbr2_1"],
+  ["lbr1_2", "lbr2_2"],
+  ["lbr2_1", "lbsf"],
+  ["lbr2_2", "lbsf"],
+  ["lbsf", "lbf"],
+  ["lbf", "gf"],
+];
+
+/** Линии между местами: горизонталь, вертикаль, горизонталь. */
+function connectors(placed: Placed[]): string[] {
+  const at = new Map(placed.map((entry) => [entry.match.key, entry]));
+  const paths: string[] = [];
+  for (const [from, to] of LINKS) {
+    const a = at.get(from);
+    const b = at.get(to);
+    if (!a || !b) continue;
+    const x1 = a.x + CARD_W;
+    const y1 = a.y + CARD_H / 2;
+    const x2 = b.x;
+    const y2 = b.y + CARD_H / 2;
+    const mid = x1 + (x2 - x1) / 2;
+    paths.push(`M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`);
+  }
+  return paths;
+}
+
 function Crest({ name }: { name: string }) {
   const src = teamCrest(name);
   return src ? (
@@ -29,34 +149,60 @@ function Crest({ name }: { name: string }) {
   );
 }
 
-/** Одна сторона серии: команда со счётом или с вероятностью победы. */
+/** Прогноз на пустое место: кто вероятнее всего его займёт. */
+interface Projected {
+  name: string;
+  chance: number;
+}
+
+/** Одна сторона серии: участник со счётом или шансом — либо прогноз на место. */
 function Row({
   side,
+  projected,
   won,
   lost,
   chance,
   decided,
+  title,
 }: {
   side: { team_id: number; name: string; score: number } | null;
+  projected: Projected | null;
   won: boolean;
   lost: boolean;
   chance: number | null;
   decided: boolean;
+  title?: string;
 }) {
   const { t } = useT();
 
   if (!side) {
+    // Место ещё не разыграно. Показать «не определён» и уйти было бы честно, но
+    // бесполезно: вопрос-то как раз в том, кто сюда дойдёт.
     return (
-      <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-neutral-600">
-        <span className="h-4 w-4 shrink-0 rounded-sm border border-dashed border-[#2a2e3a]" />
-        <span className="flex-1">{t("playoff.tbd")}</span>
+      <div className="flex flex-1 items-center gap-2 px-2 text-[11px] text-neutral-600" title={title}>
+        {projected ? (
+          <>
+            <span className="opacity-40">
+              <Crest name={projected.name} />
+            </span>
+            <span className="flex-1 truncate text-neutral-500 italic">{projected.name}</span>
+            <span className="tabular w-10 text-right text-sky-500/80">
+              {Math.round(projected.chance * 100)}%
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="h-4 w-4 shrink-0 rounded-sm border border-dashed border-[#2a2e3a]" />
+            <span className="flex-1">{t("playoff.tbd")}</span>
+          </>
+        )}
       </div>
     );
   }
 
   const tone = won ? "text-neutral-100" : lost ? "text-neutral-600" : "text-neutral-300";
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 text-[11px]">
+    <div className="flex flex-1 items-center gap-2 px-2 text-[11px]" title={title}>
       <Crest name={side.name} />
       <span className={`flex-1 truncate ${tone}`}>{side.name}</span>
       {decided ? (
@@ -64,7 +210,7 @@ function Row({
           {side.score}
         </span>
       ) : (
-        <span className="tabular w-10 text-right text-neutral-500">
+        <span className="tabular w-10 text-right text-neutral-400">
           {chance == null ? "—" : `${Math.round(chance * 100)}%`}
         </span>
       )}
@@ -88,17 +234,38 @@ function MatchCard({
 
   // Кто сюда дойдёт — только пока участники не определились: у сыгранной серии
   // этот вопрос уже не стоит, а у начатой на него ответила первая карта.
-  const reach = useMemo(() => {
-    if (match.left && match.right) return [];
-    return Object.entries(match.reach)
-      .map(([id, value]) => ({ name: names.get(Number(id)) ?? id, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 3);
-  }, [match, names]);
+  const reach = useMemo(
+    () =>
+      Object.entries(match.reach)
+        .map(([id, value]) => ({ name: names.get(Number(id)) ?? id, chance: value }))
+        .sort((a, b) => b.chance - a.chance),
+    [match, names],
+  );
+
+  // Два самых вероятных занимают два пустых места: они и сыграют друг с другом,
+  // если всё пойдёт по прогнозу.
+  const free = [match.left, match.right].filter((side) => side === null).length;
+  const taken = new Set([match.left?.team_id, match.right?.team_id]);
+  const projected = reach
+    .filter((entry) => ![...taken].some((id) => id != null && names.get(id) === entry.name))
+    .slice(0, free);
+
+  const hint = reach.length
+    ? `${t("playoff.reach")}: ${reach
+        .slice(0, 4)
+        .map((entry) => `${entry.name} ${Math.round(entry.chance * 100)}%`)
+        .join(" · ")}`
+    : undefined;
+
+  let next = 0;
+  const projectedFor = (side: unknown) => (side ? null : (projected[next++] ?? null));
 
   return (
-    <div className="rounded border border-[#2a2e3a] bg-[#1a1d24]">
-      <div className="flex items-center justify-between border-b border-[#20232c] px-2 py-1 text-[10px] text-neutral-600">
+    <div
+      className="flex flex-col overflow-hidden rounded border border-[#2a2e3a] bg-[#1a1d24] shadow-sm"
+      style={{ height: CARD_H }}
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-[#20232c] bg-[#16181e] px-2 py-0.5 text-[10px] text-neutral-600">
         <span className="tabular">{t("playoff.bestOf", { n: match.best_of })}</span>
         {match.match_ids.length > 0 && onOpen && (
           <span className="flex gap-1">
@@ -118,65 +285,85 @@ function MatchCard({
 
       <Row
         side={match.left}
+        projected={projectedFor(match.left)}
         won={decided && match.winner_id === match.left?.team_id}
         lost={decided && match.winner_id !== match.left?.team_id}
         chance={chance(match.left?.team_id)}
         decided={decided}
+        title={hint}
       />
       <div className="border-t border-[#20232c]" />
       <Row
         side={match.right}
+        projected={projectedFor(match.right)}
         won={decided && match.winner_id === match.right?.team_id}
         lost={decided && match.winner_id !== match.right?.team_id}
         chance={chance(match.right?.team_id)}
         decided={decided}
+        title={hint}
       />
-
-      {reach.length > 0 && (
-        <div className="border-t border-[#20232c] px-2 py-1 text-[10px] text-neutral-500">
-          <span className="text-neutral-600">{t("playoff.reach")}: </span>
-          {reach.map((entry, index) => (
-            <span key={entry.name} className="whitespace-nowrap">
-              {index > 0 && " · "}
-              {entry.name}{" "}
-              <span className="tabular text-neutral-400">
-                {Math.round(entry.value * 100)}%
-              </span>
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
 
+/** Дерево сетки: карточки по вычисленным местам плюс линии между ними. */
 function Bracket({
-  rounds,
   matches,
   names,
   onOpen,
 }: {
-  rounds: readonly string[];
   matches: PlayoffMatch[];
   names: Map<number, string>;
   onOpen?: (id: number) => void;
 }) {
   const { tryT } = useT();
+  const { placed, width, height } = useMemo(() => layout(matches), [matches]);
+  const paths = useMemo(() => connectors(placed), [placed]);
+  const at = new Map(placed.map((entry) => [entry.match.key, entry]));
+
+  /** Подпись раунда — над первой его серией. */
+  const headers: { round: string; x: number; y: number }[] = [];
+  for (const round of [...UPPER_ROUNDS, ...LOWER_ROUNDS]) {
+    const first = placed
+      .filter((entry) => entry.match.round === round)
+      .sort((a, b) => a.y - b.y)[0];
+    if (first) headers.push({ round, x: first.x, y: first.y - HEADER_H + 4 });
+  }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {rounds.map((round) => (
-        <section key={round} className="space-y-2">
-          <header className="rounded border border-[#2a2e3a] bg-[#20232c] px-2 py-1 text-[11px] tracking-wide text-neutral-300 uppercase">
-            {tryT(`playoff.round.${round}`, round)}
-          </header>
-          {matches
-            .filter((match) => match.round === round)
-            .sort((a, b) => a.order - b.order)
-            .map((match) => (
-              <MatchCard key={match.key} match={match} names={names} onOpen={onOpen} />
-            ))}
-        </section>
-      ))}
+    <div className="overflow-x-auto pb-2">
+      <div className="relative" style={{ width, height }}>
+        <svg
+          className="pointer-events-none absolute inset-0"
+          width={width}
+          height={height}
+          aria-hidden
+        >
+          {paths.map((d) => (
+            <path key={d} d={d} fill="none" stroke="#3a4050" strokeWidth={1} />
+          ))}
+        </svg>
+
+        {headers.map((header) => (
+          <div
+            key={header.round}
+            className="absolute truncate rounded bg-[#20232c] px-2 py-0.5 text-[11px] tracking-wide text-neutral-300 uppercase"
+            style={{ left: header.x, top: header.y, width: CARD_W }}
+          >
+            {tryT(`playoff.round.${header.round}`, header.round)}
+          </div>
+        ))}
+
+        {[...at.values()].map((entry) => (
+          <div
+            key={entry.match.key}
+            className="absolute"
+            style={{ left: entry.x, top: entry.y, width: CARD_W }}
+          >
+            <MatchCard match={entry.match} names={names} onOpen={onOpen} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -255,20 +442,8 @@ export default function PlayoffPanel({ onOpen }: { onOpen?: (id: number) => void
               })
         }
       >
-        <div className="space-y-4">
-          <Bracket
-            rounds={UPPER_ROUNDS}
-            matches={playoffs.matches}
-            names={names}
-            onOpen={onOpen}
-          />
-          <Bracket
-            rounds={LOWER_ROUNDS}
-            matches={playoffs.matches}
-            names={names}
-            onOpen={onOpen}
-          />
-        </div>
+        <Bracket matches={playoffs.matches} names={names} onOpen={onOpen} />
+        <p className="mt-1 text-[11px] text-neutral-500">{t("playoff.legend")}</p>
         {!forecast && (
           <div className="mt-3">
             <Notice kind="warn">{t("playoff.noForecast")}</Notice>

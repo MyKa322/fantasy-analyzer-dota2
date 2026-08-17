@@ -577,6 +577,7 @@ const id: Dictionary = {
   "playoff.round.lbsf": "Semifinal bawah",
   "playoff.round.lbf": "Final bawah",
   "playoff.noForecast": "Belum ada peluang: sebagian dari delapan tim tidak punya rating di data. Bagannya sendiri ditampilkan sesuai pengumuman.",
+  "playoff.legend": "Abu-abu miring adalah prakiraan untuk slot kosong: siapa yang paling mungkin sampai ke sana dan seberapa besar peluangnya. Di sebelah tim yang sudah ada di bagan, persentasenya lain — itu peluang memenangi seri tersebut.",
   "playoff.chancesTitle": "Sejauh apa tiap tim melaju",
   "playoff.chancesSubtitle": "Sisa bagan disimulasikan dari rating saat ini. Seri yang sudah dimainkan masuk sebagai fakta, bukan lempar koin.",
   "playoff.recordColumn": "Rekor",

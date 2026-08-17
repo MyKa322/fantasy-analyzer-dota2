@@ -577,6 +577,7 @@ const es: Dictionary = {
   "playoff.round.lbsf": "Semifinal inferior",
   "playoff.round.lbf": "Final inferior",
   "playoff.noForecast": "Todavía no hay probabilidades: parte de los ocho no tiene rating en los datos. El cuadro se muestra tal y como fue anunciado.",
+  "playoff.legend": "En gris y cursiva va el pronóstico de una casilla vacía: quién es más probable que llegue y con qué probabilidad. Junto a un equipo que ya está en el cuadro el porcentaje es otro: la opción de ganar esa serie.",
   "playoff.chancesTitle": "Hasta dónde llega cada equipo",
   "playoff.chancesSubtitle": "El resto del cuadro simulado con los ratings actuales. Las series ya jugadas entran como hecho, no como moneda al aire.",
   "playoff.recordColumn": "Balance",

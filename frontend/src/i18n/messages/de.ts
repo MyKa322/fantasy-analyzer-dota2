@@ -577,6 +577,7 @@ const de: Dictionary = {
   "playoff.round.lbsf": "Halbfinale unten",
   "playoff.round.lbf": "Finale unten",
   "playoff.noForecast": "Noch keine Wahrscheinlichkeiten: für einen Teil der acht fehlt die Wertung in den Daten. Das Bracket selbst steht so, wie es angekündigt wurde.",
+  "playoff.legend": "Grau und kursiv ist die Prognose für einen freien Platz: wer dort am ehesten landet und mit welcher Wahrscheinlichkeit. Bei einem Team, das schon dort steht, bedeutet die Prozentzahl etwas anderes — die Chance, diese Serie zu gewinnen.",
   "playoff.chancesTitle": "Wie weit jedes Team kommt",
   "playoff.chancesSubtitle": "Das restliche Bracket, simuliert aus den aktuellen Wertungen. Bereits gespielte Serien gehen als Fakt ein, nicht als Münzwurf.",
   "playoff.recordColumn": "Bilanz",

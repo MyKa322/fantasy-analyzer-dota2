@@ -577,6 +577,7 @@ const vi: Dictionary = {
   "playoff.round.lbsf": "Bán kết nhánh dưới",
   "playoff.round.lbf": "Chung kết nhánh dưới",
   "playoff.noForecast": "Chưa có xác suất: một phần trong tám đội chưa có điểm đánh giá trong dữ liệu. Nhánh đấu vẫn hiển thị đúng như công bố.",
+  "playoff.legend": "Chữ xám in nghiêng là dự báo cho ô trống: ai có khả năng tới đó nhất và với xác suất bao nhiêu. Bên cạnh đội đã có mặt trong nhánh, phần trăm mang nghĩa khác — cơ hội thắng chính series đó.",
   "playoff.chancesTitle": "Mỗi đội đi được tới đâu",
   "playoff.chancesSubtitle": "Phần nhánh còn lại được mô phỏng theo điểm đánh giá hiện tại. Series đã đấu vào như sự thật, không phải tung đồng xu.",
   "playoff.recordColumn": "Thành tích",

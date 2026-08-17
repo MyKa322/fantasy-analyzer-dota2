@@ -577,6 +577,7 @@ const zh: Dictionary = {
   "playoff.round.lbsf": "败者组半决赛",
   "playoff.round.lbf": "败者组决赛",
   "playoff.noForecast": "暂时没有概率：八强中有战队在数据里没有评分。对阵表本身仍按公布的样子显示。",
+  "playoff.legend": "灰色斜体是空位的预测：谁最可能走到这里，概率多大。已经确定进入对阵表的战队旁边的百分比含义不同——那是赢下这场系列赛的概率。",
   "playoff.chancesTitle": "各队能走多远",
   "playoff.chancesSubtitle": "剩余对阵按当前评分模拟。已经打完的系列赛按事实计入，而不是重新抛硬币。",
   "playoff.recordColumn": "战绩",
