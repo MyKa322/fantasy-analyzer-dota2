@@ -8,6 +8,7 @@ import {
   fitInventory,
   inventoryGaps,
   optimiseBanner,
+  roleSlots,
   scoreBanner,
   type Availability,
   type GroupColor,
@@ -801,7 +802,7 @@ const staticApi: typeof live = {
       // Команды нет в этом периоде — значит, и очков в нём не будет: в плей-офф
       // играют восемь команд из шестнадцати, и остальным нечего показывать.
       if (!ratios) continue;
-      const banner = neutralBannerFor(role.role, snapshot.rules);
+      const banner = neutralBannerFor(role.role, snapshot.rules, stage);
       const values = new Map(role.stats.map((s) => [s.stat, s]));
       const card = scoreBanner(banner, values, snapshot.rules).total;
       const mean = card * ratios.period;
@@ -877,6 +878,8 @@ const staticApi: typeof live = {
       qualities: payload.qualities ?? undefined,
       traits: payload.traits ?? undefined,
       topN: payload.top_n ?? 3,
+      // Раскладка периода: в основном этапе слотов пять, и цвета там свои.
+      stage: payload.stage,
     });
 
     // Период считается по выбранному этапу: в плей-офф у команды другое число
@@ -939,7 +942,7 @@ const staticApi: typeof live = {
     const gaps: Record<string, string[]> = {};
     for (const role of Object.keys(snapshot.rules.role_slots)) {
       if (payload.role && role !== payload.role) continue;
-      const missing = inventoryGaps(payload.inventory, role, snapshot.rules);
+      const missing = inventoryGaps(payload.inventory, role, snapshot.rules, payload.stage);
       if (missing.length) {
         gaps[role] = missing.map((m) =>
           tr().t("error.gap", { color: m.color, need: m.need, have: m.have }),
@@ -954,7 +957,13 @@ const staticApi: typeof live = {
       if (role.games < (payload.min_games ?? 5)) continue;
       const ratios = periodRatios(role, payload.stage ?? GROUP_STAGE, payload.series ?? 5);
       if (!ratios) continue;
-      const fit = fitInventory(role.role, payload.inventory, role.stats, snapshot.rules);
+      const fit = fitInventory(
+        role.role,
+        payload.inventory,
+        role.stats,
+        snapshot.rules,
+        payload.stage,
+      );
       if (!fit) continue;
       fits.push({
         role: role.role,
@@ -1056,15 +1065,24 @@ const staticApi: typeof live = {
 // Те же нейтральные наборы, что и в backend/app/fantasy/presets.py: порядок
 // статов соответствует цветам слотов роли. Расхождение здесь означало бы, что
 // опубликованная страница и локальный расчёт дают разные числа.
+//
+// У основного этапа набор свой — там пять слотов, — и берётся он из снапшота:
+// его считает тот же бэкенд, что и коэффициенты периода.
 const NEUTRAL_ROLE_STATS: Record<string, string[]> = {
   core: ["gpm", "kills", "teamfight_participation"],
   mid: ["gpm", "runes_grabbed", "teamfight_participation"],
   support: ["wards_placed", "camps_stacked", "stuns"],
 };
 
-function neutralBannerFor(role: string, rules: RulesSnapshot): Emblem[] {
-  const stats = NEUTRAL_ROLE_STATS[role] ?? NEUTRAL_ROLE_STATS.core;
-  const colors = rules.role_slots[role] ?? [];
+function neutralBannerFor(
+  role: string,
+  rules: RulesSnapshot,
+  stage?: string,
+): Emblem[] {
+  const layout = stage ? rules.stages?.[stage] : undefined;
+  const stats =
+    layout?.neutral_stats?.[role] ?? NEUTRAL_ROLE_STATS[role] ?? NEUTRAL_ROLE_STATS.core;
+  const colors = roleSlots(rules, role, layout ? stage : undefined);
   return colors.map((_, index) => ({
     stat: stats[index],
     quality: "tier_3",

@@ -17,7 +17,8 @@ import {
   YAxis,
 } from "recharts";
 import { GROUP_COLOR, heroIcon, itemIcon, loadItemManifest } from "../assets";
-import { statPoints, type RulesSnapshot, type StatScoring } from "../engine/scoring";
+import { roleSlots, statPoints, type RulesSnapshot, type StatScoring } from "../engine/scoring";
+import { stageForDate } from "../fantasyStage";
 import { findPair, loadHeadToHead, type HeadToHead } from "../headToHead";
 import { useT } from "../i18n";
 import {
@@ -95,8 +96,9 @@ function neutralBanner(
   role: string,
   points: Map<string, number>,
   rules: RulesSnapshot,
+  stage?: string,
 ): { color: string; stat: string; label: string; points: number }[] {
-  const colors = rules.role_slots[role] ?? ["red", "red", "green"];
+  const colors = roleSlots(rules, role, stage);
   const usable = rules.stats.filter((stat) => stat.availability !== "unavailable");
   const taken = new Set<string>();
 
@@ -312,8 +314,15 @@ export default function MatchPanel({
 
     assignRoles(rows.filter((row) => row.radiant));
     assignRoles(rows.filter((row) => !row.radiant));
+    // Период карты — по её дате: в основном этапе баннер на пять эмблем, и
+    // очки за ту же игру считаются иначе, чем в группе. OpenDota отдаёт время
+    // unix-секундами, периоды в снапшоте — календарными днями.
+    const stage = stageForDate(
+      snapshot.stages ?? [],
+      new Date(match.start_time * 1000).toISOString(),
+    );
     for (const row of rows) {
-      row.banner = neutralBanner(row.role, row.points, rules);
+      row.banner = neutralBanner(row.role, row.points, rules, stage);
       row.total = row.banner.reduce((sum, slot) => sum + slot.points, 0);
     }
 

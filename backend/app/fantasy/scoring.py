@@ -100,9 +100,14 @@ class Banner:
         *,
         strict_slots: bool = False,
         check_role_colors: bool = False,
+        stage: str | None = None,
     ) -> None:
-        """Проверить баннер на соответствие правилам. Бросает ValueError."""
-        layout = rules.banner
+        """Проверить баннер на соответствие правилам. Бросает ValueError.
+
+        `stage` выбирает раскладку периода: в группе у роли три слота, в
+        основном этапе — пять, и цвета там свои.
+        """
+        layout = rules.layout(stage).banner
         if strict_slots and len(self.emblems) != layout.slots:
             raise ValueError(
                 f"баннер должен содержать {layout.slots} эмблем, получено {len(self.emblems)}"
@@ -111,7 +116,7 @@ class Banner:
         if check_role_colors:
             if self.role is None:
                 raise ValueError("для проверки цветов у баннера должна быть указана роль")
-            expected = rules.slot_colors(self.role)
+            expected = rules.slot_colors(self.role, stage)
             if len(self.emblems) != len(expected):
                 raise ValueError(
                     f"роль {self.role!r} использует {len(expected)} слотов, "

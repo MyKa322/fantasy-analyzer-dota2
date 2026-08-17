@@ -26,6 +26,27 @@ export interface ChangelogEntry {
 /** Новое сверху: список читают с начала и до первой знакомой версии. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.6.0",
+    date: "2026-08-17",
+    items: [
+      {
+        kind: "fixed",
+        en: "The International period is played with five emblems per role, not three — the banner, the slot colours and every projection now follow the main event layout.",
+        ru: "В периоде The International у роли пять эмблем, а не три: баннер, цвета слотов и все проекции считаются по раскладке основного этапа.",
+      },
+      {
+        kind: "changed",
+        en: "The emblem search was rewritten: a full sweep over five slots is twenty-four million combinations, so the score is now split into per-slot terms and only the trait conditions are enumerated. Same answers as the old brute force, and instant on five slots.",
+        ru: "Подбор эмблем переписан: полный перебор на пяти слотах — двадцать четыре миллиона вариантов, поэтому счёт разложен на слагаемые по слотам, а перебираются только условия трейтов. Ответы те же, что у полного перебора, и мгновенно.",
+      },
+      {
+        kind: "changed",
+        en: "A map from the main event is scored on the five-emblem banner on the match page too — the period is taken from the date of the game.",
+        ru: "Карта основного этапа и на странице матча считается по баннеру из пяти эмблем — период берётся по дате игры.",
+      },
+    ],
+  },
+  {
     version: "0.5.0",
     date: "2026-08-17",
     items: [

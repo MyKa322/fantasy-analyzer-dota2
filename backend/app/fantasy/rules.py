@@ -133,6 +133,28 @@ class BannerLayout:
 
 
 @dataclass(frozen=True, slots=True)
+class StageLayout:
+    """Раскладка баннера одного периода: сколько слотов и какого цвета.
+
+    Периодов два, и они играются разными баннерами: в группе у роли три
+    эмблемы, в основном этапе — пять. Всё остальное (цены статов, бонусы
+    качеств, трейты) общее, поэтому меняется только раскладка.
+    """
+
+    key: str
+    banner: "BannerLayout"
+    role_slots: dict[str, tuple[Color, ...]]
+
+    def slot_colors(self, role: str) -> tuple[Color, ...]:
+        try:
+            return self.role_slots[role]
+        except KeyError:
+            raise KeyError(
+                f"неизвестная роль {role!r}; известны: {sorted(self.role_slots)}"
+            ) from None
+
+
+@dataclass(frozen=True, slots=True)
 class RoleRule:
     key: str
     label: str
@@ -160,28 +182,32 @@ class FantasyRules:
     # Цвета слотов по ролям: core [red, red, green] и т.д. Цвет задан ролью и не
     # рероллится — он же ограничивает набор доступных роли статов.
     role_slots: dict[str, tuple[Color, ...]] = field(default_factory=dict)
+    # Периоды с другой раскладкой баннера: у основного этапа пять слотов вместо
+    # трёх. Ключ совпадает с ключом периода Fantasy в конфиге предсказаний.
+    stages: dict[str, StageLayout] = field(default_factory=dict)
     titles: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
-    def slot_colors(self, role: str) -> tuple[Color, ...]:
-        try:
-            return self.role_slots[role]
-        except KeyError:
-            raise KeyError(
-                f"неизвестная роль {role!r}; известны: {sorted(self.role_slots)}"
-            ) from None
+    def layout(self, stage: str | None = None) -> StageLayout:
+        """Раскладка периода. Без периода — базовая, то есть групповой этап."""
+        if stage is not None and stage in self.stages:
+            return self.stages[stage]
+        return StageLayout(key="group", banner=self.banner, role_slots=self.role_slots)
 
-    def stats_for_role(self, role: str) -> dict[int, list[StatRule]]:
+    def slot_colors(self, role: str, stage: str | None = None) -> tuple[Color, ...]:
+        return self.layout(stage).slot_colors(role)
+
+    def stats_for_role(self, role: str, stage: str | None = None) -> dict[int, list[StatRule]]:
         """Какие статы доступны роли в каждом слоте баннера."""
         return {
             index: self.stats_by_color(color)
-            for index, color in enumerate(self.slot_colors(role))
+            for index, color in enumerate(self.slot_colors(role, stage))
         }
 
-    def available_stats(self, role: str) -> set[str]:
+    def available_stats(self, role: str, stage: str | None = None) -> set[str]:
         """Все статы, которые роль вообще может получить на баннер."""
         return {
             stat.key
-            for color in set(self.slot_colors(role))
+            for color in set(self.slot_colors(role, stage))
             for stat in self.stats_by_color(color)
         }
 
@@ -210,6 +236,35 @@ class FantasyRules:
         raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         banner_raw = raw.get("banner", {})
         scoring_raw = raw.get("scoring_rules", {})
+        base_role_slots = {
+            role: tuple(Color(c) for c in colors)
+            for role, colors in (raw.get("role_slots") or {}).items()
+        }
+
+        def stage_layout(key: str, stage_raw: dict[str, Any]) -> StageLayout:
+            """Раскладка периода: своё число слотов и свои цвета, остальное общее."""
+            banner = BannerLayout(
+                slots=int(stage_raw.get("slots", banner_raw.get("slots", 3))),
+                adjacency=str(stage_raw.get("adjacency", banner_raw.get("adjacency", "linear"))),
+                allow_duplicate_stats=bool(
+                    stage_raw.get(
+                        "allow_duplicate_stats", banner_raw.get("allow_duplicate_stats", False)
+                    )
+                ),
+                per_role=bool(stage_raw.get("per_role", banner_raw.get("per_role", True))),
+            )
+            colors = {
+                role: tuple(Color(c) for c in values)
+                for role, values in (stage_raw.get("role_slots") or {}).items()
+            } or base_role_slots
+            for role, values in colors.items():
+                if len(values) != banner.slots:
+                    raise ValueError(
+                        f"период {key!r}: у роли {role!r} {len(values)} слотов, "
+                        f"а баннер на {banner.slots}"
+                    )
+            return StageLayout(key=key, banner=banner, role_slots=colors)
+
         return cls(
             version=raw.get("version", "unknown"),
             source=raw.get("source", ""),
@@ -232,9 +287,10 @@ class FantasyRules:
                 },
             ),
             trait_bonus_mode=str(raw.get("trait_bonus_mode", "additive")),
-            role_slots={
-                role: tuple(Color(c) for c in colors)
-                for role, colors in (raw.get("role_slots") or {}).items()
+            role_slots=base_role_slots,
+            stages={
+                key: stage_layout(key, value)
+                for key, value in (banner_raw.get("stages") or {}).items()
             },
             titles=raw.get("titles", {}) or {},
         )

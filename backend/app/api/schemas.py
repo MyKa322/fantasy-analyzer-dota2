@@ -236,6 +236,8 @@ class BannerAdviceRequest(BaseModel):
     top_n: int = 3
     history_days: int = 180
     series: int = 5
+    # Период Fantasy: у основного этапа баннер на пять эмблем, а не на три.
+    stage: str | None = None
 
 
 class StatReportRequest(BaseModel):
@@ -305,6 +307,8 @@ class InventoryRequest(BaseModel):
     history_days: int = 180
     min_games: int = 5
     top_n: int = 16
+    # Период Fantasy: раскладка баннера у периодов разная.
+    stage: str | None = None
 
 
 class InventoryFitOut(BaseModel):

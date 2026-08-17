@@ -35,7 +35,7 @@ from app.analytics.simulate import (  # noqa: E402
 from app.db.models import Team  # noqa: E402
 from app.db.session import init_db, session_scope  # noqa: E402
 from app.fantasy.advisor import EmblemAdvisor  # noqa: E402
-from app.fantasy.presets import neutral_banner  # noqa: E402
+from app.fantasy.presets import neutral_banner, neutral_stats  # noqa: E402
 from app.fantasy.projection import RoleProjector  # noqa: E402
 from app.fantasy.rules import load_rules  # noqa: E402
 from app.fantasy.shrinkage import shrink_to_role_mean  # noqa: E402
@@ -65,6 +65,21 @@ def export_rules() -> dict:
         "trait_bonus_mode": rules.trait_bonus_mode,
         "banner_slots": rules.banner.slots,
         "role_slots": {role: [str(c) for c in colors] for role, colors in rules.role_slots.items()},
+        # Раскладки периодов: в основном этапе у роли пять слотов, а не три, и
+        # цвета там свои. Без этого браузер собирал бы баннер группового этапа.
+        "stages": {
+            key: {
+                "slots": layout.banner.slots,
+                "role_slots": {
+                    role: [str(color) for color in colors]
+                    for role, colors in layout.role_slots.items()
+                },
+                "neutral_stats": {
+                    role: list(neutral_stats(role, key)) for role in layout.role_slots
+                },
+            }
+            for key, layout in rules.stages.items()
+        },
         "qualities": rules.qualities,
         "traits": [
             {
@@ -484,6 +499,11 @@ def playoff_series_distributions(playoffs: dict | None) -> dict[int, dict[int, f
     }
 
 
+def _ratio(period: float, card: float) -> float:
+    """Во сколько раз счёт за период больше счёта за карту тем же баннером."""
+    return round(period / card, 4) if card else 0.0
+
+
 def _stat_row(value) -> dict:
     return {
         "stat": value.stat,
@@ -604,16 +624,24 @@ def export_roles(
             # Основной этап: распределение серий по сетке плей-офф, если команда
             # в неё попала. У вылетевших этого ключа не будет — и это ровно то,
             # что нужно показать: в этом периоде им уже не набрать ничего.
+            #
+            # Баннер там другой — пять эмблем вместо трёх, — поэтому и делится
+            # проекция на счёт своего баннера: коэффициент периода должен
+            # умножаться на карту того же этапа, иначе очки вырастут на ровном
+            # месте.
+            main_banner = neutral_banner(role, stage=PLAYOFF_STAGE_KEY)
+            main_card = advisor.projector.expected_card_score(history, main_banner)
             if team_id in playoff_series:
                 projections[PLAYOFF_STAGE_KEY] = advisor.projector.project(
                     history,
-                    neutral_banner(role),
+                    main_banner,
                     simulations=simulations,
                     series_distribution=playoff_series[team_id],
                 )
 
             projection = projections[series]
             neutral_card = advisor.projector.expected_card_score(history, neutral_banner(role))
+            cards = {PLAYOFF_STAGE_KEY: main_card}
 
             rows.append(
                 {
@@ -667,13 +695,14 @@ def export_roles(
                     if neutral_card
                     else 0.0,
                     # То же самое для каждого числа серий: переключатель на
-                    # странице ростера выбирает отсюда.
+                    # странице ростера выбирает отсюда. У периода со своим
+                    # баннером делитель свой — см. main_card выше.
                     "period_ratios": {
-                        str(count): round(p.mean / neutral_card, 4) if neutral_card else 0.0
+                        str(count): _ratio(p.mean, cards.get(count, neutral_card))
                         for count, p in projections.items()
                     },
                     "ceiling_ratios": {
-                        str(count): round(p.ceiling / neutral_card, 4) if neutral_card else 0.0
+                        str(count): _ratio(p.ceiling, cards.get(count, neutral_card))
                         for count, p in projections.items()
                     },
                     # Кого эта роль берёт: по этому же пулу оцениваются префиксы

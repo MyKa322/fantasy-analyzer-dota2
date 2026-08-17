@@ -34,10 +34,10 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from itertools import product
 
 import numpy as np
 
+from .banner_search import search_banners
 from .projection import Projection, RoleGame, RoleHistory, RoleProjector
 from .rules import FantasyRules
 from .scoring import Banner, Emblem
@@ -442,6 +442,7 @@ class EmblemAdvisor:
         history: RoleHistory,
         *,
         role: str | None = None,
+        stage: str | None = None,
         qualities: Sequence[str] | None = None,
         traits: Sequence[str | None] | None = None,
         stats_per_slot: int = 3,
@@ -457,15 +458,19 @@ class EmblemAdvisor:
         если из роллов выпали только Tier II и III, оптимум надо искать среди
         них, а не среди недостижимых Tier V.
 
+        `stage` задаёт раскладку: в группе у роли три эмблемы, в основном этапе
+        пять, и цвета слотов там свои.
+
         Перебор идёт в два круга. Сначала по каждому цветному слоту берутся
         `stats_per_slot` лучших статов по базовым очкам — остальные при любых
-        качестве и трейте не догонят. Затем полный перебор комбинаций качеств и
-        трейтов: их взаимодействие нелинейно (Fractal требует три разных
-        качества, Friendly — три одинаковых трейта), поэтому жадный выбор по
-        слотам здесь ошибается.
+        качестве и трейте не догонят. Затем под каждую комбинацию статов
+        подбираются качества и трейты: их взаимодействие нелинейно (Fractal
+        требует все качества разными, Friendly — три Friendly-эмблемы), поэтому
+        жадный выбор по слотам ошибается, а полный перебор на пяти слотах уже не
+        помещается. Как это решается — см. `banner_search`.
         """
         role = role or history.role
-        colors = self.rules.slot_colors(role)
+        colors = self.rules.slot_colors(role, stage)
         qualities = list(qualities or self.rules.qualities)
         traits = list(traits) if traits is not None else [None, *self.rules.traits]
 
@@ -476,83 +481,37 @@ class EmblemAdvisor:
         for color_values in by_color.values():
             color_values.sort(key=lambda v: -v.base_points)
 
+        # Пул слота не может быть меньше числа слотов того же цвета: два статa на
+        # три красных слота — это ноль допустимых баннеров, повторы запрещены.
+        # Поэтому на пяти слотах основного этапа пул автоматически шире.
+        same_color = Counter(str(color) for color in colors)
         slot_candidates: list[list[StatValue]] = []
         for color in colors:
             pool = by_color.get(str(color), [])
             if not pool:
                 raise ValueError(f"нет доступных статов цвета {color} для роли {role}")
-            slot_candidates.append(pool[:stats_per_slot])
+            depth = max(stats_per_slot, same_color[str(color)] + 1)
+            slot_candidates.append(pool[:depth])
 
-        # Множители зависят только от качеств и трейтов — статы на них не влияют.
-        # Поэтому набор множителей считается один раз, а не заново для каждой
-        # комбинации статов: 27 тысяч вариантов вместо трёх четвертей миллиона.
-        layouts: list[tuple[tuple[str, ...], tuple[str | None, ...]]] = []
-        multiplier_rows: list[list[float]] = []
-        probe_stats = [pool[0].stat for pool in slot_candidates]
-        for quality_combo in product(qualities, repeat=len(colors)):
-            for trait_combo in product(traits, repeat=len(colors)):
-                probe = Banner(
-                    emblems=tuple(
-                        Emblem(stat=s, quality=q, trait=t)
-                        for s, q, t in zip(
-                            probe_stats, quality_combo, trait_combo, strict=True
-                        )
-                    ),
-                    role=role,
-                )
-                layouts.append((quality_combo, trait_combo))
-                multiplier_rows.append(list(self.scorer.emblem_multipliers(probe)))
-
-        multipliers_matrix = np.array(multiplier_rows)  # (варианты, слоты)
-
-        stat_combos: list[tuple[str, ...]] = []
-        base_rows: list[list[float]] = []
-        for stat_combo in product(*slot_candidates):
-            stats = tuple(v.stat for v in stat_combo)
-            if not self.rules.banner.allow_duplicate_stats and len(set(stats)) != len(stats):
-                continue
-            stat_combos.append(stats)
-            base_rows.append([values[s].base_points for s in stats])
-
-        if not stat_combos:
+        best = search_banners(
+            self.rules,
+            slot_stats=[[v.stat for v in pool] for pool in slot_candidates],
+            base_by_stat={stat: value.base_points for stat, value in values.items()},
+            qualities={q: self.rules.quality_bonus(q) for q in qualities},
+            traits=traits,
+            multipliers=lambda emblems: self.scorer.emblem_multipliers(
+                Banner(emblems=tuple(emblems), role=role)
+            ),
+            allow_duplicate_stats=self.rules.banner.allow_duplicate_stats,
+            top_n=top_n,
+        )
+        if not best:
             raise ValueError(f"не удалось собрать баннер для роли {role}")
 
-        base_matrix = np.array(base_rows)  # (комбинации статов, слоты)
-        totals = base_matrix @ multipliers_matrix.T  # (статы, качества-трейты)
-
-        # Берём с запасом: часть верхних вариантов схлопнется как дубликаты.
-        flat = totals.ravel()
-        take = min(flat.size, max(top_n * 20, 50))
-        order = np.argpartition(-flat, take - 1)[:take]
-        order = order[np.argsort(-flat[order])]
-
-        best: list[tuple[float, tuple[Emblem, ...]]] = []
-        for position in order:
-            stat_index, layout_index = divmod(int(position), multipliers_matrix.shape[0])
-            stats = stat_combos[stat_index]
-            quality_combo, trait_combo = layouts[layout_index]
-            best.append(
-                (
-                    float(flat[position]),
-                    tuple(
-                        Emblem(stat=s, quality=q, trait=t)
-                        for s, q, t in zip(stats, quality_combo, trait_combo, strict=True)
-                    ),
-                )
-            )
-
-        advices: list[BannerAdvice] = []
-        seen: set[tuple[tuple[str, str, str | None], ...]] = set()
-        for total, emblems in best:
-            key = tuple((e.stat, e.quality, e.trait) for e in emblems)
-            if key in seen:
-                continue
-            seen.add(key)
-            advices.append(
-                self._describe(history, role, emblems, total, values, by_color)
-            )
-            if len(advices) >= top_n:
-                break
+        advices = [
+            self._describe(history, role, emblems, total, values, by_color)
+            for total, emblems in best
+        ]
 
         if simulate:
             for advice in advices:
@@ -640,7 +599,7 @@ class EmblemAdvisor:
     # --- 3. свои эмблемы -> под кого их ставить -------------------------------
 
     def inventory_gaps(
-        self, inventory: Sequence[Emblem], role: str
+        self, inventory: Sequence[Emblem], role: str, *, stage: str | None = None
     ) -> tuple[str, ...]:
         """Каких цветов не хватает, чтобы вообще заполнить баннер этой роли.
 
@@ -648,7 +607,7 @@ class EmblemAdvisor:
         фиксированы ролью, и если синих эмблем всего одна, саппорта не собрать
         ни с кем.
         """
-        colors = [str(c) for c in self.rules.slot_colors(role)]
+        colors = [str(c) for c in self.rules.slot_colors(role, stage)]
         need: dict[str, int] = {}
         for color in colors:
             need[color] = need.get(color, 0) + 1
@@ -672,6 +631,7 @@ class EmblemAdvisor:
         inventory: Sequence[Emblem],
         *,
         role: str | None = None,
+        stage: str | None = None,
         now: datetime | None = None,
         values: Mapping[str, StatValue] | None = None,
     ) -> InventoryFit:
@@ -691,8 +651,8 @@ class EmblemAdvisor:
         встанет на баннер только если ставить больше нечего.
         """
         role = role or history.role
-        colors = [str(c) for c in self.rules.slot_colors(role)]
-        gaps = self.inventory_gaps(inventory, role)
+        colors = [str(c) for c in self.rules.slot_colors(role, stage)]
+        gaps = self.inventory_gaps(inventory, role, stage=stage)
         if gaps:
             raise ValueError(f"инвентаря не хватает на роль {role}: {'; '.join(gaps)}")
 
@@ -782,6 +742,7 @@ class EmblemAdvisor:
         inventory: Sequence[Emblem],
         histories: Iterable[RoleHistory],
         *,
+        stage: str | None = None,
         now: datetime | None = None,
         min_games: int = 5,
     ) -> list[InventoryFit]:
@@ -797,7 +758,7 @@ class EmblemAdvisor:
             history
             for history in histories
             if len(history.games) >= min_games
-            and not self.inventory_gaps(inventory, history.role)
+            and not self.inventory_gaps(inventory, history.role, stage=stage)
         ]
         adjusted = shrink_to_role_mean(
             [
@@ -808,7 +769,11 @@ class EmblemAdvisor:
 
         fits = [
             self.fit_inventory(
-                history, inventory, now=now, values={v.stat: v for v in values}
+                history,
+                inventory,
+                stage=stage,
+                now=now,
+                values={v.stat: v for v in values},
             )
             for history, values in zip(eligible, adjusted, strict=True)
         ]

@@ -60,9 +60,10 @@ percent = 100% + quality bonus + own trait (if its condition holds) + neighbour 
 | GPM, Tier II, Vampiric | 100 + 30 + 50 | 180% |
 | GPM (mid), Tier II, Unique | 100 + 30 + 30 − 10 (Vampiric neighbour) | 150% |
 
-The same cards imply two more facts: there are **exactly three slots**, and **emblems sit in a
-column** — on the core banner a Vampiric at the bottom took 10% off the middle slot only, while the
-top one kept its 130%. In a ring layout both would have suffered.
+The same cards imply two more facts: the group stage has **exactly three slots** (the main event has
+five — see "Playoffs" below), and **emblems sit in a column** — on the core banner a Vampiric at the
+bottom took 10% off the middle slot only, while the top one kept its 130%. In a ring layout both
+would have suffered.
 
 ### Slot colours are fixed by the role
 
@@ -71,6 +72,9 @@ top one kept its 130%. In a ring layout both would have suffered.
 | Core | 🔴 🔴 🟢 | GPM and Creep Score are available, wards and smokes never will be |
 | Mid | 🔴 🔵 🟢 | the only role with all three colours |
 | Support | 🔵 🔵 🟢 | GPM is out of reach entirely |
+
+The main event has five slots in the same proportions: core 🔴 🟢 🔴 🟢 🔴, mid 🔴 🔵 🟢 🔴 🟢,
+support 🔵 🟢 🔵 🟢 🔵.
 
 The colour never rerolls — only the stat inside the colour, the quality and the trait do. That is
 why both the emblem search and the per-stat player ranking stay strictly inside the colours the
@@ -310,6 +314,29 @@ distribution from the bracket simulation. The best series of the period counts, 
 worth more than one strong map — and a team outside the bracket scores nothing at all, which the page
 says outright instead of showing a zero.
 
+**The banner differs by period too: the main event has five emblems, not three.** That is what the
+Fantasy screen of 2026-08-17 shows, and it changes the layout rather than a caption: a core has three
+red slots and two green, a mid two-one-two, a support three blue and two green. The layouts live in
+`banner.stages` of the Fantasy config; everything else — stat prices, quality bonuses, traits — is
+shared between periods.
+
+Five slots break the old search. A full sweep is |qualities|^slots × |traits|^slots: 27 thousand
+combinations on three slots and an instant answer, twenty-four million on five, which fits neither in
+time nor in memory. That much is not needed, because the score splits into per-slot terms
+
+```
+score = Σ base_i · (1 + quality_i + own trait_i)  +  Σ neighbour_effect(trait_i) · (sum of neighbour bases at i)
+```
+
+and the only thing coupling the slots is the trait conditions: Fractal wants all qualities distinct,
+Unique wants to be alone on the banner, Friendly wants at least three of its kind. So the search
+enumerates the eight "which conditions fired" cases and picks quality and trait per slot inside each
+(with Fractal active the qualities are distinct, and by the rearrangement inequality the larger bonus
+goes to the slot with the larger base points). The chosen variant is then scored by the real
+multiplier formula, and tests compare the result against the full sweep —
+[`test_banner_search.py`](backend/tests/test_banner_search.py). The browser runs the same algorithm:
+[`engine/scoring.ts`](frontend/src/engine/scoring.ts).
+
 Roster slots are independent: the compendium allows taking a mid and supports from the same lineup
 (that is what the Fantasy screen shows), and the suggester no longer throws those combinations away.
 
@@ -463,7 +490,8 @@ backend/
                                   point scales, participants
   config/ti15_rosters.yaml        manual roster overrides (they beat the automation)
   app/
-    fantasy/rules.py              loading and typing of the rules
+    fantasy/rules.py              loading and typing of the rules, period layouts
+    fantasy/banner_search.py      banner search: decomposition instead of a sweep
     fantasy/scoring.py            the point engine: emblems -> player -> role -> series -> period
     fantasy/projection.py         bootstrap projection of a role's points over a period
     fantasy/advisor.py            the analyzer: stat value, banner search, per-stat ranking

@@ -636,6 +636,7 @@ def best_banner(
         advices = advisor.optimise_banner(
             history,
             role=request.role,
+            stage=request.stage,
             qualities=request.qualities,
             traits=request.traits,
             simulate=request.simulate,
@@ -875,7 +876,7 @@ def inventory_fit(
     for role_key in rules.role_slots:
         if request.role and role_key != request.role:
             continue
-        missing = advisor.inventory_gaps(inventory, role_key)
+        missing = advisor.inventory_gaps(inventory, role_key, stage=request.stage)
         if missing:
             gaps[role_key] = list(missing)
 
@@ -896,7 +897,9 @@ def inventory_fit(
             history.team_name = team_name
             histories.append(history)
 
-    fits = advisor.rank_inventory(inventory, histories, min_games=request.min_games)[
+    fits = advisor.rank_inventory(
+        inventory, histories, stage=request.stage, min_games=request.min_games
+    )[
         : request.top_n
     ]
 

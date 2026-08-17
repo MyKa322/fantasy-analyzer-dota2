@@ -51,6 +51,14 @@ export interface TitleRule {
   heroes?: string[];
 }
 
+/** Раскладка баннера одного периода: сколько слотов и какого цвета. */
+export interface StageLayout {
+  slots: number;
+  role_slots: Record<string, string[]>;
+  /** Нейтральный набор статов роли — тот же, что считает бэкенд. */
+  neutral_stats?: Record<string, string[]>;
+}
+
 export interface RulesSnapshot {
   qualities: Record<string, number>;
   traits: TraitRule[];
@@ -58,6 +66,23 @@ export interface RulesSnapshot {
   banner_slots: number;
   stats: StatScoring[];
   titles?: { prefixes: TitleRule[]; suffixes: TitleRule[] };
+  /** Периоды с другой раскладкой: в основном этапе у роли пять эмблем. */
+  stages?: Record<string, StageLayout>;
+}
+
+/**
+ * Цвета слотов роли в этом периоде.
+ *
+ * Раскладка задана периодом: групповой этап играется тремя эмблемами, основной
+ * — пятью. Старый снапшот про периоды не знает, и тогда остаётся базовая.
+ */
+export function roleSlots(
+  rules: RulesSnapshot,
+  role: string,
+  stage?: string,
+): string[] {
+  const layout = stage ? rules.stages?.[stage] : undefined;
+  return layout?.role_slots[role] ?? rules.role_slots[role] ?? [];
 }
 
 /**
@@ -223,10 +248,11 @@ export function inventoryGaps(
   inventory: Emblem[],
   role: string,
   rules: RulesSnapshot,
+  stage?: string,
 ): { color: GroupColor; need: number; have: number }[] {
   const colors = statColors(rules);
   const need = new Map<string, number>();
-  for (const color of rules.role_slots[role] ?? []) {
+  for (const color of roleSlots(rules, role, stage)) {
     need.set(color, (need.get(color) ?? 0) + 1);
   }
   const have = new Map<string, number>();
@@ -256,9 +282,10 @@ export function fitInventory(
   inventory: Emblem[],
   statValues: StatValue[],
   rules: RulesSnapshot,
+  stage?: string,
 ): InventoryFit | null {
-  const slotColors = rules.role_slots[role] ?? [];
-  if (inventoryGaps(inventory, role, rules).length) return null;
+  const slotColors = roleSlots(rules, role, stage);
+  if (inventoryGaps(inventory, role, rules, stage).length) return null;
 
   const colors = statColors(rules);
   const byStat = new Map(statValues.map((v) => [v.stat, v]));
@@ -306,29 +333,60 @@ export function fitInventory(
   };
 }
 
-function cartesian<T>(pool: T[], length: number): T[][] {
-  let result: T[][] = [[]];
-  for (let i = 0; i < length; i++) {
-    const next: T[][] = [];
-    for (const prefix of result) for (const item of pool) next.push([...prefix, item]);
-    result = next;
-  }
-  return result;
-}
-
 export interface BannerOption {
   emblems: Emblem[];
   slots: SlotBreakdown[];
   total: number;
 }
 
+/** Трейт двумя числами: что даёт себе и что соседям. Порт banner_search.py. */
+interface TraitMath {
+  key: string | null;
+  own: number;
+  adjacent: number;
+  condition: string;
+}
+
+function traitMath(rules: RulesSnapshot, keys: (string | null)[]): TraitMath[] {
+  const byKey = traitByKey(rules);
+  return keys.map((key) => {
+    const rule = key ? byKey[key] : undefined;
+    if (!rule) return { key: null, own: 0, adjacent: 0, condition: "always" };
+    let own = 0;
+    let adjacent = 0;
+    for (const effect of rule.effects) {
+      if (effect.scope === "self_bonus" || effect.scope === "self_value") own += effect.amount;
+      if (effect.scope === "adjacent_value") adjacent += effect.amount;
+    }
+    return { key, own, adjacent, condition: rule.condition };
+  });
+}
+
+/** Подмножества условных трейтов: какие условия считаем сработавшими. */
+function subsets<T>(items: T[]): T[][] {
+  const result: T[][] = [[]];
+  for (const item of items) {
+    for (const existing of [...result]) result.push([...existing, item]);
+  }
+  return result;
+}
+
 /**
- * Перебор лучших баннеров для роли.
+ * Подбор лучших баннеров для роли.
  *
- * Цвет слота задан ролью, поэтому кандидаты в каждый слот ограничены цветом.
- * Множители зависят только от качеств и трейтов, так что они считаются один раз
- * для всех комбинаций статов — иначе перебор раздувается в три четверти
- * миллиона расчётов вместо двадцати семи тысяч.
+ * Полный перебор качеств и трейтов — это |качества|^слотов × |трейты|^слотов.
+ * На трёх слотах это 27 тысяч, на пяти (основной этап) — двадцать четыре
+ * миллиона, и браузер на этом встаёт. Считать столько и не нужно: счёт баннера
+ * раскладывается на независимые по слотам слагаемые
+ *
+ *     счёт = Σ base_i · (1 + качество_i + свой трейт_i)
+ *          + Σ эффект_на_соседей(трейт_i) · (сумма base соседей i),
+ *
+ * и слоты связывают между собой только условия трейтов: Fractal требует все
+ * качества разными, Unique — что он на баннере один, Friendly — что таких
+ * эмблем хотя бы три. Поэтому перебираются варианты «какие условия сработали»
+ * (их восемь), а внутри каждого выбор идёт послотно. Тот же алгоритм и с теми же
+ * доводами живёт в backend/app/fantasy/banner_search.py.
  */
 export function optimiseBanner(
   role: string,
@@ -339,49 +397,42 @@ export function optimiseBanner(
     traits?: (string | null)[];
     statsPerSlot?: number;
     topN?: number;
+    stage?: string;
   } = {},
 ): BannerOption[] {
-  const colors = rules.role_slots[role] ?? ["red", "red", "green"];
-  const qualities = options.qualities?.length
+  const colors = roleSlots(rules, role, options.stage);
+  if (!colors.length) return [];
+
+  const qualityKeys = options.qualities?.length
     ? options.qualities
     : Object.keys(rules.qualities);
-  const traits = options.traits?.length
+  const qualities = qualityKeys
+    .map((key) => ({ key, bonus: rules.qualities[key] ?? 0 }))
+    .sort((a, b) => b.bonus - a.bonus);
+  if (!qualities.length) return [];
+
+  const traitKeys = options.traits?.length
     ? options.traits
     : [null, ...rules.traits.map((t) => t.key)];
-  const statsPerSlot = options.statsPerSlot ?? 3;
-  const topN = options.topN ?? 3;
+  const pool = traitMath(rules, traitKeys);
+  const conditional = pool.filter((t) => t.key && t.condition !== "always");
 
   const byStat = new Map(statValues.map((v) => [v.stat, v]));
   const usable = statValues.filter((v) => v.availability !== "unavailable");
 
+  // Пул слота не может быть меньше числа слотов того же цвета: повторять стат
+  // на баннере нельзя, а у кора в основном этапе три красных слота.
+  const sameColor = new Map<string, number>();
+  for (const color of colors) sameColor.set(color, (sameColor.get(color) ?? 0) + 1);
   const slotCandidates = colors.map((color) =>
     usable
       .filter((v) => v.color === color)
       .sort((a, b) => b.base_points - a.base_points)
-      .slice(0, statsPerSlot),
+      .slice(0, Math.max(options.statsPerSlot ?? 3, (sameColor.get(color) ?? 1) + 1)),
   );
   if (slotCandidates.some((pool) => pool.length === 0)) return [];
 
-  // Один и тот же набор множителей для любых статов.
-  const layouts: { qualities: string[]; traits: (string | null)[]; multipliers: number[] }[] = [];
-  const probeStats = slotCandidates.map((pool) => pool[0].stat);
-  for (const qualityCombo of cartesian(qualities, colors.length)) {
-    for (const traitCombo of cartesian(traits, colors.length)) {
-      const probe = probeStats.map((stat, i) => ({
-        stat,
-        quality: qualityCombo[i],
-        trait: traitCombo[i],
-      }));
-      layouts.push({
-        qualities: qualityCombo,
-        traits: traitCombo,
-        multipliers: emblemMultipliers(probe, rules),
-      });
-    }
-  }
-
-  // Комбинации статов собираем обходом: у слотов разные пулы, и дубликаты
-  // статов на баннере запрещены правилами.
+  // Комбинации статов: у слотов разные пулы, дубликаты запрещены правилами.
   const combos: string[][] = [];
   const walk = (index: number, current: string[]) => {
     if (index === slotCandidates.length) {
@@ -396,35 +447,108 @@ export function optimiseBanner(
   };
   walk(0, []);
 
-  const scored: BannerOption[] = [];
+  const found = new Map<string, { emblems: Emblem[]; total: number }>();
+
   for (const stats of combos) {
     const base = stats.map((s) => byStat.get(s)?.base_points ?? 0);
-    for (const layout of layouts) {
-      let total = 0;
-      for (let i = 0; i < base.length; i++) total += base[i] * layout.multipliers[i];
-      scored.push({
-        emblems: stats.map((stat, i) => ({
+    const neighbours = base.map(
+      (_, i) => (i > 0 ? base[i - 1] : 0) + (i + 1 < base.length ? base[i + 1] : 0),
+    );
+
+    for (const active of subsets(conditional)) {
+      const activeKeys = new Set(active.map((t) => t.key));
+      const distinct = active.some((t) => t.condition === "all_qualities_distinct");
+      if (distinct && qualities.length < colors.length) continue;
+
+      // Качества: при активном Fractal — все разные, и больший бонус уходит
+      // слоту с большими базовыми очками; иначе везде лучшее качество.
+      const quality: { key: string; bonus: number }[] = [];
+      if (distinct) {
+        const order = base.map((_, i) => i).sort((a, b) => base[b] - base[a]);
+        order.forEach((slot, rank) => {
+          quality[slot] = qualities[rank];
+        });
+      } else {
+        for (let i = 0; i < colors.length; i++) quality[i] = qualities[0];
+      }
+
+      const works = (trait: TraitMath) =>
+        trait.key === null || trait.condition === "always" || activeKeys.has(trait.key);
+      const value = (slot: number, trait: TraitMath) =>
+        base[slot] * (1 + quality[slot].bonus + (works(trait) ? trait.own : 0)) +
+        (works(trait) ? trait.adjacent : 0) * neighbours[slot];
+
+      const allowed = pool.filter(
+        (t) => t.key === null || t.condition === "always" || activeKeys.has(t.key),
+      );
+      const exactlyOne = allowed.filter((t) => t.condition === "only_unique_on_banner");
+      const atLeastThree = allowed.filter((t) => t.condition === "at_least_3_friendly");
+      const free = allowed.filter((t) => !exactlyOne.includes(t));
+      if (!free.length || exactlyOne.length > colors.length) continue;
+
+      // Трейт «ровно один на баннере» перебирается по слотам: вариантов мало, а
+      // выбор слота меняет всё остальное распределение. Такой трейт в правилах
+      // ровно один (Unique); появится второй — этот контекст просто пропустится,
+      // и оптимум будет найден среди остальных.
+      if (exactlyOne.length > 1) continue;
+      const slotsForOne: number[][] =
+        exactlyOne.length === 0 ? [[]] : colors.map((_, i) => [i]);
+
+      for (const forced of slotsForOne) {
+        const chosen: TraitMath[] = new Array(colors.length).fill(free[0]);
+        forced.forEach((slot, index) => {
+          chosen[slot] = exactlyOne[index];
+        });
+        const freeSlots = colors
+          .map((_, i) => i)
+          .filter((i) => !forced.includes(i));
+        for (const slot of freeSlots) {
+          chosen[slot] = free.reduce((best, t) =>
+            value(slot, t) > value(slot, best) ? t : best,
+          );
+        }
+
+        // «Не меньше трёх» — количество доводится там, где замена дешевле всего.
+        let short = false;
+        for (const trait of atLeastThree) {
+          const need = 3 - chosen.filter((t) => t === trait).length;
+          if (need <= 0) continue;
+          const spare = freeSlots
+            .filter((i) => chosen[i] !== trait)
+            .sort(
+              (a, b) =>
+                value(a, chosen[a]) - value(a, trait) - (value(b, chosen[b]) - value(b, trait)),
+            );
+          if (spare.length < need) {
+            short = true;
+            break;
+          }
+          for (const slot of spare.slice(0, need)) chosen[slot] = trait;
+        }
+        if (short) continue;
+
+        const emblems = stats.map((stat, i) => ({
           stat,
-          quality: layout.qualities[i],
-          trait: layout.traits[i],
-        })),
-        slots: [],
-        total,
-      });
+          quality: quality[i].key,
+          trait: chosen[i].key,
+        }));
+        const key = emblems.map((e) => `${e.stat}|${e.quality}|${e.trait}`).join(",");
+        if (found.has(key)) continue;
+        // Итоговое число — по настоящей формуле множителей: разложение выбирает
+        // вариант, формула его считает.
+        const multipliers = emblemMultipliers(emblems, rules);
+        let total = 0;
+        for (let i = 0; i < base.length; i++) total += base[i] * multipliers[i];
+        found.set(key, { emblems, total });
+      }
     }
   }
 
-  scored.sort((a, b) => b.total - a.total);
-
-  const seen = new Set<string>();
-  const result: BannerOption[] = [];
-  for (const option of scored) {
-    const key = option.emblems.map((e) => `${e.stat}|${e.quality}|${e.trait}`).join(",");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const detailed = scoreBanner(option.emblems, byStat, rules);
-    result.push({ emblems: option.emblems, slots: detailed.slots, total: detailed.total });
-    if (result.length >= topN) break;
-  }
-  return result;
+  return [...found.values()]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, options.topN ?? 3)
+    .map((option) => {
+      const detailed = scoreBanner(option.emblems, byStat, rules);
+      return { emblems: option.emblems, slots: detailed.slots, total: detailed.total };
+    });
 }

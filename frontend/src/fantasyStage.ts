@@ -65,6 +65,23 @@ export function locksIn(stage: FantasyStage | undefined, now = new Date()): numb
 }
 
 /**
+ * Период, которому принадлежит дата: последний из начавшихся к этому дню.
+ *
+ * Нужен там, где вопрос не «что я выбрал», а «по каким правилам считалась эта
+ * карта»: баннер основного этапа на две эмблемы длиннее группового, и карта
+ * плей-офф стоит других очков, чем карта той же команды в группе.
+ */
+export function stageForDate(
+  stages: FantasyStage[],
+  date: string | null | undefined,
+): string | undefined {
+  if (!date) return undefined;
+  const day = date.slice(0, 10);
+  const started = stages.filter((stage) => stage.starts && stage.starts.slice(0, 10) <= day);
+  return started[started.length - 1]?.key;
+}
+
+/**
  * Этап по умолчанию — ближайший, состав которого ещё не закреплён.
  *
  * Именно он и нужен: закрепить состав прошлого этапа нельзя, а смотреть на его

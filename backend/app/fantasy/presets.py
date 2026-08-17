@@ -29,7 +29,32 @@ DEFAULT_ROLE_STATS: dict[str, tuple[str, ...]] = {
     "support": ("wards_placed", "camps_stacked", "stuns"),
 }
 
+# Основной этап играется баннером на пять эмблем, и цвета слотов там свои.
+# Наборы те же по смыслу — типичное для роли внутри доступного цвета.
+MAIN_ROLE_STATS: dict[str, tuple[str, ...]] = {
+    # red, green, red, green, red
+    "core": ("gpm", "teamfight_participation", "kills", "roshan_kills", "creep_score"),
+    # red, blue, green, red, green
+    "mid": ("gpm", "runes_grabbed", "teamfight_participation", "kills", "first_blood"),
+    # blue, green, blue, green, blue
+    "support": (
+        "wards_placed",
+        "stuns",
+        "camps_stacked",
+        "teamfight_participation",
+        "smokes_used",
+    ),
+}
+
+STAGE_ROLE_STATS: dict[str, dict[str, tuple[str, ...]]] = {"main": MAIN_ROLE_STATS}
+
 NEUTRAL_QUALITY = "tier_3"
+
+
+def neutral_stats(role: str, stage: str | None = None) -> tuple[str, ...]:
+    """Нейтральный набор статов роли для периода."""
+    table = STAGE_ROLE_STATS.get(stage or "", DEFAULT_ROLE_STATS)
+    return table.get(role, table["core"])
 
 
 def neutral_banner(
@@ -37,17 +62,19 @@ def neutral_banner(
     stats: tuple[str, ...] | list[str] | None = None,
     *,
     rules: FantasyRules | None = None,
+    stage: str | None = None,
 ) -> Banner:
     """Баннер для честного сравнения кандидатов на роль.
 
     Результат валидируется по цветам слотов: набор, который нельзя собрать в
-    игре, сравнивать бессмысленно.
+    игре, сравнивать бессмысленно. В основном этапе слотов пять, поэтому и
+    набор другой — сравнивать периоды между собой всё равно нельзя.
     """
     rules = rules or load_rules()
-    chosen = tuple(stats) if stats else DEFAULT_ROLE_STATS.get(role, DEFAULT_ROLE_STATS["core"])
+    chosen = tuple(stats) if stats else neutral_stats(role, stage)
     banner = Banner(
         emblems=tuple(Emblem(stat=s, quality=NEUTRAL_QUALITY) for s in chosen),
         role=role,
     )
-    banner.validate(rules, check_role_colors=True)
+    banner.validate(rules, check_role_colors=True, stage=stage)
     return banner
