@@ -18,7 +18,7 @@ import json
 import logging
 import sys
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -49,6 +49,10 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("snapshot")
 
 OUTPUT = Path(__file__).resolve().parents[2] / "frontend" / "public" / "data" / "snapshot.json"
+
+# Ключ периода Fantasy, который играется по сетке плей-офф. Совпадает с ключом
+# этапа в конфиге: страница выбирает коэффициент периода по нему же.
+PLAYOFF_STAGE_KEY = "main"
 
 
 def export_rules() -> dict:
@@ -190,7 +194,11 @@ def export_stage(session) -> dict:
 
     predictions = load_predictions_config()
     teams = ti_team_ids()
-    stage = build_group_stage(session, teams, starts=predictions.starts)
+    # Плей-офф играют те же команды между собой: без границы четвертьфинал
+    # стал бы шестым раундом Swiss.
+    stage = build_group_stage(
+        session, teams, starts=predictions.starts, until=predictions.playoffs.starts
+    )
     swiss = predictions.group_stage.swiss
     first_round = predictions.first_round_for(teams)
 
@@ -290,6 +298,192 @@ def export_stage(session) -> dict:
     }
 
 
+def export_playoffs(session, simulations: int) -> dict | None:
+    """Сетка плей-офф: объявленные четвертьфиналы, сыгранное и прогноз по нему.
+
+    Считается одной симуляцией на всё: и вероятности каждого места сетки, и
+    рекомендованные 14 предсказаний, и распределение числа серий — то самое,
+    которым дальше живёт Fantasy основного этапа. Разные симуляции для этих
+    вопросов означали бы, что «шанс дойти до финала» и «сколько серий сыграет»
+    посчитаны по разным турнирам.
+    """
+    from app.analytics.playoff_bracket import build_playoff_bracket  # noqa: PLC0415
+    from app.analytics.simulate import (  # noqa: PLC0415
+        BracketSimulator,
+        optimise_bracket_predictions,
+    )
+    from app.services.analysis import latest_ratings  # noqa: PLC0415
+
+    predictions = load_predictions_config()
+    config = predictions.playoffs
+    if not config.upper_quarterfinals:
+        log.info("плей-офф пропущен: сетка ещё не объявлена")
+        return None
+
+    teams = predictions.playoff_team_ids()
+    quarterfinals = predictions.quarterfinal_ids()
+    bracket = build_playoff_bracket(
+        session,
+        teams,
+        quarterfinals,
+        starts=config.starts,
+        best_of=config.best_of,
+        grand_final_best_of=config.grand_final_best_of,
+        # Карты, уже разобранные групповым этапом: те же команды играли и там.
+        exclude_match_ids=_group_stage_match_ids(session, predictions),
+    )
+
+    ratings = latest_ratings(session)
+    # Посев — порядок объявленной сетки: сначала пары четвертьфиналов.
+    ordered = [team for pair in quarterfinals for team in pair]
+    missing = [teams[t] for t in ordered if t not in ratings]
+    simulation = None
+    plan = None
+    if missing:
+        log.warning("прогноз плей-офф пропущен: нет рейтинга у %s", ", ".join(missing))
+    else:
+        simulator = BracketSimulator(
+            {t: Rating(*ratings[t]) for t in ordered},
+            config,
+            seed=2,
+            quarterfinals=quarterfinals,
+            results=bracket.results(),
+            participants={
+                m.key: (m.left.team_id, m.right.team_id)
+                for m in bracket.matches
+                if m.left is not None and m.right is not None
+            },
+        )
+        simulation = simulator.run(simulations=simulations)
+        plan = optimise_bracket_predictions(simulation, config.points)
+
+    def side(entry) -> dict | None:
+        if entry is None:
+            return None
+        return {"team_id": entry.team_id, "name": entry.name, "score": entry.score}
+
+    def chances(values: dict[int, float] | None) -> dict[str, float]:
+        return {str(k): round(v, 4) for k, v in (values or {}).items() if v > 0.0005}
+
+    matches = [
+        {
+            "key": m.key,
+            "round": m.round,
+            "side": m.side,
+            "order": m.order,
+            "best_of": m.best_of,
+            "left": side(m.left),
+            "right": side(m.right),
+            "winner_id": m.winner_id,
+            "played_at": m.played_at.isoformat() if m.played_at else None,
+            "match_ids": list(m.match_ids),
+            "candidates": list(m.candidates),
+            # Кто здесь окажется и кто выиграет: у нерешённого места вопросы
+            # разные, и ответ на второй без первого не читается.
+            "reach": chances(
+                simulation.participant_probabilities(m.key) if simulation else None
+            ),
+            "win": chances(simulation.match_probabilities(m.key) if simulation else None),
+        }
+        for m in bracket.matches
+    ]
+
+    rows = []
+    for run in bracket.teams:
+        row = {
+            "team_id": run.team_id,
+            "name": run.name,
+            "series_won": run.series_won,
+            "series_lost": run.series_lost,
+            "maps_won": run.maps_won,
+            "maps_lost": run.maps_lost,
+            "bracket": run.bracket,
+            "place": run.place,
+            "next_slot": run.next_slot,
+        }
+        if simulation is not None:
+            row |= {
+                "champion": round(simulation.champion_probability[run.team_id], 4),
+                "final": round(simulation.top_probability(run.team_id, places=2), 4),
+                "top4": round(simulation.top_probability(run.team_id, places=4), 4),
+                "places": {
+                    place: round(value, 4)
+                    for place, value in simulation.place_probabilities(run.team_id).items()
+                },
+                "expected_series": round(simulation.expected_series(run.team_id), 2),
+                "series": {
+                    str(count): round(share, 4)
+                    for count, share in simulation.series_distribution(run.team_id).items()
+                },
+            }
+        rows.append(row)
+
+    result = {
+        "starts": config.starts.isoformat() if config.starts else None,
+        "best_of": config.best_of,
+        "grand_final_best_of": config.grand_final_best_of,
+        "started": bracket.started,
+        "matches": matches,
+        "teams": rows,
+    }
+    if simulation is not None and plan is not None:
+        result |= {
+            "simulations": simulation.simulations,
+            "plan": [
+                {
+                    "key": str(key),
+                    "team_id": int(team_id),
+                    "name": teams.get(int(team_id), str(team_id)),
+                }
+                for key, team_id in plan.assignment.items()
+            ],
+            "expected_points": round(plan.expected_points, 1),
+            "expected_correct": round(plan.expected_correct, 2),
+            "points_percentiles": {
+                str(k): round(v, 1) for k, v in plan.points_percentiles.items()
+            },
+        }
+    return result
+
+
+def _group_stage_match_ids(session, predictions) -> set[int]:
+    """Карты, которые уже разобраны как групповой этап."""
+    from app.analytics.group_stage import build_group_stage  # noqa: PLC0415
+    from app.services.analysis import ti_team_ids  # noqa: PLC0415
+
+    stage = build_group_stage(
+        session,
+        ti_team_ids(),
+        starts=predictions.starts,
+        until=predictions.playoffs.starts,
+    )
+    return {match_id for series in stage.series for match_id in series.match_ids}
+
+
+def export_fantasy_stages(predictions) -> list[dict]:
+    """Периоды Fantasy: у каждого свой состав и свой момент закрепления."""
+    return [
+        {
+            "key": stage.key,
+            "label": stage.label,
+            "starts": stage.starts.isoformat() if stage.starts else None,
+            "locks": stage.locks.isoformat() if stage.locks else None,
+        }
+        for stage in predictions.fantasy_stages
+    ]
+
+
+def playoff_series_distributions(playoffs: dict | None) -> dict[int, dict[int, float]]:
+    """Распределение числа серий по командам плей-офф — вход для проекции Fantasy."""
+    if not playoffs:
+        return {}
+    return {
+        int(team["team_id"]): {int(count): share for count, share in team["series"].items()}
+        for team in playoffs["teams"]
+        if team.get("series")
+    }
+
+
 def _stat_row(value) -> dict:
     return {
         "stat": value.stat,
@@ -359,6 +553,7 @@ def export_roles(
     simulations: int,
     series: int,
     series_options: Sequence[int] = (4, 5, 6, 7),
+    playoff_series: Mapping[int, dict[int, float]] | None = None,
 ) -> list[dict]:
     """Для каждой роли каждой команды: ценность статов, проекция, титулы.
 
@@ -369,6 +564,12 @@ def export_roles(
     не только для базового: на странице ростера это переключатель, и без всех
     вариантов он бы ничего не менял. Разница существенная — в зачёт идёт лучшая
     серия периода, и каждая дополнительная серия поднимает ожидание.
+
+    Основной этап считается отдельно и не числом, а распределением: в плей-офф
+    число серий команды — случайная величина от двух до шести, и заменять её
+    средним нельзя. Команда с 40% на глубокий забег и 60% на ранний вылет — это
+    не «четыре серии»: у неё и потолок выше, и ожидание ниже, чем у той, что
+    сыграет четыре наверняка.
     """
     from app.services.profiles import load_heroes  # noqa: PLC0415
 
@@ -377,6 +578,7 @@ def export_roles(
     since = datetime.now(timezone.utc) - timedelta(days=history_days)
     candidates = ti_candidates(session)
     all_series = sorted({series, *series_options})
+    playoff_series = playoff_series or {}
 
     rows: list[dict] = []
     # Статы копятся отдельно: сжатие к среднему по роли сравнивает команды между
@@ -399,6 +601,17 @@ def export_roles(
                 )
                 for count in all_series
             }
+            # Основной этап: распределение серий по сетке плей-офф, если команда
+            # в неё попала. У вылетевших этого ключа не будет — и это ровно то,
+            # что нужно показать: в этом периоде им уже не набрать ничего.
+            if team_id in playoff_series:
+                projections[PLAYOFF_STAGE_KEY] = advisor.projector.project(
+                    history,
+                    neutral_banner(role),
+                    simulations=simulations,
+                    series_distribution=playoff_series[team_id],
+                )
+
             projection = projections[series]
             neutral_card = advisor.projector.expected_card_score(history, neutral_banner(role))
 
@@ -815,6 +1028,11 @@ def main() -> int:
             load_items as _load_items,
         )
 
+        predictions = load_predictions_config()
+        # Плей-офф считается до ролей: распределение серий по сетке — это вход
+        # проекции основного этапа Fantasy, а не отдельная справка рядом с ней.
+        playoffs = export_playoffs(session, args.simulations)
+
         snapshot = {
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "rules": export_rules(),
@@ -827,11 +1045,14 @@ def main() -> int:
             "teams": export_teams(session),
             "group": export_group(session, args.simulations),
             "stage": export_stage(session),
+            "playoffs": playoffs,
+            "stages": export_fantasy_stages(predictions),
             "roles": export_roles(
                 session,
                 history_days=args.history_days,
                 simulations=args.role_simulations,
                 series=args.series,
+                playoff_series=playoff_series_distributions(playoffs),
             ),
         }
         profiles = export_profiles(

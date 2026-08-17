@@ -9,8 +9,10 @@ import { ChangelogButton, RepositoryLink } from "./components/HeaderLinks";
 import InventoryAnalyzer from "./components/InventoryAnalyzer";
 import LanguageSwitch from "./components/LanguageSwitch";
 import MatchPanel from "./components/MatchPanel";
+import PlayoffPanel from "./components/PlayoffPanel";
 import ProfilesPanel from "./components/ProfilesPanel";
 import RosterPanel from "./components/RosterPanel";
+import StageBar from "./components/StageBar";
 import StagePanel from "./components/StagePanel";
 import TeamsPanel from "./components/TeamsPanel";
 import { useT, type MessageKey } from "./i18n";
@@ -33,6 +35,7 @@ const TABS: Tab[] = ([
   { key: "profiles", label: "app.tab.profiles", element: <ProfilesPanel />, live: false },
   { key: "match", label: "app.tab.match", live: false },
   { key: "stage", label: "app.tab.stage", live: false },
+  { key: "playoffs", label: "app.tab.playoffs", live: false },
   { key: "roster", label: "app.tab.roster", element: <RosterPanel />, live: false },
   { key: "predictions", label: "app.tab.predictions", element: <GroupPanel />, live: false },
   { key: "teams", label: "app.tab.teams", element: <TeamsPanel />, live: true },
@@ -42,6 +45,9 @@ const TABS: Tab[] = ([
 
 /** Адрес открытого матча: `#/match/8922016200`. */
 const MATCH_HASH = /^#\/match\/(\d+)/;
+
+// Вкладки, которые считают очки Fantasy: только им нужен выбор периода.
+const FANTASY_TABS = new Set(["emblems", "inventory", "roster", "fantasy"]);
 
 export default function App() {
   const { t, dt } = useT();
@@ -129,6 +135,8 @@ export default function App() {
 
       <AdBanner />
 
+      {FANTASY_TABS.has(active) && <StageBar />}
+
       <main>
         {active === "match" ? (
           <MatchPanel matchId={matchId} onOpen={openMatch} />
@@ -136,6 +144,8 @@ export default function App() {
           // Со страницы групповой стадии открывается разбор конкретной карты,
           // поэтому ей нужен тот же переход, что и таблицам матчей.
           <StagePanel onOpen={openMatch} />
+        ) : active === "playoffs" ? (
+          <PlayoffPanel onOpen={openMatch} />
         ) : (
           TABS.find((tab) => tab.key === active)?.element
         )}

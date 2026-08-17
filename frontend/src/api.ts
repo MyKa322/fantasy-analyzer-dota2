@@ -14,6 +14,7 @@ import {
   type RulesSnapshot,
   type StatValue,
 } from "./engine/scoring";
+import { GROUP_STAGE, periodRatios } from "./fantasyStage";
 import { tr } from "./i18n";
 import {
   STATIC_MODE,
@@ -542,17 +543,23 @@ const live = {
       body: JSON.stringify(payload),
     }),
 
+  // Период (`stage`) понимает только статический режим: коэффициенты плей-офф
+  // считаются при экспорте по сетке, а живой бэкенд отвечает за одну команду и
+  // сетки не знает. Поэтому в запрос он не уходит.
   roster: (payload?: {
     simulations?: number;
     series?: number;
+    stage?: string;
     min_games?: number;
     top_n?: number;
     history_days?: number;
-  }) =>
-    request<RosterResponse>("/fantasy/roster", {
+  }) => {
+    const { stage: _stage, ...body } = payload ?? {};
+    return request<RosterResponse>("/fantasy/roster", {
       method: "POST",
-      body: JSON.stringify(payload ?? {}),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
 
   statReport: (payload: {
     team_id: number;
@@ -575,11 +582,14 @@ const live = {
     top_n?: number;
     history_days?: number;
     series?: number;
-  }) =>
-    request<BannerAdvice[]>("/fantasy/best-banner", {
+    stage?: string;
+  }) => {
+    const { stage: _stage, ...body } = payload;
+    return request<BannerAdvice[]>("/fantasy/best-banner", {
       method: "POST",
-      body: JSON.stringify(payload),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
 
   playerReport: (payload: { team_id: number; role: string; history_days?: number }) =>
     request<PlayerProfile[]>("/fantasy/players", {
@@ -618,11 +628,15 @@ const live = {
     history_days?: number;
     min_games?: number;
     top_n?: number;
-  }) =>
-    request<InventoryResponse>("/fantasy/inventory", {
+    series?: number;
+    stage?: string;
+  }) => {
+    const { stage: _stage, ...body } = payload;
+    return request<InventoryResponse>("/fantasy/inventory", {
       method: "POST",
-      body: JSON.stringify(payload),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
 
   statRanking: (stat: string, role?: string, minGames = 5) => {
     const params = new URLSearchParams({ min_games: String(minGames) });
@@ -779,15 +793,18 @@ const staticApi: typeof live = {
     // Число серий за период — не косметика: в зачёт идёт лучшая серия, и каждая
     // дополнительная попытка поднимает ожидание. Коэффициенты на каждый вариант
     // посчитаны при экспорте; если их нет (старый снапшот), берём базовый.
-    const series = String(payload?.series ?? 5);
+    const stage = payload?.stage ?? GROUP_STAGE;
+    const series = payload?.series ?? 5;
 
     for (const role of snapshot.roles) {
+      const ratios = periodRatios(role, stage, series);
+      // Команды нет в этом периоде — значит, и очков в нём не будет: в плей-офф
+      // играют восемь команд из шестнадцати, и остальным нечего показывать.
+      if (!ratios) continue;
       const banner = neutralBannerFor(role.role, snapshot.rules);
       const values = new Map(role.stats.map((s) => [s.stat, s]));
       const card = scoreBanner(banner, values, snapshot.rules).total;
-      const periodRatio = role.period_ratios?.[series] ?? role.period_ratio;
-      const ceilingRatio = role.ceiling_ratios?.[series] ?? role.ceiling_ratio;
-      const mean = card * periodRatio;
+      const mean = card * ratios.period;
       candidates[role.role] ??= [];
       candidates[role.role].push({
         role: role.role,
@@ -796,7 +813,7 @@ const staticApi: typeof live = {
         player_names: role.players,
         mean,
         floor_p5: mean * 0.85,
-        ceiling_p95: card * ceilingRatio,
+        ceiling_p95: card * ratios.ceiling,
         games_used: role.games,
       });
       byRole[role.role] ??= [];
@@ -807,15 +824,15 @@ const staticApi: typeof live = {
       candidates[role].sort((a, b) => b.mean - a.mean);
     }
 
-    // Лучшие сочетания из трёх разных команд.
+    // Лучшие сочетания. Слоты независимы: компендиум разрешает взять мид и
+    // саппортов из одного состава, и запрет «три разные команды» вычёркивал бы
+    // варианты, которые в игре собираются свободно.
     const rosters: Roster[] = [];
     const roles = Object.keys(byRole);
     if (roles.length === 3) {
       for (const core of byRole[roles[0]] ?? []) {
         for (const mid of byRole[roles[1]] ?? []) {
-          if (mid.team_id === core.team_id) continue;
           for (const support of byRole[roles[2]] ?? []) {
-            if (support.team_id === core.team_id || support.team_id === mid.team_id) continue;
             const picks = [
               { role: roles[0], ...core },
               { role: roles[1], ...mid },
@@ -862,6 +879,10 @@ const staticApi: typeof live = {
       topN: payload.top_n ?? 3,
     });
 
+    // Период считается по выбранному этапу: в плей-офф у команды другое число
+    // серий, а у вылетевшей их нет вовсе — тогда и очков за период нет.
+    const ratios = periodRatios(role, payload.stage ?? GROUP_STAGE, payload.series ?? 5);
+
     return options.map((option) => ({
       role: payload.role,
       team_id: payload.team_id,
@@ -870,8 +891,8 @@ const staticApi: typeof live = {
       substitutions: role.substitutions ?? [],
       slots: option.slots.map((s) => ({ ...s, alternatives: [] })),
       expected_card_points: option.total,
-      period_mean: option.total * role.period_ratio,
-      period_ceiling: option.total * role.ceiling_ratio,
+      period_mean: ratios ? option.total * ratios.period : null,
+      period_ceiling: ratios ? option.total * ratios.ceiling : null,
     }));
   },
 
@@ -931,6 +952,8 @@ const staticApi: typeof live = {
       if (payload.role && role.role !== payload.role) continue;
       if (gaps[role.role]) continue;
       if (role.games < (payload.min_games ?? 5)) continue;
+      const ratios = periodRatios(role, payload.stage ?? GROUP_STAGE, payload.series ?? 5);
+      if (!ratios) continue;
       const fit = fitInventory(role.role, payload.inventory, role.stats, snapshot.rules);
       if (!fit) continue;
       fits.push({
@@ -940,8 +963,8 @@ const staticApi: typeof live = {
         player_names: role.players,
         slots: fit.slots.map((s) => ({ ...s, alternatives: [] })),
         expected_card_points: fit.total,
-        period_mean: fit.total * role.period_ratio,
-        period_ceiling: fit.total * role.ceiling_ratio,
+        period_mean: fit.total * ratios.period,
+        period_ceiling: fit.total * ratios.ceiling,
         unused: fit.unused,
         games: role.games,
       });

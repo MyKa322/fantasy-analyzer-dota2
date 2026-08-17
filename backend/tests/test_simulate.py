@@ -354,3 +354,112 @@ def test_bracket_plan_picks_most_likely_winner(playoff_config):
     )
     assert 0 <= plan.expected_correct <= 14
     assert plan.expected_points > 0
+
+
+# --- объявленная сетка и уже сыгранное ----------------------------------------
+
+
+def test_announced_pairs_replace_the_seeding(playoff_config):
+    """Сетку разводят по итогам группы, а не по рейтингу: пары приходят снаружи."""
+    sim = BracketSimulator(
+        make_ratings(8),
+        playoff_config,
+        seed=79,
+        quarterfinals=((1, 2), (3, 4), (5, 6), (7, 8)),
+    )
+    result = sim.run(simulations=200)
+
+    first = result.participant_probabilities("ubqf1")
+    assert set(first) == {1, 2}
+    assert set(result.participant_probabilities("ubqf4")) == {7, 8}
+
+
+def test_a_pair_outside_the_ratings_is_rejected(playoff_config):
+    with pytest.raises(ValueError, match="нет рейтинга"):
+        BracketSimulator(
+            make_ratings(8),
+            playoff_config,
+            quarterfinals=((1, 2), (3, 4), (5, 6), (7, 99)),
+        )
+
+
+def test_played_series_enter_as_fact(playoff_config):
+    """Сыгранное не разыгрывается заново: победитель четвертьфинала известен."""
+    pairs = ((1, 2), (3, 4), (5, 6), (7, 8))
+    before = BracketSimulator(
+        make_ratings(8, spread=80.0), playoff_config, seed=83, quarterfinals=pairs
+    ).run(simulations=400)
+    # Фаворит проиграл четвертьфинал и ушёл в нижнюю сетку.
+    after = BracketSimulator(
+        make_ratings(8, spread=80.0),
+        playoff_config,
+        seed=83,
+        quarterfinals=pairs,
+        results={"ubqf1": 2},
+        participants={"ubqf1": (1, 2)},
+    ).run(simulations=400)
+
+    assert after.match_probabilities("ubqf1") == {2: 1.0}
+    assert set(after.participant_probabilities("ubsf1")) <= {2, 3, 4}
+    assert after.champion_probability[1] < before.champion_probability[1]
+    assert after.champion_probability[2] > before.champion_probability[2]
+    assert after.top_probability(1, places=1) < after.top_probability(1, places=3), (
+        "из нижней сетки путь к титулу длиннее, чем к призам"
+    )
+
+
+def test_an_eliminated_team_plays_no_more_series(playoff_config):
+    """Две проигранные серии — конец турнира, а значит и конец Fantasy-очкам."""
+    sim = BracketSimulator(
+        equal_ratings(8),
+        playoff_config,
+        seed=89,
+        quarterfinals=((1, 2), (3, 4), (5, 6), (7, 8)),
+        results={"ubqf1": 1, "ubqf2": 3, "lbr1_1": 4},
+        participants={"ubqf1": (1, 2), "ubqf2": (3, 4), "lbr1_1": (2, 4)},
+    )
+    result = sim.run(simulations=200)
+
+    assert result.series_distribution(2) == {2: 1.0}
+    assert result.expected_series(2) == 2.0
+    assert result.place_probabilities(2) == {"7-8": 1.0}
+    assert result.champion_probability[2] == 0.0
+
+
+def test_series_count_spans_the_whole_run(playoff_config):
+    """Путь по сетке — от двух серий до шести, и это вход для Fantasy."""
+    sim = BracketSimulator(equal_ratings(8), playoff_config, seed=97)
+    result = sim.run(simulations=500)
+
+    distribution = result.series_distribution(1)
+    assert min(distribution) == 2
+    assert max(distribution) == 6
+    assert sum(distribution.values()) == pytest.approx(1.0)
+    assert 2 < result.expected_series(1) < 6
+
+
+def test_places_add_up_to_a_full_bracket(playoff_config):
+    """Восемь команд занимают ровно восемь мест: одно первое, два места 5-6."""
+    sim = BracketSimulator(make_ratings(8), playoff_config, seed=101)
+    result = sim.run(simulations=400)
+
+    for team in result.team_ids:
+        assert sum(result.place_probabilities(team).values()) == pytest.approx(1.0)
+
+    champions = sum(
+        result.place_probabilities(t).get("1", 0.0) for t in result.team_ids
+    )
+    shared = sum(result.place_probabilities(t).get("5-6", 0.0) for t in result.team_ids)
+    assert champions == pytest.approx(1.0)
+    assert shared == pytest.approx(2.0)
+
+
+def test_top_probability_grows_with_the_bar(playoff_config):
+    sim = BracketSimulator(make_ratings(8, spread=60.0), playoff_config, seed=103)
+    result = sim.run(simulations=600)
+
+    champion = result.top_probability(1, places=1)
+    top_four = result.top_probability(1, places=4)
+    assert champion == pytest.approx(result.champion_probability[1])
+    assert champion <= result.top_probability(1, places=2) <= top_four <= 1.0
+    assert result.top_probability(1, places=8) == pytest.approx(1.0)

@@ -137,6 +137,9 @@ class RosterRequest(BaseModel):
     min_games: int = 6
     top_n: int = 5
     history_days: int = 180
+    # Три разные команды в составе. Компендиум этого не требует, поэтому по
+    # умолчанию выключено; включается, когда нужен именно разнесённый состав.
+    distinct_teams: bool = False
 
 
 class RosterCandidateOut(BaseModel):

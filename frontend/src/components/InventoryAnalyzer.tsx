@@ -16,6 +16,7 @@ import {
   type InventoryResponse,
 } from "../api";
 import { GROUP_COLOR, QUALITY_LABEL, ROLES, TRAIT_LABEL, teamCrest } from "../assets";
+import { useFantasyStage } from "../fantasyStage";
 import { useT } from "../i18n";
 import EmblemCard from "./EmblemCard";
 import PlayerPortrait from "./PlayerPortrait";
@@ -46,6 +47,7 @@ function loadInventory(): Emblem[] {
 
 export default function InventoryAnalyzer() {
   const { t, tryT, tp, n, role: roleLabel } = useT();
+  const { stage } = useFantasyStage();
   const [rules, setRules] = useState<FantasyRules | null>(null);
   const [inventory, setInventory] = useState<Emblem[]>(loadInventory);
   const [role, setRole] = useState("");
@@ -76,7 +78,7 @@ export default function InventoryAnalyzer() {
     setBusy(true);
     const timer = setTimeout(() => {
       api
-        .inventory({ inventory, role: role || null, min_games: 5 })
+        .inventory({ inventory, role: role || null, min_games: 5, stage })
         .then((r) => {
           if (!cancelled) {
             setResult(r);
@@ -90,7 +92,7 @@ export default function InventoryAnalyzer() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [inventory, role]);
+  }, [inventory, role, stage]);
 
   const statsByColor = useMemo(() => {
     const groups: Record<string, FantasyRules["stats"]> = { red: [], blue: [], green: [] };

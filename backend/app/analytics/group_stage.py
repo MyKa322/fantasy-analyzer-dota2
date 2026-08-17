@@ -15,28 +15,21 @@
 каждая серия попадает в раунд и в группу «по записи на входе» (0-0, 1-0, 0-1 и
 так далее) — ровно так, как их рисует сетка турнира.
 
-Серия, а не карта: в Bo3 три матча, и считать их как три победы было бы
-неверно. Матчи склеиваются по series_key, победитель серии — тот, кто выиграл
-больше карт.
+Разбор карт в серии живёт в `series.py`: тот же вопрос — «кто с кем сыграл и с
+каким счётом» — задаёт и сетка плей-офф, и ответ у него один на обе стадии.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db.models import Match
+from .series import Side, collect_series
 
-
-@dataclass(frozen=True, slots=True)
-class Side:
-    team_id: int
-    name: str
-    score: int
+__all__ = ["GroupStage", "Series", "Side", "Standing", "build_group_stage"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,54 +75,30 @@ class GroupStage:
         return dict(sorted(by_round.items()))
 
 
-def _utc(moment: datetime) -> datetime:
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
-
-
 def build_group_stage(
     session: Session,
     teams: dict[int, str],
     *,
     starts: date | None,
+    until: date | None = None,
 ) -> GroupStage:
-    """Собрать сетку по матчам между участниками, сыгранным с начала турнира."""
+    """Собрать сетку по матчам между участниками, сыгранным с начала турнира.
+
+    `until` отсекает плей-офф: те же команды играют между собой и в сетке, а
+    четвертьфинал — не шестой раунд Swiss. По умолчанию границы нет: пока
+    плей-офф не начался, отсекать нечего.
+    """
     if not teams or starts is None:
         return GroupStage(standings=[Standing(tid, name) for tid, name in teams.items()])
-
-    query = (
-        select(Match)
-        .where(
-            Match.radiant_team_id.in_(teams),
-            Match.dire_team_id.in_(teams),
-        )
-        .order_by(Match.start_time)
-    )
-
-    # Карты в серии: победитель серии — тот, у кого больше выигранных карт.
-    by_series: dict[str, list[Match]] = defaultdict(list)
-    for match in session.scalars(query):
-        if _utc(match.start_time).date() < starts:
-            continue
-        if match.radiant_team_id == match.dire_team_id:
-            continue
-        by_series[match.series_key].append(match)
 
     played: dict[int, tuple[int, int]] = {team_id: (0, 0) for team_id in teams}
     series: list[Series] = []
 
-    for maps in sorted(by_series.values(), key=lambda ms: _utc(ms[0].start_time)):
-        first = maps[0]
-        left_id, right_id = first.radiant_team_id, first.dire_team_id
-        if left_id is None or right_id is None:
+    for played_series in collect_series(session, teams, since=starts):
+        if until is not None and played_series.played_at >= until:
             continue
-
-        wins = {left_id: 0, right_id: 0}
-        for game in maps:
-            if game.radiant_win is None:
-                continue
-            winner = game.radiant_team_id if game.radiant_win else game.dire_team_id
-            if winner in wins:
-                wins[winner] += 1
+        left_id = played_series.left.team_id
+        right_id = played_series.right.team_id
 
         # Раунд — по числу уже сыгранных серий. Если команды разошлись (перенос
         # матча, техническое поражение), берётся больший: сетка рисуется по
@@ -137,23 +106,21 @@ def build_group_stage(
         rounds_played = max(sum(played[left_id]), sum(played[right_id]))
         record = f"{played[left_id][0]}-{played[left_id][1]}"
 
-        decided = wins[left_id] != wins[right_id]
-        winner_id = (left_id if wins[left_id] > wins[right_id] else right_id) if decided else None
-
         series.append(
             Series(
                 round=rounds_played + 1,
                 record=record,
-                left=Side(left_id, teams[left_id], wins[left_id]),
-                right=Side(right_id, teams[right_id], wins[right_id]),
-                winner_id=winner_id,
-                played_at=_utc(first.start_time).date(),
-                match_ids=tuple(m.match_id for m in maps),
+                left=played_series.left,
+                right=played_series.right,
+                winner_id=played_series.winner_id,
+                played_at=played_series.played_at,
+                match_ids=played_series.match_ids,
             )
         )
 
-        if decided:
-            loser_id = right_id if winner_id == left_id else left_id
+        winner_id = played_series.winner_id
+        loser_id = played_series.loser_id
+        if winner_id is not None and loser_id is not None:
             played[winner_id] = (played[winner_id][0] + 1, played[winner_id][1])
             played[loser_id] = (played[loser_id][0], played[loser_id][1] + 1)
 

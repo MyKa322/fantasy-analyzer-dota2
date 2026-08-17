@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -11,22 +11,30 @@ import {
 } from "recharts";
 import { api, type RosterResponse } from "../api";
 import { teamCrest } from "../assets";
+import { MAIN_STAGE, useFantasyStage } from "../fantasyStage";
 import { useT } from "../i18n";
+import { STATIC_MODE } from "../snapshot";
 import PlayerPortrait from "./PlayerPortrait";
 import { Button, Field, Notice, Panel, Stat, chartTooltip, selectClass } from "./ui";
 
 export default function RosterPanel() {
   const { t, n, role: roleLabel } = useT();
+  const { stage } = useFantasyStage();
   const [data, setData] = useState<RosterResponse | null>(null);
   const [series, setSeries] = useState(5);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // В плей-офф число серий не выбирают: оно приходит из сетки и у каждой
+  // команды своё — от двух серий до шести, в зависимости от того, как далеко
+  // она пройдёт. Переключатель здесь означал бы выбор турнира, а не периода.
+  const bracketDriven = stage === MAIN_STAGE;
+
   const run = async () => {
     setBusy(true);
     setError(null);
     try {
-      setData(await api.roster({ series, simulations: 4000, history_days: 180 }));
+      setData(await api.roster({ series, stage, simulations: 4000, history_days: 180 }));
     } catch (e) {
       setError((e as Error).message);
       setData(null);
@@ -35,17 +43,29 @@ export default function RosterPanel() {
     }
   };
 
+  // На опубликованной странице считать нечего — коэффициенты уже посчитаны,
+  // поэтому состав показывается сразу и пересобирается при смене периода.
+  // С живым бэкендом каждый пересчёт — это тысячи симуляций, и там он по кнопке.
+  useEffect(() => {
+    if (STATIC_MODE) void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+
   return (
     <div className="space-y-4">
       <Panel
         title={t("roster.title")}
-        subtitle={t("roster.subtitle")}
+        subtitle={bracketDriven ? t("roster.subtitleMain") : t("roster.subtitle")}
         actions={
           <div className="flex items-end gap-3">
-            <Field label={t("roster.series")} hint={t("roster.seriesHint")}>
+            <Field
+              label={t("roster.series")}
+              hint={bracketDriven ? t("roster.seriesBracket") : t("roster.seriesHint")}
+            >
               <select
                 className={selectClass}
                 value={series}
+                disabled={bracketDriven}
                 onChange={(e) => setSeries(Number(e.target.value))}
               >
                 {[4, 5, 6, 7].map((n) => (
@@ -61,6 +81,11 @@ export default function RosterPanel() {
           </div>
         }
       >
+        {bracketDriven && (
+          <div className="mb-3">
+            <Notice>{t("roster.playoffNote")}</Notice>
+          </div>
+        )}
         {error && <Notice kind="error">{error}</Notice>}
         {!data && !error && (
           <Notice>

@@ -479,8 +479,9 @@ def recommend_roster_route(
     """Кандидаты по ролям среди участников TI15 и лучшие сочетания.
 
     Все кандидаты роли считаются по одному и тому же баннеру — иначе сравнение
-    команд превратится в сравнение баннеров. Ограничение «три разные команды» —
-    из механики компендиума.
+    команд превратится в сравнение баннеров. Слоты независимы: компендиум
+    разрешает брать роли из одного состава, и по умолчанию сочетания этим не
+    ограничены — см. `distinct_teams`.
     """
     candidates = ti_candidates(session)
     if not candidates:
@@ -546,7 +547,9 @@ def recommend_roster_route(
             for entries in candidates.values()
             for team_id, name, _ in entries
         }
-        for roster in recommend_roster(projections, top_n=request.top_n):
+        for roster in recommend_roster(
+            projections, top_n=request.top_n, distinct_teams=request.distinct_teams
+        ):
             summary = roster.summary()
             rosters.append(
                 schemas.RosterOut(

@@ -146,6 +146,74 @@ export interface Stage {
   analytics?: StageAnalytics;
 }
 
+/** Место в сетке плей-офф: кто здесь играет и чем это кончилось. */
+export interface PlayoffMatch {
+  key: string;
+  /** Раунд: ubqf, ubsf, ubf, lbr1, lbr2, lbsf, lbf, gf. */
+  round: string;
+  /** Сторона сетки: upper, lower, grand. */
+  side: string;
+  order: number;
+  best_of: number;
+  left: { team_id: number; name: string; score: number } | null;
+  right: { team_id: number; name: string; score: number } | null;
+  winner_id: number | null;
+  played_at: string | null;
+  match_ids: number[];
+  /** Кто ещё может здесь оказаться, пока участники не определились. */
+  candidates: number[];
+  /** Вероятность дойти до этого места: id команды -> доля. */
+  reach: Record<string, number>;
+  /** Вероятность выиграть эту серию. */
+  win: Record<string, number>;
+}
+
+/** Путь команды по сетке: факт слева, прогноз справа. */
+export interface PlayoffTeam {
+  team_id: number;
+  name: string;
+  series_won: number;
+  series_lost: number;
+  maps_won: number;
+  maps_lost: number;
+  /** upper — без поражений, lower — одно, out — вылетела, champion — чемпион. */
+  bracket: string;
+  /** Итоговое место, когда путь окончен: «1», «2», «3», «4», «5-6», «7-8». */
+  place: string | null;
+  next_slot: string | null;
+  champion?: number;
+  final?: number;
+  top4?: number;
+  places?: Record<string, number>;
+  /** Ожидаемое число серий за плей-офф — от двух до шести. */
+  expected_series?: number;
+  /** Распределение числа серий: «сколько попыток выбить лучшую серию». */
+  series?: Record<string, number>;
+}
+
+export interface Playoffs {
+  starts: string | null;
+  best_of: number;
+  grand_final_best_of: number;
+  started: boolean;
+  matches: PlayoffMatch[];
+  teams: PlayoffTeam[];
+  simulations?: number;
+  /** Рекомендованные 14 предсказаний: ключ места -> команда. */
+  plan?: { key: string; team_id: number; name: string }[];
+  expected_points?: number;
+  expected_correct?: number;
+  points_percentiles?: Record<string, number>;
+}
+
+/** Период Fantasy: свой состав, своё число серий, свой момент закрепления. */
+export interface FantasyStage {
+  key: string;
+  label: string;
+  starts: string | null;
+  locks: string | null;
+}
+
 export interface Snapshot {
   generated_at: string;
   rules: RulesSnapshot & { version: string; source: string; trait_bonus_mode: string };
@@ -178,6 +246,10 @@ export interface Snapshot {
   } | null;
   /** Сетка группового этапа. Появилась позже снапшота — может отсутствовать. */
   stage?: Stage;
+  /** Сетка плей-офф. Пусто, пока состав восьмёрки не объявлен. */
+  playoffs?: Playoffs | null;
+  /** Периоды Fantasy: группа и основной этап со своими датами закрепления. */
+  stages?: FantasyStage[];
   roles: RoleSnapshot[];
 }
 

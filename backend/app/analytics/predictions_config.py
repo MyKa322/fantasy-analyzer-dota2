@@ -87,6 +87,21 @@ class PlayoffConfig:
     best_of: int
     grand_final_best_of: int
     points: PointsTable
+    # Объявленные пары четвертьфиналов верхней сетки, названиями команд. Пока их
+    # нет, сетка разводится по посеву — как и первый раунд Swiss.
+    upper_quarterfinals: tuple[tuple[str, str], ...] = ()
+    # Первый день плей-офф: по нему серии сетки отличаются от серий группы.
+    starts: date | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FantasyStage:
+    """Период Fantasy: свой состав, своё число серий, свой момент закрепления."""
+
+    key: str
+    label: str
+    starts: date | None
+    locks: date | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +112,8 @@ class PredictionsConfig:
     playoffs: PlayoffConfig
     team_names: tuple[str, ...]
     team_ids: dict[str, int | None]
+    # Периоды Fantasy по порядку: групповой этап, затем основной.
+    fantasy_stages: tuple[FantasyStage, ...] = ()
     # Первый день турнира. По нему матчи группового этапа отличаются от
     # квалификаций и товарищеских: команды те же, а сетка — только начиная
     # с этой даты.
@@ -167,6 +184,11 @@ class PredictionsConfig:
             points=PointsTable(
                 {int(k): int(v) for k, v in playoff_raw["points_by_correct"].items()}
             ),
+            upper_quarterfinals=tuple(
+                (str(pair[0]), str(pair[1]))
+                for pair in playoff_raw.get("upper_quarterfinals") or ()
+            ),
+            starts=_first_date(playoff_raw.get("starts")),
         )
 
         config = cls(
@@ -175,6 +197,15 @@ class PredictionsConfig:
             starts=_first_date(raw.get("dates")),
             group_stage=group,
             playoffs=playoffs,
+            fantasy_stages=tuple(
+                FantasyStage(
+                    key=str(stage["key"]),
+                    label=str(stage.get("label", stage["key"])),
+                    starts=_first_date(stage.get("starts")),
+                    locks=_first_date(stage.get("locks")),
+                )
+                for stage in raw.get("fantasy_stages") or ()
+            ),
             team_names=tuple(t["name"] for t in teams_raw),
             team_ids={t["name"]: t.get("team_id") for t in teams_raw},
             team_aliases={
@@ -212,6 +243,29 @@ class PredictionsConfig:
             return pairs
         return ()
 
+    def quarterfinal_ids(self) -> tuple[tuple[int, int], ...]:
+        """Объявленные четвертьфиналы верхней сетки в team_id."""
+        pairs: list[tuple[int, int]] = []
+        for left, right in self.playoffs.upper_quarterfinals:
+            a, b = self.team_ids.get(left), self.team_ids.get(right)
+            if a is None or b is None:
+                missing = left if a is None else right
+                raise ValueError(f"пара плей-офф {left} — {right}: у {missing} нет team_id")
+            pairs.append((int(a), int(b)))
+        return tuple(pairs)
+
+    def playoff_team_ids(self) -> dict[int, str]:
+        """Восемь команд объявленной сетки: {team_id: название}."""
+        names = {team_id: name for name, team_id in self.team_ids.items()}
+        return {
+            team: names.get(team, str(team))
+            for pair in self.quarterfinal_ids()
+            for team in pair
+        }
+
+    def fantasy_stage(self, key: str) -> FantasyStage | None:
+        return next((s for s in self.fantasy_stages if s.key == key), None)
+
     def validate(self) -> None:
         if self.group_stage.total_slots() != self.group_stage.teams:
             raise ValueError(
@@ -224,23 +278,30 @@ class PredictionsConfig:
                 f"в конфиге {len(self.team_names)} команд, ожидалось {self.group_stage.teams}"
             )
 
-        first_round = self.group_stage.swiss.first_round
-        if not first_round:
-            return
         # Первый раунд либо расписан целиком, либо не расписан вовсе: половина
         # пар по сетке, половина по посеву — это не «уточнение», а смесь двух
-        # разных турниров.
-        listed = [name for pair in first_round for name in pair]
-        if len(first_round) * 2 != self.group_stage.teams:
-            raise ValueError(
-                f"в первом раунде {len(first_round)} пар на {self.group_stage.teams} команд"
-            )
+        # разных турниров. То же с сеткой плей-офф.
+        self._validate_pairs(
+            self.group_stage.swiss.first_round, self.group_stage.teams, "первом раунде"
+        )
+        self._validate_pairs(
+            self.playoffs.upper_quarterfinals, self.playoffs.teams, "сетке плей-офф"
+        )
+
+    def _validate_pairs(
+        self, pairs: tuple[tuple[str, str], ...], teams: int, what: str
+    ) -> None:
+        if not pairs:
+            return
+        listed = [name for pair in pairs for name in pair]
+        if len(pairs) * 2 != teams:
+            raise ValueError(f"в {what} {len(pairs)} пар на {teams} команд")
         unknown = sorted(set(listed) - set(self.team_names)) if self.team_names else []
         if unknown:
-            raise ValueError(f"в первом раунде команды не из конфига: {', '.join(unknown)}")
+            raise ValueError(f"в {what} команды не из конфига: {', '.join(unknown)}")
         repeated = sorted({name for name in listed if listed.count(name) > 1})
         if repeated:
-            raise ValueError(f"в первом раунде команда встречается дважды: {', '.join(repeated)}")
+            raise ValueError(f"в {what} команда встречается дважды: {', '.join(repeated)}")
 
 
 @lru_cache(maxsize=4)

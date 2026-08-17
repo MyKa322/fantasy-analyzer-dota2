@@ -430,13 +430,19 @@ class Roster:
 def recommend_roster(
     projections: Mapping[str, Mapping[int, Projection]],
     *,
-    distinct_teams: bool = True,
+    distinct_teams: bool = False,
     top_n: int = 5,
 ) -> list[Roster]:
     """Собрать лучшие ростеры из проекций по ролям.
 
-    `projections[role][team_id]`. Ограничение "три разные команды" — из механики
-    компендиума: core, mid и support берутся из трёх разных составов.
+    `projections[role][team_id]`. Слоты независимы: компендиум разрешает брать
+    core, mid и support из одного состава — на экране Fantasy мид и пара
+    саппортов стоят от одной команды. Раньше здесь стояло обратное ограничение,
+    и оно вычёркивало варианты, которые в игре собираются свободно.
+
+    `distinct_teams` оставлен для случая, когда сочетание из трёх разных команд
+    нужно именно как отдельный вопрос: очки ролей одной команды приходят из
+    одних и тех же серий, и разброс у такого состава выше.
     """
     roles = list(projections)
     if not roles:

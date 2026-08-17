@@ -302,17 +302,18 @@ def test_recommend_roster_picks_best_combination(projector):
     assert rosters
     best = rosters[0]
     assert best.expected_total >= rosters[-1].expected_total
-    teams = [pick.team_id for pick in best.picks]
-    assert len(set(teams)) == 3
+    # Лучшая пара ролей — самые результативные слоты, а не самые разные команды.
+    assert [pick.team_id for pick in best.picks][:2] == [1, 1]
 
 
-def test_recommend_roster_enforces_distinct_teams(projector):
+def test_recommend_roster_allows_two_slots_from_one_team(projector):
+    """Компендиум разрешает брать мид и саппортов из одного состава."""
     projections = {
         "core": {1: _projection(projector, 1, "core", 12)},
         "mid": {1: _projection(projector, 1, "mid", 12)},
     }
-    assert recommend_roster(projections) == []
-    assert recommend_roster(projections, distinct_teams=False)
+    assert recommend_roster(projections)
+    assert recommend_roster(projections, distinct_teams=True) == []
 
 
 def test_roster_summary_reports_interval(projector):

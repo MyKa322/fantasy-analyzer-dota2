@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .glicko2 import Glicko2, Rating
+from .playoff_bracket import BRACKET, QUARTERFINALS, SLOT_KEYS, SPEC_BY_KEY, Source
 from .predictions_config import GroupStageConfig, PlayoffConfig, PointsTable
 
 log = logging.getLogger(__name__)
@@ -420,24 +421,13 @@ def optimise_group_predictions(
 
 # --- плей-офф -----------------------------------------------------------------
 
-# Double elimination на 8 команд = 14 матчей, ровно столько предсказаний просит
-# компендиум. UB QF -> UB SF -> UB F, параллельно LB, затем гранд-финал.
-BRACKET_SLOTS = (
-    "ubqf1",
-    "ubqf2",
-    "ubqf3",
-    "ubqf4",
-    "ubsf1",
-    "ubsf2",
-    "ubf",
-    "lbr1_1",
-    "lbr1_2",
-    "lbr2_1",
-    "lbr2_2",
-    "lbsf",
-    "lbf",
-    "gf",
-)
+# Структура сетки — из playoff_bracket: одна схема на страницу, разбор
+# сыгранного и симуляцию. Здесь только имена мест, чтобы не тащить импорт в
+# каждый вызов.
+BRACKET_SLOTS = SLOT_KEYS
+
+# Места, на которых заканчивается турнир, от лучшего к худшему.
+PLACES: tuple[str, ...] = ("1", "2", "3", "4", "5-6", "7-8")
 
 
 @dataclass(slots=True)
@@ -448,6 +438,15 @@ class BracketSimulation:
     winners: np.ndarray
     champion_probability: dict[int, float]
     simulations: int
+    # participants[sim, match, 0..1] — кто вышел на эту серию. Нужны там, где
+    # вопрос не «кто выиграет», а «кто вообще сюда дойдёт».
+    participants: np.ndarray | None = None
+    # series_played[sim, team] — сколько серий команда сыграет за плей-офф.
+    # Это же и вход для Fantasy: путь чемпиона через нижнюю сетку — шесть серий,
+    # вылет в первом раунде нижней — две, и в зачёт идёт лучшая из них.
+    series_played: np.ndarray | None = None
+    # places[sim, team] — индекс итогового места в PLACES.
+    places: np.ndarray | None = None
 
     def match_probabilities(self, match_key: str) -> dict[int, float]:
         column = self.winners[:, self.match_keys.index(match_key)]
@@ -458,9 +457,62 @@ class BracketSimulation:
             if counts[i]
         }
 
+    def participant_probabilities(self, match_key: str) -> dict[int, float]:
+        """Кто окажется на этом месте сетки — с какой вероятностью."""
+        if self.participants is None:
+            raise ValueError("симуляция не сохраняла участников")
+        column = self.participants[:, self.match_keys.index(match_key), :].ravel()
+        counts = np.bincount(column, minlength=len(self.team_ids))
+        return {
+            self.team_ids[i]: float(counts[i] / self.simulations)
+            for i in range(len(self.team_ids))
+            if counts[i]
+        }
+
+    def expected_series(self, team_id: int) -> float:
+        if self.series_played is None:
+            raise ValueError("симуляция не сохраняла число серий")
+        return float(self.series_played[:, self.team_ids.index(team_id)].mean())
+
+    def series_distribution(self, team_id: int) -> dict[int, float]:
+        """Распределение числа серий команды — вход для проекции Fantasy."""
+        if self.series_played is None:
+            raise ValueError("симуляция не сохраняла число серий")
+        column = self.series_played[:, self.team_ids.index(team_id)]
+        counts = np.bincount(column)
+        return {int(n): float(c / self.simulations) for n, c in enumerate(counts) if c}
+
+    def place_probabilities(self, team_id: int) -> dict[str, float]:
+        if self.places is None:
+            raise ValueError("симуляция не сохраняла места")
+        column = self.places[:, self.team_ids.index(team_id)]
+        counts = np.bincount(column, minlength=len(PLACES))
+        return {
+            PLACES[i]: float(counts[i] / self.simulations)
+            for i in range(len(PLACES))
+            if counts[i]
+        }
+
+    def top_probability(self, team_id: int, places: int) -> float:
+        """Вероятность закончить не ниже указанного места (топ-3, топ-4, ...)."""
+        if self.places is None:
+            raise ValueError("симуляция не сохраняла места")
+        column = self.places[:, self.team_ids.index(team_id)]
+        # Индекс места в PLACES растёт вместе с самим местом, а «5-6» — это уже
+        # пятое: сравнение по границе диапазона, а не по индексу.
+        allowed = [i for i, place in enumerate(PLACES) if int(place.split("-")[0]) <= places]
+        return float(np.isin(column, allowed).mean())
+
 
 class BracketSimulator:
-    """Double elimination на 8 команд с посевом по итогам группового этапа."""
+    """Double elimination на 8 команд: объявленная сетка плюс уже сыгранное.
+
+    Симулируется та же структура, по которой сетка рисуется (`playoff_bracket`),
+    и с теми же начальными условиями: пары четвертьфиналов объявлены, а серии,
+    которые уже сыграны, не разыгрываются заново, а входят как факт. Поэтому по
+    ходу плей-офф вероятности сужаются сами: после победы в верхней сетке
+    команда больше не может вылететь седьмой.
+    """
 
     def __init__(
         self,
@@ -469,6 +521,9 @@ class BracketSimulator:
         *,
         engine: Glicko2 | None = None,
         seed: int | None = None,
+        quarterfinals: Sequence[tuple[int, int]] | None = None,
+        results: Mapping[str, int] | None = None,
+        participants: Mapping[str, tuple[int, int]] | None = None,
     ) -> None:
         if len(ratings) != config.teams:
             raise ValueError(f"нужно {config.teams} команд, получено {len(ratings)}")
@@ -477,9 +532,37 @@ class BracketSimulator:
         self.rng = np.random.default_rng(seed)
         # Порядок = посев: первая команда — лучший результат группы.
         self.team_ids = tuple(ratings)
+        self._index = {team_id: i for i, team_id in enumerate(self.team_ids)}
         self.ratings = dict(ratings)
         self._p = self._probability_matrix(config.best_of)
         self._p_gf = self._probability_matrix(config.grand_final_best_of)
+        self._quarterfinals = self._resolve_quarterfinals(quarterfinals)
+        self._results = {key: self._index[team] for key, team in (results or {}).items()}
+        self._participants = {
+            key: (self._index[a], self._index[b])
+            for key, (a, b) in (participants or {}).items()
+        }
+
+    def _resolve_quarterfinals(
+        self, pairs: Sequence[tuple[int, int]] | None
+    ) -> dict[str, tuple[int, int]]:
+        """Объявленные пары в индексы. Без них — классический посев 1-8, 4-5, 3-6, 2-7."""
+        if not pairs:
+            seeded = ((0, 7), (3, 4), (2, 5), (1, 6))
+            return dict(zip(QUARTERFINALS, seeded, strict=True))
+        if len(pairs) != len(QUARTERFINALS):
+            raise ValueError(
+                f"четвертьфиналов должно быть {len(QUARTERFINALS)}, получено {len(pairs)}"
+            )
+        resolved: dict[str, tuple[int, int]] = {}
+        for key, (left, right) in zip(QUARTERFINALS, pairs, strict=True):
+            try:
+                resolved[key] = (self._index[left], self._index[right])
+            except KeyError as exc:
+                raise ValueError(
+                    f"пара {key}: нет рейтинга для команды {exc.args[0]!r}"
+                ) from exc
+        return resolved
 
     def _probability_matrix(self, best_of: int) -> np.ndarray:
         n = len(self.team_ids)
@@ -498,64 +581,83 @@ class BracketSimulator:
             return a, b
         return b, a
 
+    def _simulate(self) -> tuple[dict[str, int], dict[str, tuple[int, int]]]:
+        """Один прогон: победитель и пара участников каждого места сетки."""
+        winners: dict[str, int] = {}
+        pairs: dict[str, tuple[int, int]] = {}
+
+        for spec in BRACKET:
+            known = self._participants.get(spec.key)
+            if known is not None:
+                a, b = known
+            elif spec.key in self._quarterfinals:
+                a, b = self._quarterfinals[spec.key]
+            else:
+                a = self._resolve(spec.sources[0], winners, pairs)
+                b = self._resolve(spec.sources[1], winners, pairs)
+            pairs[spec.key] = (a, b)
+
+            fixed = self._results.get(spec.key)
+            if fixed is not None:
+                winners[spec.key] = fixed
+                continue
+            winner, _ = self._play(a, b, grand_final=spec.key == "gf")
+            winners[spec.key] = winner
+
+        return winners, pairs
+
+    @staticmethod
+    def _resolve(
+        source: Source, winners: Mapping[str, int], pairs: Mapping[str, tuple[int, int]]
+    ) -> int:
+        winner = winners[source.slot]
+        if source.winner:
+            return winner
+        left, right = pairs[source.slot]
+        return right if winner == left else left
+
     def run_once(self) -> dict[str, int]:
         """Один прогон сетки. Возвращает победителя каждого матча."""
-        result: dict[str, int] = {}
-
-        # Верхняя сетка: 1-8, 4-5, 3-6, 2-7 по посеву.
-        qf_pairs = ((0, 7), (3, 4), (2, 5), (1, 6))
-        qf_winners, qf_losers = [], []
-        for idx, (a, b) in enumerate(qf_pairs, start=1):
-            winner, loser = self._play(a, b)
-            result[f"ubqf{idx}"] = winner
-            qf_winners.append(winner)
-            qf_losers.append(loser)
-
-        sf1_w, sf1_l = self._play(qf_winners[0], qf_winners[1])
-        sf2_w, sf2_l = self._play(qf_winners[2], qf_winners[3])
-        result["ubsf1"], result["ubsf2"] = sf1_w, sf2_w
-
-        ubf_w, ubf_l = self._play(sf1_w, sf2_w)
-        result["ubf"] = ubf_w
-
-        # Нижняя сетка.
-        lb1_w, _ = self._play(qf_losers[0], qf_losers[1])
-        lb2_w, _ = self._play(qf_losers[2], qf_losers[3])
-        result["lbr1_1"], result["lbr1_2"] = lb1_w, lb2_w
-
-        # Проигравшие полуфиналов встречаются с победителями из противоположной части.
-        lb3_w, _ = self._play(lb1_w, sf2_l)
-        lb4_w, _ = self._play(lb2_w, sf1_l)
-        result["lbr2_1"], result["lbr2_2"] = lb3_w, lb4_w
-
-        lbsf_w, _ = self._play(lb3_w, lb4_w)
-        result["lbsf"] = lbsf_w
-
-        lbf_w, _ = self._play(lbsf_w, ubf_l)
-        result["lbf"] = lbf_w
-
-        champion, _ = self._play(ubf_w, lbf_w, grand_final=True)
-        result["gf"] = champion
-        return result
+        winners, _ = self._simulate()
+        return winners
 
     def run(self, simulations: int = 20_000) -> BracketSimulation:
-        winners = np.empty((simulations, len(BRACKET_SLOTS)), dtype=np.int16)
+        n_slots = len(BRACKET_SLOTS)
+        n_teams = len(self.team_ids)
+        winners = np.empty((simulations, n_slots), dtype=np.int16)
+        participants = np.empty((simulations, n_slots, 2), dtype=np.int16)
+        series_played = np.zeros((simulations, n_teams), dtype=np.int8)
+        places = np.zeros((simulations, n_teams), dtype=np.int8)
+
         for sim in range(simulations):
-            outcome = self.run_once()
+            outcome, pairs = self._simulate()
             for j, key in enumerate(BRACKET_SLOTS):
                 winners[sim, j] = outcome[key]
+                left, right = pairs[key]
+                participants[sim, j] = (left, right)
+                series_played[sim, left] += 1
+                series_played[sim, right] += 1
+                # Место определяется тем, где команда проиграла: серия, после
+                # которой турнир для неё кончается, знает своё место сама.
+                spec = SPEC_BY_KEY[key]
+                if spec.elimination_place is not None:
+                    loser = right if outcome[key] == left else left
+                    places[sim, loser] = PLACES.index(spec.elimination_place)
+            places[sim, outcome["gf"]] = PLACES.index("1")
 
         champion_column = winners[:, BRACKET_SLOTS.index("gf")]
-        counts = np.bincount(champion_column, minlength=len(self.team_ids))
+        counts = np.bincount(champion_column, minlength=n_teams)
         return BracketSimulation(
             team_ids=self.team_ids,
             match_keys=BRACKET_SLOTS,
             winners=winners,
             champion_probability={
-                self.team_ids[i]: float(counts[i] / simulations)
-                for i in range(len(self.team_ids))
+                self.team_ids[i]: float(counts[i] / simulations) for i in range(n_teams)
             },
             simulations=simulations,
+            participants=participants,
+            series_played=series_played,
+            places=places,
         )
 
 

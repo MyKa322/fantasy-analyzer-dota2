@@ -26,6 +26,37 @@ export interface ChangelogEntry {
 /** Новое сверху: список читают с начала и до первой знакомой версии. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.0",
+    date: "2026-08-17",
+    items: [
+      {
+        kind: "added",
+        en: "The playoff bracket: eight teams, double elimination, fourteen series. Announced quarterfinals plus everything already played, with odds for every slot — who gets there and who wins it.",
+        ru: "Сетка плей-офф: восемь команд, double elimination, четырнадцать серий. Объявленные четвертьфиналы плюс всё сыгранное, и у каждого места две вероятности — кто дойдёт и кто выиграет.",
+      },
+      {
+        kind: "added",
+        en: "Playoff predictions: one pick per series with expected compendium points, from the same simulation that draws the bracket odds.",
+        ru: "Предсказания плей-офф: ставка на каждую серию с ожидаемыми очками компендиума — из той же симуляции, что считает вероятности сетки.",
+      },
+      {
+        kind: "added",
+        en: "Fantasy is now split into periods, like the compendium: group stage and The International, with a countdown to the roster lock.",
+        ru: "Fantasy разделено на периоды, как в компендиуме: групповой этап и The International, со счётчиком до закрепления состава.",
+      },
+      {
+        kind: "changed",
+        en: "In the main event period the number of series is no longer a setting: it comes from each team's own path through the bracket — two series on an early exit, six on a run through the lower bracket. The best series of the period counts, so the projection now reflects how deep a team is likely to go, not just how it plays a map.",
+        ru: "В основном этапе число серий больше не настройка: оно берётся из пути команды по сетке — две серии при раннем вылете, шесть при дороге через нижнюю. В зачёт идёт лучшая серия периода, поэтому проекция теперь учитывает, как далеко команда дойдёт, а не только как она играет карту.",
+      },
+      {
+        kind: "fixed",
+        en: "Roster suggestions no longer demand three different teams: the compendium allows a mid and supports from the same lineup, and those combinations were being thrown away.",
+        ru: "Подбор состава больше не требует трёх разных команд: компендиум разрешает брать мид и саппортов из одного состава, а такие варианты вычёркивались.",
+      },
+    ],
+  },
+  {
     version: "0.4.0",
     date: "2026-08-11",
     items: [

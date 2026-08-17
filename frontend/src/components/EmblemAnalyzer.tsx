@@ -25,6 +25,7 @@ import {
   type TitleAdvice,
 } from "../api";
 import { GROUP_COLOR, ROLES, teamCrest } from "../assets";
+import { MAIN_STAGE, useFantasyStage } from "../fantasyStage";
 import { useT } from "../i18n";
 import EmblemCard from "./EmblemCard";
 import HeroPool from "./HeroPool";
@@ -37,6 +38,7 @@ const TRAITS = ["fractal", "benevolent", "vampiric", "unique", "friendly"];
 
 export default function EmblemAnalyzer() {
   const { t, tryT, tp, n, role: roleLabel } = useT();
+  const { stage } = useFantasyStage();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamId, setTeamId] = useState<number | null>(null);
   const [role, setRole] = useState("core");
@@ -82,6 +84,9 @@ export default function EmblemAnalyzer() {
           simulate: true,
           simulations: 3000,
           top_n: 3,
+          // Очки за период зависят от этапа: в плей-офф серий у команды меньше,
+          // а у вылетевшей их нет вовсе.
+          stage,
         }),
         api.statReport(payload),
         api.titles(payload),
@@ -301,6 +306,15 @@ export default function EmblemAnalyzer() {
                 ))}
               </div>
             </div>
+
+            {/* Команда вне сетки: в основном этапе она не сыграет ни серии, и
+                любые очки за период у неё нулевые — это про выбор состава,
+                а не сноска под таблицей. */}
+            {stage === MAIN_STAGE && best.period_mean == null && (
+              <div className="mb-3">
+                <Notice kind="warn">{t("emblems.notInPlayoffs")}</Notice>
+              </div>
+            )}
 
             {/* Замена в составе: цифры принадлежат не тому, кто выйдет играть,
                 и об этом надо сказать до эмблем, а не в сноске под ними. */}

@@ -39,7 +39,8 @@ export type PluralKey =
   | "plural.options"
   | "plural.tournaments"
   | "plural.winStreak"
-  | "plural.lossStreak";
+  | "plural.lossStreak"
+  | "plural.days";
 
 /** Подстановка `{name}` — единственный формат, который нужен подписям. */
 function fill(template: string, params?: Params): string {

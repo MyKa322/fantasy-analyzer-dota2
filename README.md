@@ -106,8 +106,10 @@ split of a duo by player; **My emblems** — the inverse problem: enter what you
 produced and get the TI15 duos ranked for that exact set; **Profiles** — a page for any team and
 any player in the database: matches, averages, heroes, rating and our analysis on top; **Match** —
 any game by its id, pulled live from OpenDota: the scoreboard with items, the ward map with a
-timeline, the head-to-head record and compendium points for the map; **Roster** —
-candidates per role across the 16 participants and the best combinations; **Predictions** — Swiss
+timeline, the head-to-head record and compendium points for the map; **Group stage** — the Swiss bracket,
+stage analytics and head-to-head history; **Playoffs** — the eight-team bracket, the odds for every
+slot and the recommended 14 predictions; **Roster** —
+candidates per role and the best combinations for the chosen Fantasy period; **Predictions** — Swiss
 bucket probabilities and a ready prediction layout; **Ratings** — the Glicko-2 table and the trend
 with its uncertainty band; **Custom banner** — a manual builder with a point projection; **Data** —
 match ingestion.
@@ -277,6 +279,40 @@ Below the bracket: the Elimination Round (whoever reaches 3-2 and 2-3), the stan
 sixteen have met each other before — the score in that column is this team's wins against that
 opponent, taken from `head_to_head.json`.
 
+**Playoffs: one structure for the page, the results and the forecast.** The **Playoffs** tab draws
+the eight-team double elimination — fourteen series, of which the quarterfinals are announced while
+every other slot only knows where its teams come from ("winner of ubqf1", "loser of ubsf2"). That
+layout lives in one place, [`analytics/playoff_bracket.py`](backend/app/analytics/playoff_bracket.py),
+and the simulation walks the same structure: two copies would diverge on the first evening, when the
+loser of an upper semifinal landed in different halves of the lower bracket on the page and in the
+forecast.
+
+Every slot carries two different questions, kept apart: **who reaches it** and **who wins it**. For a
+quarterfinal the first answer is trivial; for the grand final it is not.
+
+Series already played enter the forecast as fact instead of being replayed, so the odds narrow by
+themselves: once a team wins in the upper bracket it can no longer finish seventh. The recommended 14
+compendium predictions come from that same simulation, not from a separate one.
+
+A series finds its slot by its participants: as soon as both sources are decided, the slot's
+participants are known. The lower bracket's first-round pairing is not shown on the compendium
+screen and is assumed to follow the classic layout (losers crossed from opposite halves); if the real
+pairing differs, the series still takes a slot in the same round — the round itself does not change.
+The boundary between stages is the playoff start date from the config plus the maps already consumed
+by the group stage: the same eight teams also met in Swiss, and a quarterfinal is not round six.
+
+**Fantasy is scored by period, as in the compendium.** The group stage has its own roster, the main
+event has another, and they lock on different days — the strip above the Fantasy tabs shows both
+periods and the countdown to each lock. The difference is not cosmetic: in the group a team plays 4-6
+series back to back, in the playoffs anywhere from two (out in the first lower-bracket round) to six
+(a champion's run through the lower bracket), and there the series count is not a setting but a
+distribution from the bracket simulation. The best series of the period counts, so going deep is
+worth more than one strong map — and a team outside the bracket scores nothing at all, which the page
+says outright instead of showing a zero.
+
+Roster slots are independent: the compendium allows taking a mid and supports from the same lineup
+(that is what the Fantasy screen shows), and the suggester no longer throws those combinations away.
+
 **A correction for sample size, so the leaderboard is not won by noise.** Picking the best of 48
 candidates (16 teams × 3 roles) is a maximum over noisy estimates, and a maximum goes to whoever has
 the smallest sample, not the strongest play: a shorter history has a wider spread and lands in the
@@ -423,7 +459,8 @@ represented more honestly by a high RD, and the model will say for itself that t
 ```
 backend/
   config/ti15_fantasy.yaml        compendium numbers: stats, qualities, traits, titles
-  config/ti15_predictions.yaml    Swiss format, bracket, point scales, participants
+  config/ti15_predictions.yaml    Swiss format, playoff bracket, Fantasy periods,
+                                  point scales, participants
   config/ti15_rosters.yaml        manual roster overrides (they beat the automation)
   app/
     fantasy/rules.py              loading and typing of the rules
@@ -432,6 +469,9 @@ backend/
     fantasy/advisor.py            the analyzer: stat value, banner search, per-stat ranking
     analytics/glicko2.py          rating with uncertainty
     analytics/rating.py           chronological recomputation (anti-leak)
+    analytics/series.py           maps into series — shared by the group and the bracket
+    analytics/group_stage.py      the Swiss bracket built from played matches
+    analytics/playoff_bracket.py  double elimination structure and what is played in it
     analytics/simulate.py         Monte-Carlo Swiss + bracket + prediction layout
     ingest/opendota.py            client with rate limiting and a file cache
     ingest/stat_mapping.py        turning a match into compendium stats
@@ -516,9 +556,20 @@ left:
    starts from them instead of splitting the field by seed. It is all or nothing — half the round
    from the bracket and half from the seeding would be two different tournaments. Later rounds are
    still paired by record, because they depend on results that have not happened yet.
-2. **Prefix title conditions.** They depend on a hero's colour and type. The lists are filled in by
+2. **Lower bracket routing and the playoff calendar.** The bracket screen shows the quarterfinals but
+   not how the losers are paired: the classic layout is assumed (losers crossed from opposite
+   halves). If the real pairing differs, the series still takes a slot in the same round — the
+   parser looks at who plays the round, not only at the assumed routing. The playoff start date
+   (`playoffs.starts`) and the main event's roster lock (`fantasy_stages`) are derived from the
+   Fantasy screen of 2026-08-17 — "4 days to lock"; both are one line in the config.
+3. **How many roster slots may come from one team.** On the Fantasy screen a mid and a support duo
+   come from the same lineup, so there is no ban on repeating a team. Whether all three slots can
+   come from one team is not visible from that screen; the suggester does not forbid it, and
+   `distinct_teams` in `/api/fantasy/roster` turns the opposite constraint back on when a spread
+   roster is what you want.
+4. **Prefix title conditions.** They depend on a hero's colour and type. The lists are filled in by
    hand from the glossary, and a hero that is not on any list simply does not trigger a prefix.
-3. **Substitutions before the tournament.** Rosters are derived from a team's recent matches, but if
+5. **Substitutions before the tournament.** Rosters are derived from a team's recent matches, but if
    a substitute has not played a single game yet, only a human can see it. `config/ti15_rosters.yaml`
    exists for that case — whatever is written there beats the automation. A player who has never
    played for the team at all is written as a dictionary rather than a nickname, because nicknames
