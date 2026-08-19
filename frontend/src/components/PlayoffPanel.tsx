@@ -403,6 +403,12 @@ function Status({ team }: { team: { bracket: string; place: string | null } }) {
   );
 }
 
+/** Карты за группу «выиграно-проиграно». У старых снапшотов их нет. */
+function mapRecord(row: { maps_won?: number; maps_lost?: number } | undefined): string {
+  if (!row || row.maps_won == null || row.maps_lost == null) return "—";
+  return `${row.maps_won}-${row.maps_lost}`;
+}
+
 function heat(probability: number): string {
   if (probability >= 0.3) return "bg-[#c8a24a] text-black";
   if (probability >= 0.15) return "bg-[#8a6f33] text-neutral-100";
@@ -481,6 +487,9 @@ export default function PlayoffPanel({ onOpen }: { onOpen?: (id: number) => void
                 <th className="py-1 text-center" title={t("playoff.groupHint")}>
                   {t("playoff.groupColumn")}
                 </th>
+                <th className="py-1 text-center" title={t("stage.mapRecordHint")}>
+                  {t("common.mapRecord")}
+                </th>
                 <th className="py-1 text-center">{t("common.rating")}</th>
                 <th className="py-1 text-center">{t("playoff.recordColumn")}</th>
                 <th className="py-1 text-center">{t("playoff.champion")}</th>
@@ -505,6 +514,9 @@ export default function PlayoffPanel({ onOpen }: { onOpen?: (id: number) => void
                     {group.has(team.team_id)
                       ? `${group.get(team.team_id)!.wins}-${group.get(team.team_id)!.losses}`
                       : "—"}
+                  </td>
+                  <td className="tabular py-1.5 text-center text-neutral-500">
+                    {mapRecord(group.get(team.team_id))}
                   </td>
                   <td className="tabular py-1.5 text-center text-neutral-400">
                     {rated.get(team.team_id)?.rating == null

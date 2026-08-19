@@ -36,8 +36,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       },
       {
         kind: "added",
-        en: "The playoff table shows where the odds come from: the Swiss record and the rating stand next to each team's chances.",
-        ru: "В таблице плей-офф видно, из чего сложились вероятности: рядом с шансами команды стоят её результат в группе и рейтинг.",
+        en: "The playoff table shows where the odds come from: the Swiss record, the maps behind it and the rating stand next to each team's chances. The group standings carry the map record too, and an equal record is now broken by map difference.",
+        ru: "В таблице плей-офф видно, из чего сложились вероятности: рядом с шансами команды стоят её результат в группе, карты за ним и рейтинг. В таблице группы карты тоже появились, а равная запись теперь разводится разницей карт.",
       },
     ],
   },

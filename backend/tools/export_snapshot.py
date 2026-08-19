@@ -281,7 +281,14 @@ def export_stage(session, engine=None) -> dict:
             for s in stage.series
         ],
         "standings": [
-            {"team_id": s.team_id, "name": s.name, "wins": s.wins, "losses": s.losses}
+            {
+                "team_id": s.team_id,
+                "name": s.name,
+                "wins": s.wins,
+                "losses": s.losses,
+                "maps_won": s.maps_won,
+                "maps_lost": s.maps_lost,
+            }
             for s in stage.standings
         ],
         "analytics": {

@@ -239,6 +239,9 @@ export default function StagePanel({ onOpen }: { onOpen?: (id: number) => void }
               <tr>
                 <th className="py-1 text-left">{t("common.team")}</th>
                 <th className="py-1 text-center">{t("stage.record")}</th>
+                <th className="py-1 text-center" title={t("stage.mapRecordHint")}>
+                  {t("common.mapRecord")}
+                </th>
                 <th className="py-1 text-left">{t("stage.headToHead")}</th>
               </tr>
             </thead>
@@ -266,6 +269,11 @@ export default function StagePanel({ onOpen }: { onOpen?: (id: number) => void }
                     </td>
                     <td className="tabular py-1 text-center text-neutral-300">
                       {team.wins}-{team.losses}
+                    </td>
+                    <td className="tabular py-1 text-center text-neutral-500">
+                      {team.maps_won == null || team.maps_lost == null
+                        ? "—"
+                        : `${team.maps_won}-${team.maps_lost}`}
                     </td>
                     <td className="py-1 text-neutral-500">
                       {meetings.length ? (

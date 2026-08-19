@@ -141,7 +141,15 @@ export interface Stage {
   wins_to_advance: number;
   losses_to_eliminate: number;
   series: StageSeries[];
-  standings: { team_id: number; name: string; wins: number; losses: number }[];
+  standings: {
+    team_id: number;
+    name: string;
+    wins: number;
+    losses: number;
+    /** Карты за этап. Появились позже серий — у старых снапшотов их нет. */
+    maps_won?: number;
+    maps_lost?: number;
+  }[];
   /** Аналитика этапа. Появилась позже сетки — у старых снапшотов её нет. */
   analytics?: StageAnalytics;
 }

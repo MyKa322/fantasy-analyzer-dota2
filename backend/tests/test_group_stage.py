@@ -115,6 +115,29 @@ def test_standings_are_sorted_by_record(session):
     assert stage.standings[0].record == "2-0"
 
 
+def test_the_table_counts_maps_as_well_as_series(session):
+    """Серия — это ещё не всё: 2-0 и 2-1 стоят в таблице одинаково, а сыграны по-разному."""
+    add_series(session, key="a", left=1, right=2, results=[True, True])
+    add_series(session, key="b", left=1, right=3, results=[True, False, True], hours=24)
+
+    maps = {s.team_id: s.map_record for s in build_group_stage(session, TEAMS, starts=STARTS).standings}
+
+    assert maps[1] == "4-1"
+    assert maps[2] == "0-2"
+    assert maps[3] == "1-2"
+
+
+def test_an_equal_record_is_broken_by_the_map_difference(session):
+    """При равных сериях выше тот, кто прошёл их с меньшими потерями."""
+    add_series(session, key="a", left=1, right=3, results=[True, True])
+    add_series(session, key="b", left=2, right=4, results=[True, False, True], hours=1)
+
+    standings = build_group_stage(session, TEAMS, starts=STARTS).standings
+    top = [s for s in standings if s.wins == 1 and s.losses == 0]
+
+    assert [s.team_id for s in top] == [1, 2], "всухую выше, чем через третью карту"
+
+
 def test_a_draw_leaves_the_series_undecided(session):
     """Ничья в серии — сигнал о неполных данных, а не результат.
 

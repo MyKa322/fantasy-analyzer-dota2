@@ -55,10 +55,22 @@ class Standing:
     name: str
     wins: int = 0
     losses: int = 0
+    #: Карты, а не серии. Швейцарка сводит команды по сериям, но 4-1 набранное
+    #: всухую и то же 4-1 через три решающие карты — разные турниры.
+    maps_won: int = 0
+    maps_lost: int = 0
 
     @property
     def record(self) -> str:
         return f"{self.wins}-{self.losses}"
+
+    @property
+    def map_record(self) -> str:
+        return f"{self.maps_won}-{self.maps_lost}"
+
+    @property
+    def map_diff(self) -> int:
+        return self.maps_won - self.maps_lost
 
 
 @dataclass(slots=True)
@@ -92,6 +104,7 @@ def build_group_stage(
         return GroupStage(standings=[Standing(tid, name) for tid, name in teams.items()])
 
     played: dict[int, tuple[int, int]] = {team_id: (0, 0) for team_id in teams}
+    maps: dict[int, tuple[int, int]] = {team_id: (0, 0) for team_id in teams}
     series: list[Series] = []
 
     for played_series in collect_series(session, teams, since=starts):
@@ -118,14 +131,23 @@ def build_group_stage(
             )
         )
 
+        for side, other in (
+            (played_series.left, played_series.right),
+            (played_series.right, played_series.left),
+        ):
+            won, lost = maps[side.team_id]
+            maps[side.team_id] = (won + side.score, lost + other.score)
+
         winner_id = played_series.winner_id
         loser_id = played_series.loser_id
         if winner_id is not None and loser_id is not None:
             played[winner_id] = (played[winner_id][0] + 1, played[winner_id][1])
             played[loser_id] = (played[loser_id][0], played[loser_id][1] + 1)
 
+    # Порядок — по сериям, а при равенстве по разнице карт: это ближайшее к
+    # смыслу «кто прошёл этап увереннее» из того, что видно из результатов.
     standings = sorted(
-        (Standing(tid, name, *played[tid]) for tid, name in teams.items()),
-        key=lambda s: (-s.wins, s.losses, s.name),
+        (Standing(tid, name, *played[tid], *maps[tid]) for tid, name in teams.items()),
+        key=lambda s: (-s.wins, s.losses, -s.map_diff, s.name),
     )
     return GroupStage(series=series, standings=standings)
