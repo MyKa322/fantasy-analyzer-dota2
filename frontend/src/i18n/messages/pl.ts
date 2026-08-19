@@ -577,7 +577,7 @@ const pl: Dictionary = {
   "playoff.round.lbsf": "Półfinał dolnej",
   "playoff.round.lbf": "Finał dolnej",
   "playoff.noForecast": "Na razie bez prawdopodobieństw: część ósemki nie ma rankingu w danych. Sama drabinka jest pokazana tak, jak ją ogłoszono.",
-  "playoff.legend": "Szarą kursywą — prognoza na puste miejsce: kto najpewniej je zajmie i z jakim prawdopodobieństwem. Przy drużynie, która już tam stoi, procent znaczy co innego: szansę na wygranie tej serii.",
+  "playoff.legend": "Szarą kursywą — prognoza: drabinka jest przechodzona w całości, w każdej serii dalej idzie faworyt, a przegrany trafia tam, gdzie prowadzi struktura. Procent to szansa na dotarcie w to miejsce właśnie tą gałęzią. Przy drużynie, która już stoi w drabince, procent znaczy co innego: szansę na wygranie tej serii.",
   "playoff.chancesTitle": "Kto zajdzie jak daleko",
   "playoff.chancesSubtitle": "Reszta drabinki rozegrana według obecnych rankingów. Serie już rozegrane wchodzą jako fakt, a nie rzut monetą.",
   "playoff.recordColumn": "Bilans",

@@ -582,7 +582,7 @@ export const en = {
   "playoff.round.lbsf": "Lower semifinal",
   "playoff.round.lbf": "Lower final",
   "playoff.noForecast": "No odds yet: some of the eight have no rating in the data. The bracket itself is shown as announced.",
-  "playoff.legend": "Grey and italic is the forecast for an empty slot: who is most likely to get there, and how likely. Next to a team already in the bracket the percentage is different — it is the chance to win that series.",
+  "playoff.legend": "Grey and italic is the forecast: the bracket is walked end to end with the favourite advancing, so every loser lands where the structure sends them. The percentage is the chance of reaching that spot along that branch. Next to a team already in the bracket the percentage means something else — the chance to win that series.",
   "playoff.chancesTitle": "How far each team goes",
   "playoff.chancesSubtitle": "The remaining bracket simulated from current ratings. Series already played enter as fact, not as a coin flip.",
   "playoff.recordColumn": "Record",

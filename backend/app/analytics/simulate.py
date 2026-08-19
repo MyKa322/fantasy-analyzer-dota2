@@ -17,6 +17,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Protocol
 
 import numpy as np
 
@@ -469,6 +470,24 @@ class BracketSimulation:
             if counts[i]
         }
 
+    def side_probabilities(self, match_key: str, side: int) -> dict[int, float]:
+        """Кто займёт эту сторону места: вероятности по одной ветке.
+
+        Место сетки кормится с двух сторон, и стороны не взаимозаменяемы: слева
+        приходит победитель одной серии, справа — проигравший другой. Поэтому
+        «кто здесь окажется» имеет два разных ответа, и общий на двоих годится
+        только для подписи всего места целиком.
+        """
+        if self.participants is None:
+            raise ValueError("симуляция не сохраняла участников")
+        column = self.participants[:, self.match_keys.index(match_key), side]
+        counts = np.bincount(column, minlength=len(self.team_ids))
+        return {
+            self.team_ids[i]: float(counts[i] / self.simulations)
+            for i in range(len(self.team_ids))
+            if counts[i]
+        }
+
     def expected_series(self, team_id: int) -> float:
         if self.series_played is None:
             raise ValueError("симуляция не сохраняла число серий")
@@ -502,6 +521,12 @@ class BracketSimulation:
         # пятое: сравнение по границе диапазона, а не по индексу.
         allowed = [i for i, place in enumerate(PLACES) if int(place.split("-")[0]) <= places]
         return float(np.isin(column, allowed).mean())
+
+
+class Decider(Protocol):
+    """Чем решается серия: жребием по вероятности или выбором фаворита."""
+
+    def __call__(self, a: int, b: int, *, grand_final: bool = False) -> int: ...
 
 
 class BracketSimulator:
@@ -575,14 +600,20 @@ class BracketSimulator:
                     )
         return matrix
 
-    def _play(self, a: int, b: int, *, grand_final: bool = False) -> tuple[int, int]:
+    def _play(self, a: int, b: int, *, grand_final: bool = False) -> int:
         matrix = self._p_gf if grand_final else self._p
-        if self.rng.random() < matrix[a, b]:
-            return a, b
-        return b, a
+        return a if self.rng.random() < matrix[a, b] else b
 
-    def _simulate(self) -> tuple[dict[str, int], dict[str, tuple[int, int]]]:
-        """Один прогон: победитель и пара участников каждого места сетки."""
+    def _favourite(self, a: int, b: int, *, grand_final: bool = False) -> int:
+        matrix = self._p_gf if grand_final else self._p
+        return a if matrix[a, b] >= 0.5 else b
+
+    def _walk(self, decide: Decider) -> tuple[dict[str, int], dict[str, tuple[int, int]]]:
+        """Пройти сетку сверху вниз, отдавая каждую серию решателю.
+
+        Один и тот же проход обслуживает и случайный прогон, и «по фаворитам»:
+        разводка не должна зависеть от того, чем решается серия.
+        """
         winners: dict[str, int] = {}
         pairs: dict[str, tuple[int, int]] = {}
 
@@ -598,13 +629,33 @@ class BracketSimulator:
             pairs[spec.key] = (a, b)
 
             fixed = self._results.get(spec.key)
-            if fixed is not None:
-                winners[spec.key] = fixed
-                continue
-            winner, _ = self._play(a, b, grand_final=spec.key == "gf")
-            winners[spec.key] = winner
+            winners[spec.key] = (
+                fixed
+                if fixed is not None
+                else decide(a, b, grand_final=spec.key == "gf")
+            )
 
         return winners, pairs
+
+    def _simulate(self) -> tuple[dict[str, int], dict[str, tuple[int, int]]]:
+        """Один прогон: победитель и пара участников каждого места сетки."""
+        return self._walk(self._play)
+
+    def projected_pairs(self) -> dict[str, tuple[int, int]]:
+        """Ход сетки, если в каждой серии проходит фаворит.
+
+        Это ответ на вопрос «кто с кем сыграет дальше», а не «кто вероятнее
+        всего окажется на этом месте». Вопросы разные: по отдельности самая
+        вероятная команда каждого места складывается в сетку, которой не бывает
+        — команда стоит и в финале верхней, и в полуфинале нижней, куда после
+        выигранного полуфинала попасть уже нельзя. Здесь же турнир проходится
+        один раз целиком, поэтому проигравший всегда оказывается там, куда его
+        ведёт структура.
+        """
+        _, pairs = self._walk(self._favourite)
+        return {
+            key: (self.team_ids[a], self.team_ids[b]) for key, (a, b) in pairs.items()
+        }
 
     @staticmethod
     def _resolve(

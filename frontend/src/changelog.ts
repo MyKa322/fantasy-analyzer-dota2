@@ -26,6 +26,22 @@ export interface ChangelogEntry {
 /** Новое сверху: список читают с начала и до первой знакомой версии. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.7.0",
+    date: "2026-08-19",
+    items: [
+      {
+        kind: "changed",
+        en: "The playoff bracket is drawn as a tree instead of columns: upper band on top, lower band below it, grand final on the right, and a line from every series to the one it feeds.",
+        ru: "Сетка плей-офф рисуется деревом, а не колонками: верхняя лента, под ней нижняя, гранд-финал справа, и от каждой серии идёт линия туда, куда попадает победитель.",
+      },
+      {
+        kind: "fixed",
+        en: "The forecast in an empty slot now comes from one consistent run of the bracket, with the favourite advancing in every series. Picking the most likely team for each slot separately built a bracket that cannot happen — the same team stood in the upper final and in the lower semifinal, which a team that won its upper semifinal can never reach. The percentage next to a forecast is now the chance of arriving there along that branch.",
+        ru: "Прогноз в пустом месте берётся из одного связного хода сетки, где в каждой серии проходит фаворит. Раньше для каждого места отдельно бралась самая вероятная команда, и складывалась сетка, которой не бывает: одна команда стояла и в финале верхней, и в полуфинале нижней, куда после выигранного полуфинала верхней попасть нельзя. Процент рядом с прогнозом теперь считается по этой ветке.",
+      },
+    ],
+  },
+  {
     version: "0.6.0",
     date: "2026-08-17",
     items: [

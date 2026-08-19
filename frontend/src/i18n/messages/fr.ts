@@ -577,7 +577,7 @@ const fr: Dictionary = {
   "playoff.round.lbsf": "Demi-finale bas",
   "playoff.round.lbf": "Finale bas",
   "playoff.noForecast": "Pas encore de probabilités : une partie des huit n'a pas de classement dans les données. Le tableau reste affiché tel qu'annoncé.",
-  "playoff.legend": "En gris et en italique, la prévision pour une place vide : qui a le plus de chances d'y arriver, et avec quelle probabilité. À côté d'une équipe déjà en place, le pourcentage est autre : la chance de gagner cette série.",
+  "playoff.legend": "En gris et en italique, la prévision : le tableau est parcouru en entier, le favori passe à chaque série et le perdant tombe là où la structure l'envoie. Le pourcentage est la chance d'atteindre cette place par cette branche. À côté d'une équipe déjà en place, il signifie autre chose : la chance de gagner cette série.",
   "playoff.chancesTitle": "Jusqu'où va chaque équipe",
   "playoff.chancesSubtitle": "Le reste du tableau simulé à partir des classements actuels. Les séries déjà jouées entrent comme un fait, pas comme un tirage.",
   "playoff.recordColumn": "Bilan",

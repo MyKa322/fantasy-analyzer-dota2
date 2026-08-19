@@ -578,7 +578,7 @@ const pt: Dictionary = {
   "playoff.round.lbsf": "Semifinal inferior",
   "playoff.round.lbf": "Final inferior",
   "playoff.noForecast": "Ainda sem probabilidades: parte dos oito não tem rating nos dados. A chave em si aparece como foi anunciada.",
-  "playoff.legend": "Em cinza e itálico está o prognóstico de uma vaga vazia: quem tem mais chance de chegar lá e com que probabilidade. Ao lado de um time que já está na chave a porcentagem é outra: a chance de vencer aquela série.",
+  "playoff.legend": "Em cinza e itálico está o prognóstico: a chave é percorrida inteira, em cada série avança o favorito e quem perde cai onde a estrutura manda. A porcentagem é a chance de chegar àquela vaga por aquele ramo. Ao lado de um time que já está na chave a porcentagem é outra: a chance de vencer aquela série.",
   "playoff.chancesTitle": "Até onde cada time vai",
   "playoff.chancesSubtitle": "O restante da chave simulado a partir dos ratings atuais. Séries já jogadas entram como fato, não como cara ou coroa.",
   "playoff.recordColumn": "Campanha",

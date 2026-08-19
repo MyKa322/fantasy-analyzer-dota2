@@ -354,6 +354,7 @@ def export_playoffs(session, simulations: int) -> dict | None:
     missing = [teams[t] for t in ordered if t not in ratings]
     simulation = None
     plan = None
+    projected_pairs: dict[str, tuple[int, int]] = {}
     if missing:
         log.warning("прогноз плей-офф пропущен: нет рейтинга у %s", ", ".join(missing))
     else:
@@ -371,6 +372,10 @@ def export_playoffs(session, simulations: int) -> dict | None:
         )
         simulation = simulator.run(simulations=simulations)
         plan = optimise_bracket_predictions(simulation, config.points)
+        # Разводка «по фаворитам» — одна связная сетка вместо четырнадцати
+        # независимых ответов: проигравший каждой серии уходит туда, куда его
+        # ведёт структура, а не всплывает там, где у него выше вероятность.
+        projected_pairs = simulator.projected_pairs()
 
     def side(entry) -> dict | None:
         if entry is None:
@@ -379,6 +384,23 @@ def export_playoffs(session, simulations: int) -> dict | None:
 
     def chances(values: dict[int, float] | None) -> dict[str, float]:
         return {str(k): round(v, 4) for k, v in (values or {}).items() if v > 0.0005}
+
+    def projected(key: str) -> list[dict]:
+        """Прогноз по сторонам места: кто придёт слева и кто справа.
+
+        Процент у прогноза свой: не «дойти до места вообще», а «прийти сюда
+        именно этой веткой». Иначе у полуфинала нижней сетки стояло бы число,
+        собранное из двух дорог, одна из которых для этой команды закрыта.
+        """
+        if simulation is None:
+            return []
+        return [
+            {
+                "team_id": team_id,
+                "chance": round(simulation.side_probabilities(key, index).get(team_id, 0.0), 4),
+            }
+            for index, team_id in enumerate(projected_pairs[key])
+        ]
 
     matches = [
         {
@@ -398,6 +420,7 @@ def export_playoffs(session, simulations: int) -> dict | None:
             "reach": chances(
                 simulation.participant_probabilities(m.key) if simulation else None
             ),
+            "projected": projected(m.key),
             "win": chances(simulation.match_probabilities(m.key) if simulation else None),
         }
         for m in bracket.matches

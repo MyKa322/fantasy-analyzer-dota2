@@ -577,7 +577,7 @@ const tr: Dictionary = {
   "playoff.round.lbsf": "Alt yarı final",
   "playoff.round.lbf": "Alt final",
   "playoff.noForecast": "Henüz olasılık yok: sekiz takımın bir kısmının verilerde puanı bulunmuyor. Tablo açıklandığı haliyle gösteriliyor.",
-  "playoff.legend": "Gri ve italik olan boş bir sıra için tahmin: oraya kimin gelmesi daha olası ve hangi olasılıkla. Zaten tabloda olan bir takımın yanındaki yüzde ise başka bir şey — o seriyi kazanma şansı.",
+  "playoff.legend": "Gri ve italik olan tahmin: tablo baştan sona bir kez yürütülür, her seride favori ilerler ve kaybeden yapının gönderdiği yere düşer. Yüzde, o yere tam olarak o daldan ulaşma şansıdır. Zaten tabloda olan bir takımın yanındaki yüzde başka bir şey — o seriyi kazanma şansı.",
   "playoff.chancesTitle": "Kim nereye kadar gider",
   "playoff.chancesSubtitle": "Kalan tablo mevcut puanlara göre simüle edildi. Oynanmış seriler yazı tura değil, kesin sonuç olarak giriyor.",
   "playoff.recordColumn": "Bilanço",

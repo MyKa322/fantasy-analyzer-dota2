@@ -463,3 +463,69 @@ def test_top_probability_grows_with_the_bar(playoff_config):
     assert champion == pytest.approx(result.champion_probability[1])
     assert champion <= result.top_probability(1, places=2) <= top_four <= 1.0
     assert result.top_probability(1, places=8) == pytest.approx(1.0)
+
+
+# --- прогноз на незакрытые места ----------------------------------------------
+
+
+def test_the_forecast_is_one_bracket_and_not_fourteen_answers(playoff_config):
+    """Прогноз проходит турнир целиком, а не отвечает по каждому месту отдельно.
+
+    Самая вероятная команда каждого места по отдельности складывается в сетку,
+    которой не бывает: команда стоит и в финале верхней, и в полуфинале нижней,
+    куда после выигранного полуфинала верхней попасть уже нельзя.
+    """
+    sim = BracketSimulator(
+        make_ratings(8, spread=60.0),
+        playoff_config,
+        quarterfinals=((1, 8), (4, 5), (3, 6), (2, 7)),
+    )
+    pairs = sim.projected_pairs()
+
+    assert pairs["ubqf1"] == (1, 8)
+    # В каждой серии проходит фаворит, поэтому верхняя сетка идёт по посеву.
+    assert pairs["ubsf1"] == (1, 4)
+    assert pairs["ubf"] == (1, 2)
+    # Проигравший полуфинала верхней уходит в противоположную половину нижней.
+    assert pairs["lbr2_1"] == (3, 5)
+    assert pairs["lbr2_2"] == (4, 6)
+    # Главное: выигравший полуфинал верхней в полуфинале нижней оказаться не может.
+    assert not set(pairs["ubf"]) & set(pairs["lbsf"])
+    assert pairs["lbf"] == (2, 3)
+    assert pairs["gf"] == (1, 2)
+
+
+def test_the_forecast_starts_from_what_is_already_played(playoff_config):
+    """Сыгранное задаёт разводку: дальше идёт тот, кто выиграл, а не кто сильнее."""
+    sim = BracketSimulator(
+        make_ratings(8, spread=60.0),
+        playoff_config,
+        quarterfinals=((1, 8), (4, 5), (3, 6), (2, 7)),
+        results={"ubqf1": 8},
+        participants={"ubqf1": (1, 8)},
+    )
+    pairs = sim.projected_pairs()
+
+    assert pairs["ubsf1"] == (8, 4)
+    assert pairs["lbr1_1"] == (1, 5)
+
+
+def test_side_probabilities_answer_by_branch(playoff_config):
+    """У места два входа, и вопрос «кто здесь окажется» у каждого свой."""
+    sim = BracketSimulator(
+        make_ratings(8),
+        playoff_config,
+        seed=11,
+        quarterfinals=((1, 8), (4, 5), (3, 6), (2, 7)),
+    )
+    result = sim.run(simulations=400)
+
+    left = result.side_probabilities("ubsf1", 0)
+    right = result.side_probabilities("ubsf1", 1)
+    assert set(left) <= {1, 8}, "слева приходит только победитель первого четвертьфинала"
+    assert set(right) <= {4, 5}
+    assert sum(left.values()) == pytest.approx(1.0)
+
+    merged = result.participant_probabilities("ubsf1")
+    for team, value in merged.items():
+        assert left.get(team, 0.0) + right.get(team, 0.0) == pytest.approx(value)

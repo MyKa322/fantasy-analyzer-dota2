@@ -294,6 +294,14 @@ forecast.
 Every slot carries two different questions, kept apart: **who reaches it** and **who wins it**. For a
 quarterfinal the first answer is trivial; for the grand final it is not.
 
+An empty slot carries a forecast, and it comes from one consistent run of the tournament: the bracket
+is walked end to end with the favourite advancing, and every loser drops where the structure sends
+them. Filling each slot with its own most likely team would be simpler and builds a bracket that
+cannot happen — the same team standing in the upper final and in the lower semifinal, which a team
+that won its upper semifinal can never reach. The percentage next to a forecast is measured along its
+own branch: a slot has two inputs, the winner of one series on the left and the loser of another on
+the right, and "who ends up here" has two different answers.
+
 Series already played enter the forecast as fact instead of being replayed, so the odds narrow by
 themselves: once a team wins in the upper bracket it can no longer finish seventh. The recommended 14
 compendium predictions come from that same simulation, not from a separate one.

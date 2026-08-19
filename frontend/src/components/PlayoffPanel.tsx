@@ -10,10 +10,15 @@
 // выводятся из структуры, а не проставляются руками, и при любой правке сетки
 // линии остаются на местах.
 //
-// В пустое место вписан прогноз: кто вероятнее всего его займёт и с какой
-// вероятностью. Это и есть ответ на «кто с кем сыграет дальше» — до того, как
-// сыграно. Два числа не смешиваются: у участника показан шанс выиграть серию,
-// у прогноза — шанс до места дойти, и подписаны они по-разному.
+// В пустое место вписан прогноз, и он берётся из одного связного хода турнира:
+// сетка пройдена целиком, в каждой серии дальше идёт фаворит, проигравший
+// уходит туда, куда ведёт структура. Отдельно взятая «самая вероятная команда
+// каждого места» складывалась бы в сетку, которой не бывает — одна и та же
+// команда стояла бы и в финале верхней, и в полуфинале нижней, куда после
+// выигранного полуфинала верхней попасть уже нельзя.
+//
+// Два числа не смешиваются: у участника показан шанс выиграть серию, у прогноза
+// — шанс прийти на это место именно этой веткой, и подписаны они по-разному.
 
 import { useEffect, useMemo, useState } from "react";
 import { teamCrest } from "../assets";
@@ -242,13 +247,18 @@ function MatchCard({
     [match, names],
   );
 
-  // Два самых вероятных занимают два пустых места: они и сыграют друг с другом,
-  // если всё пойдёт по прогнозу.
-  const free = [match.left, match.right].filter((side) => side === null).length;
-  const taken = new Set([match.left?.team_id, match.right?.team_id]);
-  const projected = reach
-    .filter((entry) => ![...taken].some((id) => id != null && names.get(id) === entry.name))
-    .slice(0, free);
+  // Прогноз берётся по сторонам, а не по месту целиком. Взять два самых
+  // вероятных имени места было бы проще, но так собирается сетка, которой не
+  // бывает: команда стоит и в финале верхней, и в полуфинале нижней, куда после
+  // выигранного полуфинала верхней уже не попасть. Разводка по фаворитам
+  // отвечает на «кто с кем сыграет» одним связным ходом турнира.
+  const projectedFor = (side: unknown, index: number): Projected | null => {
+    if (side) return null;
+    const entry = match.projected?.[index];
+    if (!entry) return null;
+    const name = names.get(entry.team_id);
+    return name ? { name, chance: entry.chance } : null;
+  };
 
   const hint = reach.length
     ? `${t("playoff.reach")}: ${reach
@@ -256,9 +266,6 @@ function MatchCard({
         .map((entry) => `${entry.name} ${Math.round(entry.chance * 100)}%`)
         .join(" · ")}`
     : undefined;
-
-  let next = 0;
-  const projectedFor = (side: unknown) => (side ? null : (projected[next++] ?? null));
 
   return (
     <div
@@ -285,7 +292,7 @@ function MatchCard({
 
       <Row
         side={match.left}
-        projected={projectedFor(match.left)}
+        projected={projectedFor(match.left, 0)}
         won={decided && match.winner_id === match.left?.team_id}
         lost={decided && match.winner_id !== match.left?.team_id}
         chance={chance(match.left?.team_id)}
@@ -295,7 +302,7 @@ function MatchCard({
       <div className="border-t border-[#20232c]" />
       <Row
         side={match.right}
-        projected={projectedFor(match.right)}
+        projected={projectedFor(match.right, 1)}
         won={decided && match.winner_id === match.right?.team_id}
         lost={decided && match.winner_id !== match.right?.team_id}
         chance={chance(match.right?.team_id)}
