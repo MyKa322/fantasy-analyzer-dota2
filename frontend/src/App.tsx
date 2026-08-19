@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AdBanner from "./components/AdBanner";
 import AdminPanel from "./components/AdminPanel";
+import BasisPanel from "./components/BasisPanel";
 import DataPanel from "./components/DataPanel";
 import EmblemAnalyzer from "./components/EmblemAnalyzer";
 import FantasyPanel from "./components/FantasyPanel";
@@ -38,6 +39,7 @@ const TABS: Tab[] = ([
   { key: "playoffs", label: "app.tab.playoffs", live: false },
   { key: "roster", label: "app.tab.roster", element: <RosterPanel />, live: false },
   { key: "predictions", label: "app.tab.predictions", element: <GroupPanel />, live: false },
+  { key: "basis", label: "app.tab.basis", element: <BasisPanel />, live: false },
   { key: "teams", label: "app.tab.teams", element: <TeamsPanel />, live: true },
   { key: "fantasy", label: "app.tab.fantasy", element: <FantasyPanel />, live: true },
   { key: "data", label: "app.tab.data", element: <DataPanel />, live: true },

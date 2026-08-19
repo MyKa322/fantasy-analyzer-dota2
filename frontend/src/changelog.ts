@@ -26,6 +26,17 @@ export interface ChangelogEntry {
 /** Новое сверху: список читают с начала и до первой знакомой версии. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.9.0",
+    date: "2026-08-19",
+    items: [
+      {
+        kind: "added",
+        en: "A new tab: the basis of the estimate. Tournaments are switched off with toggles and the period is set by dates — only The International, everything except it, the last month — and the rating and the title odds are recomputed for that basis right in your browser. Next to every number is the shift against the default basis.",
+        ru: "Новая вкладка: основа оценки. Турниры выключаются тумблерами, период задаётся датами — только The International, всё кроме него, последний месяц, — и рейтинг с шансами на титул пересчитываются под эту основу прямо в браузере. Рядом с каждым числом — сдвиг относительно базовой основы.",
+      },
+    ],
+  },
+  {
     version: "0.8.0",
     date: "2026-08-19",
     items: [

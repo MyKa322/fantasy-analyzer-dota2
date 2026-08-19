@@ -210,6 +210,18 @@ export interface Playoffs {
   best_of: number;
   grand_final_best_of: number;
   started: boolean;
+  /**
+   * Структура сетки: откуда приходит участник каждого места. Считается на
+   * бэкенде и приезжает сюда, чтобы у страницы не было своей копии схемы.
+   * Появилась позже сетки — у старых снапшотов её нет.
+   */
+  structure?: {
+    key: string;
+    round: string;
+    side: string;
+    sources: { slot: string; winner: boolean }[];
+    elimination_place: string | null;
+  }[];
   matches: PlayoffMatch[];
   teams: PlayoffTeam[];
   simulations?: number;

@@ -148,6 +148,9 @@ def export_teams(session) -> list[dict]:
 #: Окно истории для подбора калибровки — то же, которым CI считает рейтинги.
 CALIBRATION_DAYS = 200
 
+#: Длина рейтингового периода: та же, что у `cli.py ratings`.
+RATING_PERIOD_DAYS = 7
+
 
 def fit_calibration(session, days: int = CALIBRATION_DAYS):
     """Подобрать температуру прогноза по истории матчей.
@@ -161,6 +164,92 @@ def fit_calibration(session, days: int = CALIBRATION_DAYS):
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
     return fit_temperature(load_match_records(session, since=since))
+
+
+def export_matches(session, *, days: int) -> dict:
+    """Все карты окна в компактном виде — чтобы страница могла пересчитать рейтинг.
+
+    Снапшот отвечает на вопрос «что модель думает сейчас», и одного ответа мало:
+    рейтинг зависит от того, какие матчи в него взяли, а это выбор, а не факт.
+    Поэтому сюда выкладывается сырьё — исходы карт с турниром и датой, — и
+    страница считает по нему свой рейтинг под выбранную основу.
+
+    Строка — массив из пяти чисел, а не объект: строк почти две тысячи, и имена
+    полей в каждой утроили бы файл на ровном месте.
+    """
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from app.db.models import Match  # noqa: PLC0415
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = session.execute(
+        select(
+            Match.start_time,
+            Match.league_id,
+            Match.league_name,
+            Match.radiant_team_id,
+            Match.dire_team_id,
+            Match.radiant_win,
+        )
+        .where(
+            Match.radiant_team_id.is_not(None),
+            Match.dire_team_id.is_not(None),
+            Match.radiant_win.is_not(None),
+            Match.start_time >= since,
+        )
+        .order_by(Match.start_time)
+    ).all()
+
+    leagues: dict[int, str] = {}
+    matches: list[list[int]] = []
+    team_ids: set[int] = set()
+    for start_time, league_id, league_name, radiant, dire, radiant_win in rows:
+        league = int(league_id or 0)
+        if league and league not in leagues:
+            leagues[league] = league_name or str(league)
+        moment = start_time if start_time.tzinfo else start_time.replace(tzinfo=timezone.utc)
+        team_ids.update((int(radiant), int(dire)))
+        matches.append(
+            [int(moment.timestamp()), league, int(radiant), int(dire), int(bool(radiant_win))]
+        )
+
+    names = {
+        team.team_id: team.compendium_name or team.name
+        for team in session.scalars(select(Team).where(Team.team_id.in_(team_ids)))
+        if team.name or team.compendium_name
+    }
+
+    # Какие турниры в списке — это сам TI. Не по названию: оно у Valve каждый год
+    # своё, а качели «содержит ли строка слово Qualifier» ломаются молча. Здесь
+    # это выводится из данных — турниры, на которых участники играли между собой
+    # с даты старта.
+    predictions = load_predictions_config()
+    participants = set(predictions.team_ids.values())
+    starts = (
+        datetime.combine(predictions.starts, datetime.min.time(), tzinfo=timezone.utc).timestamp()
+        if predictions.starts
+        else None
+    )
+    event_leagues = sorted(
+        {
+            league
+            for ts, league, radiant, dire, _ in matches
+            if league and starts is not None and ts >= starts and {radiant, dire} <= participants
+        }
+    )
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "since": since.date().isoformat(),
+        "days": days,
+        # Период рейтинга и температура — те же, которыми посчитан снапшот:
+        # пересчёт на странице должен совпадать с ним при полной основе.
+        "period_days": RATING_PERIOD_DAYS,
+        "leagues": {str(key): value for key, value in sorted(leagues.items())},
+        "event_leagues": event_leagues,
+        "teams": {str(key): value for key, value in sorted(names.items())},
+        "matches": matches,
+    }
 
 
 def export_group(session, simulations: int, engine=None) -> dict | None:
@@ -349,7 +438,7 @@ def export_playoffs(session, simulations: int, engine=None) -> dict | None:
     вопросов означали бы, что «шанс дойти до финала» и «сколько серий сыграет»
     посчитаны по разным турнирам.
     """
-    from app.analytics.playoff_bracket import build_playoff_bracket  # noqa: PLC0415
+    from app.analytics.playoff_bracket import BRACKET, build_playoff_bracket  # noqa: PLC0415
     from app.analytics.simulate import (  # noqa: PLC0415
         BracketSimulator,
         optimise_bracket_predictions,
@@ -489,6 +578,22 @@ def export_playoffs(session, simulations: int, engine=None) -> dict | None:
         "best_of": config.best_of,
         "grand_final_best_of": config.grand_final_best_of,
         "started": bracket.started,
+        # Структура сетки: откуда приходит каждый участник места. Страница
+        # прогоняет по ней свою симуляцию, когда пользователь меняет основу
+        # оценки, и вторая копия схемы в браузере разошлась бы с этой в первый
+        # же вечер плей-офф.
+        "structure": [
+            {
+                "key": spec.key,
+                "round": spec.round,
+                "side": spec.side,
+                "sources": [
+                    {"slot": source.slot, "winner": source.winner} for source in spec.sources
+                ],
+                "elimination_place": spec.elimination_place,
+            }
+            for spec in BRACKET
+        ],
         "matches": matches,
         "teams": rows,
     }
@@ -1152,6 +1257,7 @@ def main() -> int:
             other_matches=max(5, args.profile_matches // 2),
         )
         head_to_head = export_head_to_head(session, days=args.history_days)
+        matches = export_matches(session, days=CALIBRATION_DAYS)
 
     # Снапшот без команд формально валиден, но страница по нему пустая: не из
     # чего выбрать в анализаторе эмблем и некого показать в профилях. Такое уже
@@ -1201,6 +1307,18 @@ def main() -> int:
         h2h_path,
         h2h_path.stat().st_size / 1024,
         len(head_to_head["pairs"]),
+    )
+
+    # Сырьё для пересчёта рейтинга под выбранную основу: тоже отдельным файлом и
+    # тоже по требованию — его грузит одна вкладка.
+    matches_path = args.output.with_name("matches.json")
+    write(matches_path, matches)
+    log.info(
+        "%s: %.0f КБ, карт %d, турниров %d",
+        matches_path,
+        matches_path.stat().st_size / 1024,
+        len(matches["matches"]),
+        len(matches["leagues"]),
     )
     return 0
 

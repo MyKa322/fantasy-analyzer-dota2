@@ -522,6 +522,9 @@ backend/
   tools/build_og_image.py         social preview images, one per language
 frontend/                         React + TS + Tailwind + Recharts
   src/engine/scoring.ts           the emblem maths in the browser, ported from the backend
+  src/engine/rating.ts            Glicko-2 in the browser: recomputed for the chosen basis
+  src/engine/bracket.ts           the bracket simulation in the browser, structure from the snapshot
+  src/components/BasisPanel.tsx   choosing the tournaments and period the rating is built from
   src/opendota.ts                 the OpenDota client for the match page, map coordinates
   src/headToHead.ts               the head-to-head file: every meeting of a pair of teams
   src/components/MatchPanel.tsx   match breakdown: scoreboard, items, compendium points, titles
@@ -575,6 +578,25 @@ pushes a real support out of the roster.
 Rosters are stored in a separate `team_roster_slots` table rather than as a field on the player:
 rosters overlap (a player can play for two teams inside the period), and one row per player would
 overwrite the markup of whichever team was processed first.
+
+**The basis of the estimate is a choice.** Every page computes the rating from one basis —
+everything played in the window. That is a sensible default and not the only possible answer: "what
+does the field look like counted from The International alone" and "what does it look like without
+it" are different questions, and one number does not answer both. The Basis tab hands that choice to
+the reader: tournaments are switched off with toggles, the period is set by dates, and the rating
+and the bracket odds are recomputed right in the browser.
+
+The browser computes it because there is no server: the page is static. So Glicko-2 and the bracket
+simulation are mirrored in TypeScript (`frontend/src/engine/rating.ts`, `engine/bracket.ts`), while
+the bracket structure is not duplicated at all — it ships in the snapshot, computed by the backend.
+That the copies agree is checked on real data: on the full basis the browser rating must match the
+snapshot, and the shift column shows plain zeros. A drift would show up at once instead of a month
+later.
+
+The shift is measured against a baseline computed by the same in-browser run with the same seed.
+Taking the baseline from the snapshot would be tempting and wrong: two simulations with different
+seeds differ by half a percent even on identical data, and the column would show noise instead of a
+shift.
 
 **Calibration matters more than accuracy.** A realistic pre-match forecast in Dota is nowhere near
 90% accurate. What matters is that at a stated 70% the team really does win about 70% of the time,
@@ -663,9 +685,10 @@ is computed ahead of time into `frontend/public/data/snapshot.json` (~760 KB), a
 is mirrored in TypeScript in `frontend/src/engine/scoring.ts` — which is why the banner search, the
 roll restriction and the per-stat rankings all run right in the browser. Team and player pages read
 a separate `profiles.json` (~2 MB) that is only fetched when you open the **Profiles** tab, and the
-head-to-head record is a third file (`head_to_head.json`, ~200 KB). The match itself comes from
-OpenDota directly. Tabs that require a live server ("Data", "Ratings", the manual builder) are
-hidden in this mode.
+head-to-head record is a third file (`head_to_head.json`, ~200 KB). A fourth, `matches.json`
+(~75 KB), carries the outcome of every map in the window, from which the **Basis** tab recomputes
+the rating for the tournaments you pick. The match itself comes from OpenDota directly. Tabs that
+require a live server ("Data", "Ratings", the manual builder) are hidden in this mode.
 
 Refresh the snapshot by hand:
 
