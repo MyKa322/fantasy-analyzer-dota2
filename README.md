@@ -509,6 +509,8 @@ backend/
     analytics/group_stage.py      the Swiss bracket built from played matches
     analytics/playoff_bracket.py  double elimination structure and what is played in it
     analytics/simulate.py         Monte-Carlo Swiss + bracket + prediction layout
+    eval/backtest.py              walk-forward model comparison
+    eval/calibration.py           fitting the forecast temperature on history
     ingest/opendota.py            client with rate limiting and a file cache
     ingest/stat_mapping.py        turning a match into compendium stats
     ingest/pipeline.py            writing to the database
@@ -577,6 +579,31 @@ overwrite the markup of whichever team was processed first.
 **Calibration matters more than accuracy.** A realistic pre-match forecast in Dota is nowhere near
 90% accurate. What matters is that at a stated 70% the team really does win about 70% of the time,
 not the bare share of correct guesses.
+
+And on this project's history it did not. Glicko-2 answers "who is stronger" well and "by how much"
+poorly: matches given 70% were won about 63% of the time. For a table of favourites that hardly
+matters; for a bracket it matters twice over, because a series probability is a power of the map
+probability, and overconfidence in a map becomes overconfidence in a champion.
+
+So the forecast logit is multiplied by a temperature. It is not assigned but fitted on history with
+the same walk-forward protocol the model comparison uses: the forecast is built from the state at
+the start of a period, and only a finished period enters the rating (`app/eval/calibration.py`). On
+the data before the TI playoffs it comes out at ≈0.55 and improves log loss from 0.680 to 0.665 —
+the forecast is compressed towards 50%, the order of the teams does not change at all. On the
+playoff page the effect is visible as a title race half as spread out, because the model no longer
+pretends to know more than it does.
+
+What was tested and did not hold up, recorded here so it is not tested twice:
+
+| hypothesis | how it was measured | result |
+|---|---|---|
+| the rating is too inert, it needs an RD floor | floors of 60/80/100, everything else equal | log loss worse, monotonically: 0.654 → 0.656 → 0.665 → 0.677 |
+| a week is too long for a rating period | periods of 2/3/5/7 days with equal warm-up | differences within noise, the ordering is not stable |
+| premier events should outweigh online leagues | league weights of ×2 and ×3 | log loss worse: 0.688 → 0.693 → 0.704 |
+| maps within a series are correlated, Bo3 needs a fix | a temperature over the series after calibrating maps | the optimum is around 1.0 — the whole correction belongs at the map level |
+
+The common conclusion from those four: the model is not wrong about who it thinks is stronger, it
+is wrong about how sure it is. That is exactly what calibration fixes.
 
 ---
 

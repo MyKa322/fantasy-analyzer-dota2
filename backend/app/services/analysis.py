@@ -560,9 +560,18 @@ def ti_candidates(session: Session) -> dict[str, list[tuple[int, str, tuple[int,
     return by_role
 
 
+def latest_rating_run(session: Session) -> str | None:
+    """Идентификатор последнего пересчёта рейтингов.
+
+    По нему кэшируется всё, что считается поверх рейтингов: пересчитали их —
+    и производные (например, калибровка прогноза) обязаны пересчитаться тоже.
+    """
+    return session.scalar(select(TeamRating.run_id).order_by(TeamRating.id.desc()))
+
+
 def latest_ratings(session: Session) -> dict[int, tuple[float, float, float]]:
     """Последний снимок рейтинга каждой команды: (rating, rd, volatility)."""
-    latest_run = session.scalar(select(TeamRating.run_id).order_by(TeamRating.id.desc()))
+    latest_run = latest_rating_run(session)
     if latest_run is None:
         return {}
 

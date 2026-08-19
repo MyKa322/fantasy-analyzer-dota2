@@ -100,11 +100,26 @@ def _expected(mu: float, mu_j: float, phi_j: float) -> float:
 class Glicko2:
     """Движок рейтинга. Экземпляр хранит только настройки, состояние — в Rating."""
 
-    def __init__(self, tau: float = DEFAULT_TAU, epsilon: float = CONVERGENCE_EPSILON) -> None:
+    def __init__(
+        self,
+        tau: float = DEFAULT_TAU,
+        epsilon: float = CONVERGENCE_EPSILON,
+        *,
+        temperature: float = 1.0,
+    ) -> None:
         if not 0.0 < tau <= 2.0:
             raise ValueError(f"tau вне разумного диапазона (0, 2]: {tau}")
+        if not 0.0 < temperature <= 5.0:
+            raise ValueError(f"temperature вне разумного диапазона (0, 5]: {temperature}")
         self.tau = tau
         self.epsilon = epsilon
+        # Множитель логита прогноза. Рейтинг хорошо ранжирует команды и хуже
+        # оценивает разрыв: на истории проекта разница рейтингов раз за разом
+        # оказывалась больше, чем подтверждали результаты. temperature < 1
+        # сжимает прогноз к 50%, не меняя порядка команд. На обновление рейтинга
+        # она не влияет — иначе калибровка потекла бы в сам рейтинг и следующая
+        # калибровка считала бы уже по искажённым данным.
+        self.temperature = temperature
 
     # --- обновление рейтинга --------------------------------------------------
 
@@ -187,10 +202,12 @@ class Glicko2:
         """Вероятность победы `player` в одной карте.
 
         Неопределённость учитывается по обеим сторонам: чем меньше мы знаем о
-        любой из команд, тем ближе прогноз к 50%.
+        любой из команд, тем ближе прогноз к 50%. Сверху накладывается
+        температура — калибровка уверенности, см. `Glicko2.__init__`.
         """
         combined_phi = math.sqrt(player.phi**2 + opponent.phi**2)
-        return 1.0 / (1.0 + math.exp(-_g(combined_phi) * (player.mu - opponent.mu)))
+        logit = _g(combined_phi) * (player.mu - opponent.mu)
+        return 1.0 / (1.0 + math.exp(-self.temperature * logit))
 
     def series_win_probability(
         self, player: Rating, opponent: Rating, *, best_of: int = 3

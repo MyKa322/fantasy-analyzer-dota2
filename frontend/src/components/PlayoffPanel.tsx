@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { teamCrest } from "../assets";
 import { useT } from "../i18n";
-import { loadSnapshot, type PlayoffMatch, type Playoffs } from "../snapshot";
+import { loadSnapshot, type PlayoffMatch, type Snapshot } from "../snapshot";
 import { Notice, Panel, Stat } from "./ui";
 
 /** Раунды сверху вниз: верхняя лента, затем нижняя. */
@@ -412,20 +412,34 @@ function heat(probability: number): string {
 
 export default function PlayoffPanel({ onOpen }: { onOpen?: (id: number) => void }) {
   const { t, tryT, n, d, tp } = useT();
-  const [playoffs, setPlayoffs] = useState<Playoffs | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadSnapshot()
-      .then((snapshot) => setPlayoffs(snapshot.playoffs ?? null))
+      .then(setSnapshot)
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
   }, []);
 
+  const playoffs = snapshot?.playoffs ?? null;
+
   const names = useMemo(
     () => new Map((playoffs?.teams ?? []).map((team) => [team.team_id, team.name])),
     [playoffs],
+  );
+
+  // Откуда взялись вероятности: итог группы и рейтинг стоят рядом с ними в той
+  // же строке. Без этого таблица говорит «команда дойдёт до финала с такой-то
+  // вероятностью» и не говорит, из чего это следует.
+  const group = useMemo(
+    () => new Map((snapshot?.stage?.standings ?? []).map((row) => [row.team_id, row])),
+    [snapshot],
+  );
+  const rated = useMemo(
+    () => new Map((snapshot?.teams ?? []).map((team) => [team.team_id, team])),
+    [snapshot],
   );
 
   if (error) return <Notice kind="error">{error}</Notice>;
@@ -464,6 +478,10 @@ export default function PlayoffPanel({ onOpen }: { onOpen?: (id: number) => void
             <thead className="text-[11px] tracking-wide text-neutral-500 uppercase">
               <tr>
                 <th className="py-1 text-left">{t("common.team")}</th>
+                <th className="py-1 text-center" title={t("playoff.groupHint")}>
+                  {t("playoff.groupColumn")}
+                </th>
+                <th className="py-1 text-center">{t("common.rating")}</th>
                 <th className="py-1 text-center">{t("playoff.recordColumn")}</th>
                 <th className="py-1 text-center">{t("playoff.champion")}</th>
                 <th className="py-1 text-center">{t("playoff.final")}</th>
@@ -482,6 +500,16 @@ export default function PlayoffPanel({ onOpen }: { onOpen?: (id: number) => void
                       <Crest name={team.name} />
                       <span className="text-neutral-200">{team.name}</span>
                     </span>
+                  </td>
+                  <td className="tabular py-1.5 text-center text-neutral-400">
+                    {group.has(team.team_id)
+                      ? `${group.get(team.team_id)!.wins}-${group.get(team.team_id)!.losses}`
+                      : "—"}
+                  </td>
+                  <td className="tabular py-1.5 text-center text-neutral-400">
+                    {rated.get(team.team_id)?.rating == null
+                      ? "—"
+                      : n(rated.get(team.team_id)!.rating!, 0)}
                   </td>
                   <td className="tabular py-1.5 text-center text-neutral-400">
                     {team.series_won}-{team.series_lost}
@@ -510,6 +538,13 @@ export default function PlayoffPanel({ onOpen }: { onOpen?: (id: number) => void
           <p className="mt-2 text-[11px] text-neutral-500">
             {t("playoff.simulationsNote", {
               count: tp("plural.tournaments", playoffs.simulations),
+            })}
+          </p>
+        )}
+        {snapshot?.calibration && snapshot.calibration.temperature !== 1 && (
+          <p className="mt-1 text-[11px] text-neutral-500">
+            {t("playoff.calibrationNote", {
+              temperature: n(snapshot.calibration.temperature, 2),
             })}
           </p>
         )}

@@ -256,6 +256,16 @@ export interface Snapshot {
   playoffs?: Playoffs | null;
   /** Периоды Fantasy: группа и основной этап со своими датами закрепления. */
   stages?: FantasyStage[];
+  /**
+   * Калибровка прогноза: во сколько раз сжат логит вероятности и чем это
+   * обосновано. Появилась позже снапшота — у старых её нет.
+   */
+  calibration?: {
+    temperature: number;
+    samples: number;
+    log_loss: number;
+    raw_log_loss: number;
+  };
   roles: RoleSnapshot[];
 }
 

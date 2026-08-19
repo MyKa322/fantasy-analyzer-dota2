@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..analytics.glicko2 import Rating
+from ..analytics.glicko2 import Glicko2, Rating
 from ..analytics.predictions_config import load_predictions_config
 from ..analytics.simulate import (
     BRACKET_SLOTS,
@@ -25,6 +25,7 @@ from ..fantasy.presets import neutral_banner
 from ..fantasy.projection import RoleProjector, optimise_banner, recommend_roster
 from ..fantasy.rules import load_rules
 from ..fantasy.scoring import Banner, Emblem
+from ..eval.calibration import fit_temperature
 from ..ingest.opendota import OpenDotaClient
 from ..ingest.pipeline import ingest_pro_feed, ingest_team_history, resolve_compendium_teams
 from ..ingest.stat_mapping import STAT_SOURCES
@@ -32,7 +33,9 @@ from ..services.analysis import (
     ROLE_SIZES,
     build_role_history,
     infer_team_roles,
+    latest_rating_run,
     latest_ratings,
+    load_match_records,
     recompute_ratings,
     ti_candidates,
 )
@@ -212,6 +215,32 @@ def ratings_recompute(
 # --- Predictions --------------------------------------------------------------
 
 
+#: Окно истории для калибровки и её кэш: подбор идёт ходом по всей истории,
+#: делать это на каждый запрос незачем — рейтинги между запросами те же.
+CALIBRATION_DAYS = 200
+_calibration: tuple[str | None, Glicko2] | None = None
+
+
+def _forecast_engine(session: Session) -> Glicko2:
+    """Движок с калибровкой, подобранной по истории.
+
+    Считается один раз на пересчёт рейтингов: калибровка зависит от них, а они
+    меняются только при `recompute_ratings`. Сайт собирается тем же движком —
+    иначе API и страница расходились бы в вероятностях на ровном месте.
+    """
+    global _calibration
+
+    run = latest_rating_run(session)
+    if _calibration is not None and _calibration[0] == run:
+        return _calibration[1]
+
+    since = datetime.now(timezone.utc) - timedelta(days=CALIBRATION_DAYS)
+    calibration = fit_temperature(load_match_records(session, since=since))
+    engine = Glicko2(temperature=calibration.temperature)
+    _calibration = (run, engine)
+    return engine
+
+
 def _tournament_ratings(session: Session, team_ids: list[int] | None) -> dict[int, Rating]:
     """Рейтинги 16 участников: явный список, участники компендиума или топ-16."""
     ratings = latest_ratings(session)
@@ -249,7 +278,11 @@ def predict_group(
         raise HTTPException(400, f"нужно {config.teams} команд, найдено {len(ratings)}")
 
     simulator = SwissSimulator(
-        ratings, config, seed=seed, first_round=predictions.first_round_for(ratings)
+        ratings,
+        config,
+        seed=seed,
+        engine=_forecast_engine(session),
+        first_round=predictions.first_round_for(ratings),
     )
     result = simulator.run(simulations=simulations)
     plan = optimise_group_predictions(result, config.slots(), config.points)
@@ -309,7 +342,9 @@ def predict_bracket(
         raise HTTPException(400, f"нет рейтинга для команд: {missing}")
 
     seeded = {t: Rating(*ratings[t]) for t in team_ids}
-    result = BracketSimulator(seeded, config, seed=seed).run(simulations=simulations)
+    result = BracketSimulator(
+        seeded, config, seed=seed, engine=_forecast_engine(session)
+    ).run(simulations=simulations)
     plan = optimise_bracket_predictions(result, config.points)
 
     names = {

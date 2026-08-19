@@ -4,7 +4,8 @@
 рейтинга или новая фича — это мнение, а не результат.
 """
 
-from app.eval.backtest import BacktestResult, Predictor, walk_forward
+from app.eval.backtest import BacktestResult, Predictor, by_period, walk_forward
+from app.eval.calibration import Calibration, best_temperature, fit_temperature
 from app.eval.baselines import (
     CoinFlip,
     Glicko2Calibrated,
@@ -27,6 +28,7 @@ from app.eval.metrics import (
 
 __all__ = [
     "BacktestResult",
+    "Calibration",
     "CalibrationBin",
     "CoinFlip",
     "Glicko2Calibrated",
@@ -36,11 +38,14 @@ __all__ = [
     "RadiantPrior",
     "Report",
     "accuracy",
+    "best_temperature",
     "brier_score",
+    "by_period",
     "calibration_bins",
     "default_ladder",
     "evaluate",
     "expected_calibration_error",
+    "fit_temperature",
     "log_loss",
     "sharpness",
     "walk_forward",

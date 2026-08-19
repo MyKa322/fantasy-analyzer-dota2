@@ -26,6 +26,22 @@ export interface ChangelogEntry {
 /** Новое сверху: список читают с начала и до первой знакомой версии. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.8.0",
+    date: "2026-08-19",
+    items: [
+      {
+        kind: "changed",
+        en: "The odds are calibrated on history. The rating ranks teams well and overstates the gap between them: matches given 70% were won about 63% of the time. The forecast logit is now compressed by a factor fitted walk-forward on past matches, so the title race is about half as spread out as before. The order of the teams does not change — only how sure the model is allowed to sound.",
+        ru: "Вероятности откалиброваны по истории. Рейтинг хорошо ранжирует команды и переоценивает разрыв между ними: матчи, которым модель давала 70%, выигрывались примерно в 63% случаев. Теперь логит прогноза сжимается на множитель, подобранный по прошлым матчам ходом вперёд по времени, и разброс шансов на титул стал вдвое уже. Порядок команд не меняется — меняется только право модели звучать уверенно.",
+      },
+      {
+        kind: "added",
+        en: "The playoff table shows where the odds come from: the Swiss record and the rating stand next to each team's chances.",
+        ru: "В таблице плей-офф видно, из чего сложились вероятности: рядом с шансами команды стоят её результат в группе и рейтинг.",
+      },
+    ],
+  },
+  {
     version: "0.7.0",
     date: "2026-08-19",
     items: [

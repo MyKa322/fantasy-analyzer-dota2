@@ -175,3 +175,39 @@ def test_confidence_interval_brackets_rating():
     low, high = Rating(1600.0, 100.0).interval()
     assert low < 1600.0 < high
     assert math.isclose(high - low, 2 * 1.96 * 100.0)
+
+
+# --- калибровка уверенности ---------------------------------------------------
+
+
+def test_temperature_shrinks_the_forecast_without_touching_the_order():
+    """Температура меняет меру уверенности, а не то, кто фаворит."""
+    strong = Rating(1700.0, 50.0)
+    weak = Rating(1500.0, 50.0)
+
+    raw = Glicko2().win_probability(strong, weak)
+    cool = Glicko2(temperature=0.6).win_probability(strong, weak)
+
+    assert 0.5 < cool < raw
+    assert Glicko2(temperature=0.6).win_probability(weak, strong) == pytest.approx(1 - cool)
+
+
+def test_temperature_leaves_an_even_match_even():
+    equal = Rating(1600.0, 60.0)
+    assert Glicko2(temperature=0.4).win_probability(equal, equal) == pytest.approx(0.5)
+
+
+def test_temperature_does_not_leak_into_the_rating():
+    """Калибровка — свойство прогноза: рейтинг должен обновляться как обычно."""
+    player = Rating(1500.0, 200.0)
+    games = [GameResult(Rating(1400.0, 30.0), 1.0), GameResult(Rating(1550.0, 100.0), 0.0)]
+
+    plain = Glicko2().rate(player, games)
+    tempered = Glicko2(temperature=0.5).rate(player, games)
+
+    assert tempered == plain
+
+
+def test_a_temperature_outside_the_range_is_rejected():
+    with pytest.raises(ValueError, match="temperature"):
+        Glicko2(temperature=0.0)

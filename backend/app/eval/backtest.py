@@ -52,6 +52,26 @@ def period_start(moment: datetime, origin: datetime, period: timedelta) -> datet
     return origin + int(elapsed // period) * period
 
 
+def by_period(
+    matches: Iterable[MatchRecord], period_days: int
+) -> list[tuple[datetime, list[MatchRecord]]]:
+    """Матчи, разложенные по рейтинговым периодам, в хронологическом порядке.
+
+    Раскладка одна на всех, кто ходит по истории вперёд: и на сравнение моделей,
+    и на подбор калибровки. Разъедься они — и калибровка считалась бы по одному
+    расписанию, а проверялась по другому.
+    """
+    ordered = sorted(matches, key=lambda m: (m.start_time, m.match_id))
+    if not ordered:
+        return []
+    period = timedelta(days=period_days)
+    origin = ordered[0].start_time
+    buckets: dict[datetime, list[MatchRecord]] = defaultdict(list)
+    for match in ordered:
+        buckets[period_start(match.start_time, origin, period)].append(match)
+    return [(start, buckets[start]) for start in sorted(buckets)]
+
+
 @dataclass(slots=True)
 class _Tally:
     probs: list[float] = field(default_factory=list)
@@ -89,23 +109,15 @@ def walk_forward(
     bins: int = 10,
 ) -> BacktestResult:
     """Прогнать модели по истории вперёд по времени."""
-    ordered = sorted(matches, key=lambda m: (m.start_time, m.match_id))
-    if not ordered:
+    buckets = by_period(matches, period_days)
+    if not buckets:
         return BacktestResult(reports=(), matches_scored=0, matches_skipped_warmup=0, periods=0)
-
-    period = timedelta(days=period_days)
-    origin = ordered[0].start_time
-
-    buckets: dict[datetime, list[MatchRecord]] = defaultdict(list)
-    for match in ordered:
-        buckets[period_start(match.start_time, origin, period)].append(match)
 
     tallies: dict[str, _Tally] = {p.name: _Tally() for p in predictors}
     scored = 0
     skipped = 0
 
-    for number, start in enumerate(sorted(buckets)):
-        period_matches = buckets[start]
+    for number, (_, period_matches) in enumerate(buckets):
         counts_for_score = number >= warmup_periods
 
         for match in period_matches:

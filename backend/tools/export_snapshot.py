@@ -26,7 +26,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.analytics.glicko2 import Rating  # noqa: E402
+from app.analytics.glicko2 import Glicko2, Rating  # noqa: E402
 from app.analytics.predictions_config import load_predictions_config  # noqa: E402
 from app.analytics.simulate import (  # noqa: E402
     SwissSimulator,
@@ -145,7 +145,25 @@ def export_teams(session) -> list[dict]:
     return rows
 
 
-def export_group(session, simulations: int) -> dict | None:
+#: Окно истории для подбора калибровки — то же, которым CI считает рейтинги.
+CALIBRATION_DAYS = 200
+
+
+def fit_calibration(session, days: int = CALIBRATION_DAYS):
+    """Подобрать температуру прогноза по истории матчей.
+
+    Одна на весь снапшот: группа, сетка и вероятности серий должны быть
+    посчитаны с одной и той же уверенностью, иначе «шанс выйти из группы» и
+    «шанс выиграть четвертьфинал» окажутся из разных моделей.
+    """
+    from app.eval.calibration import fit_temperature  # noqa: PLC0415
+    from app.services.analysis import load_match_records  # noqa: PLC0415
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return fit_temperature(load_match_records(session, since=since))
+
+
+def export_group(session, simulations: int, engine=None) -> dict | None:
     predictions = load_predictions_config()
     config = predictions.group_stage
     ratings = latest_ratings(session)
@@ -162,6 +180,7 @@ def export_group(session, simulations: int) -> dict | None:
         {t: Rating(*ratings[t]) for t in participants},
         config,
         seed=1,
+        engine=engine,
         first_round=predictions.first_round_for(participants),
     )
     result = simulator.run(simulations=simulations)
@@ -196,7 +215,7 @@ def export_group(session, simulations: int) -> dict | None:
     }
 
 
-def export_stage(session) -> dict:
+def export_stage(session, engine=None) -> dict:
     """Сетка группового этапа: объявленный первый раунд плюс сыгранное.
 
     До старта турнира сыгранного нет, и сетка состоит из одного первого раунда с
@@ -221,6 +240,7 @@ def export_stage(session) -> dict:
         session,
         stage,
         teams,
+        engine=engine,
         ratings=latest_ratings(session),
         first_round=first_round,
         wins_to_advance=swiss.wins_to_advance,
@@ -313,7 +333,7 @@ def export_stage(session) -> dict:
     }
 
 
-def export_playoffs(session, simulations: int) -> dict | None:
+def export_playoffs(session, simulations: int, engine=None) -> dict | None:
     """Сетка плей-офф: объявленные четвертьфиналы, сыгранное и прогноз по нему.
 
     Считается одной симуляцией на всё: и вероятности каждого места сетки, и
@@ -362,6 +382,7 @@ def export_playoffs(session, simulations: int) -> dict | None:
             {t: Rating(*ratings[t]) for t in ordered},
             config,
             seed=2,
+            engine=engine,
             quarterfinals=quarterfinals,
             results=bracket.results(),
             participants={
@@ -1081,9 +1102,12 @@ def main() -> int:
         )
 
         predictions = load_predictions_config()
+        # Калибровка подбирается один раз и идёт во все симуляции снапшота.
+        calibration = fit_calibration(session)
+        engine = Glicko2(temperature=calibration.temperature)
         # Плей-офф считается до ролей: распределение серий по сетке — это вход
         # проекции основного этапа Fantasy, а не отдельная справка рядом с ней.
-        playoffs = export_playoffs(session, args.simulations)
+        playoffs = export_playoffs(session, args.simulations, engine)
 
         snapshot = {
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -1095,8 +1119,14 @@ def main() -> int:
             # внутренним именем предмета.
             "items": _load_items(),
             "teams": export_teams(session),
-            "group": export_group(session, args.simulations),
-            "stage": export_stage(session),
+            "group": export_group(session, args.simulations, engine),
+            "stage": export_stage(session, engine),
+            "calibration": {
+                "temperature": round(calibration.temperature, 3),
+                "samples": calibration.samples,
+                "log_loss": round(calibration.log_loss, 4),
+                "raw_log_loss": round(calibration.raw_log_loss, 4),
+            },
             "playoffs": playoffs,
             "stages": export_fantasy_stages(predictions),
             "roles": export_roles(

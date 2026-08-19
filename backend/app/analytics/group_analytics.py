@@ -198,14 +198,19 @@ def build_group_analytics(
     teams: dict[int, str],
     *,
     ratings: dict[int, tuple[float, float, float]],
+    engine: Glicko2 | None = None,
     first_round: list[tuple[int, int]] | None = None,
     wins_to_advance: int = 4,
     losses_to_eliminate: int = 4,
     regular_best_of: int = DEFAULT_REGULAR_BEST_OF,
     decisive_best_of: int = DEFAULT_DECISIVE_BEST_OF,
 ) -> GroupAnalytics:
-    """Собрать аналитику этапа по разобранной сетке и рейтингам."""
-    engine = Glicko2()
+    """Собрать аналитику этапа по разобранной сетке и рейтингам.
+
+    `engine` приходит снаружи, чтобы вероятности серий здесь и в симуляциях
+    считались с одной калибровкой.
+    """
+    engine = engine or Glicko2()
 
     analytics = GroupAnalytics(started=bool(stage.series))
     rows: dict[int, TeamStage] = {
