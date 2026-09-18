@@ -296,7 +296,7 @@
   "npc": "npc_dota_hero_silencer"
  },
  "76": {
-  "name": "Outworld Destroyer",
+  "name": "Outworld Devourer",
   "npc": "npc_dota_hero_obsidian_destroyer"
  },
  "77": {
@@ -480,7 +480,7 @@
   "npc": "npc_dota_hero_mars"
  },
  "131": {
-  "name": "Ringmaster",
+  "name": "Ring Master",
   "npc": "npc_dota_hero_ringmaster"
  },
  "135": {
